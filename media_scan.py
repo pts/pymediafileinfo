@@ -318,6 +318,8 @@ def get_brn_dimensions_cached(f, data):
 
 BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
 
+LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
+
 
 def scanfile(path, st):
   bufsize = 1 << 20
@@ -347,6 +349,10 @@ def scanfile(path, st):
         if (data[8 : 11] == '\0\0\0' and
             data[12 : 16] == 'IHDR' and len(data) >= 24):
           width, height = struct.unpack('>II', data[16 : 24])
+      elif data.startswith('\xcf\x84') and LEPTON_HEADER_RE.match(data):
+        format = 'lepton'  # JPEG reencoded by Dropbox lepton.
+        # Width and height are not easily available: they need
+        # decompression.
       elif data.startswith('BM') and BMP_HEADER_RE.match(data):
         format = 'bmp'
         match = BMP_HEADER_RE.match(data)
