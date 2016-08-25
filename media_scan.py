@@ -226,6 +226,96 @@ def get_jpeg_dimensions_cached(f, data):
     f.seek(old_ofs)
 
 
+def get_brn_dimensions(f):
+  """Returns (width, height) of a BRN file.
+
+  Args:
+    f: An object supporting the .read(size) method. Should be seeked to the
+        beginning of the file.
+  Returns:
+    (width, height) pair of integers.
+  Raises:
+    ValueError: If not a BRN file or there is a syntax error in the BRN file.
+    IOError: If raised by f.read(size).
+  """
+  def read_all(f, size):
+    data = f.read(size)
+    if len(data) != size:
+      raise ValueError(
+          'Short read in BRN: wanted=%d got=%d' % (size, len(data)))
+    return data
+
+  def read_base128(f):
+    shift, result, c = 0, 0, 0
+    while 1:
+      b = f.read(1)
+      if not b:
+        raise ValueError('Short read in base128.')
+      c += 1
+      if shift > 57:
+        raise ValueError('base128 value too large.')
+      b = ord(b)
+      result |= (b & 0x7f) << shift
+      if not b & 0x80:
+        return result, c
+      shift += 7
+
+  data = f.read(7)
+  if len(data) < 7 or not data.startswith('\x0a\x04B\xd2\xd5N\x12'):
+    raise ValueError('Not a BRN file.')
+
+  header_remaining, _ = read_base128(f)
+  width = height = None
+  while header_remaining:
+    if header_remaining < 0:
+      raise ValueError('BRN header spilled over.')
+    marker = ord(read_all(f, 1))
+    header_remaining -= 1
+    if marker & 0x80 or marker & 0x5 or marker <= 2:
+      raise ValueError('Invalid marker.')
+    if marker == 0x8:
+      if width is not None:
+        raise ValueError('Multiple width.')
+      width, c = read_base128(f)
+      header_remaining -= c
+    elif marker == 0x10:
+      if height is not None:
+        raise ValueError('Multiple height.')
+      height, c = read_base128(f)
+      header_remaining -= c
+    else:
+      val, c = read_base128(f)
+      header_remaining -= c
+      if (marker & 7) == 2:
+        read_all(f, val)
+        header_remaining -= val
+  if width is not None and height is not None:
+    return width, height
+  else:
+    return None, None
+
+
+def get_brn_dimensions_cached(f, data):
+  # data is the first few bytes of f.
+
+  if len(data) >= 8:
+    try:
+      return get_brn_dimensions(cStringIO.StringIO(data))
+    except ValueError, e:
+      se = str(e)
+      if not se.startswith('Short read '):
+        return None, None
+  old_ofs = f.tell()
+  f.seek(0)
+  try:
+    try:
+      return get_brn_dimensions(f)
+    except ValueError, e:
+      return None, None
+  finally:
+    f.seek(old_ofs)
+
+
 BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
 
 
@@ -249,6 +339,9 @@ def scanfile(path, st):
       elif data.startswith('\xff\xd8\xff'):
         format = 'jpeg'
         width, height = get_jpeg_dimensions_cached(f, data)
+      elif data.startswith('\x0a\x04B\xd2\xd5N\x12'):
+        format = 'brn'
+        width, height = get_brn_dimensions_cached(f, data)
       elif data.startswith('\211PNG\r\n\032\n'):
         format = 'png'
         if (data[8 : 11] == '\0\0\0' and
