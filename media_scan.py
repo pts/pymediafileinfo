@@ -385,20 +385,36 @@ def scan(path_iter, old_files):
   file_items = []
   if getattr(os, 'lstat', None):
     for path in path_iter:
-      st = os.lstat(path)
-      if stat.S_ISREG(st.st_mode):
+      try:
+        st = os.lstat(path)
+      except OSError, e:
+        print >>sys.stderr, 'warning: lstat %s: %s' % (path, e)
+        st = None
+      if not st:
+        pass
+      elif stat.S_ISREG(st.st_mode):
         file_items.append((path, st))
       elif stat.S_ISLNK(st.st_mode):
-        st2 = os.stat(path)  # There is a race condition between lstat and stat.
-        if stat.S_ISREG(st2.st_mode):
+        try:
+          st2 = os.stat(path)  # There is a race condition between lstat and stat.
+        except OSError:  # Typically: dangling symlink.
+          print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
+          st2 = None
+        if st2 and stat.S_ISREG(st2.st_mode):
           file_items.append((path, st2))
         # We don't follow symlinks pointing to directories.
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
   else:  # Running on a system which doesn't support symlinks.
     for path in path_iter:
-      st = os.stat(path)
-      if stat.S_ISREG(st.st_mode):
+      try:
+        st = os.stat(path)
+      except OSError:
+        print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
+        st = None
+      if not st:
+        pass
+      elif stat.S_ISREG(st.st_mode):
         file_items.append((path, st))
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
