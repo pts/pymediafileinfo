@@ -321,66 +321,67 @@ BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
 LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
 
 
-def scanfile(path, st):
-  bufsize = 1 << 20
-  width = height = None
-  format = '?'
-  try:
-    f = open(path, 'rb', bufsize)
+def scanfile(path, st, do_th):
+  if do_th or not path.endswith('.th.jpg'):
+    bufsize = 1 << 20
+    width = height = None
+    format = '?'
     try:
-      data = f.read(max(bufsize, 4096))
-      if not data:
-        format = 'empty'
-      elif data.startswith('GIF87a') or data.startswith('GIF89a'):
-        if is_animated_gif_cached(f, data):
-          format = 'agif'  # Animated GIF.
-        else:
-          format = 'gif'
-        if len(data) >= 10:
-          width, height = struct.unpack('<HH', data[6 : 10])
-      elif data.startswith('\xff\xd8\xff'):
-        format = 'jpeg'
-        width, height = get_jpeg_dimensions_cached(f, data)
-      elif data.startswith('\x0a\x04B\xd2\xd5N\x12'):
-        format = 'brn'
-        width, height = get_brn_dimensions_cached(f, data)
-      elif data.startswith('\211PNG\r\n\032\n'):
-        format = 'png'
-        if (data[8 : 11] == '\0\0\0' and
-            data[12 : 16] == 'IHDR' and len(data) >= 24):
-          width, height = struct.unpack('>II', data[16 : 24])
-      elif data.startswith('\xcf\x84') and LEPTON_HEADER_RE.match(data):
-        format = 'lepton'  # JPEG reencoded by Dropbox lepton.
-        # Width and height are not easily available: they need
-        # decompression.
-      elif data.startswith('BM') and BMP_HEADER_RE.match(data):
-        format = 'bmp'
-        match = BMP_HEADER_RE.match(data)
-        b = ord(match.group(1))
-        if b in (12, 64) and len(data) >= 22:
-          width, height = struct.unpack('<HH', data[18 : 22])
-        elif b in (40, 124) and len(data) >= 26:
-          width, height = struct.unpack('<II', data[18 : 26])
-      else:
-        pass  # format = '?'
-      s = sha256(data)
-      while 1:
-        data = f.read(bufsize)
+      f = open(path, 'rb', bufsize)
+      try:
+        data = f.read(max(bufsize, 4096))
         if not data:
-          break
-        s.update(data)
-    finally:
-      f.close()
-    info = {'format': format, 'f': path, 'sha256': s.hexdigest(),
-            'mtime': int(st.st_mtime), 'size': int(st.st_size)}
-    if width is not None and height is not None and width >= 0 and height >= 0:
-      info['width'], info['height'] = width, height
-    yield info
-  except IOError, e:
-    print >>sys.stderr, 'error: Reading file %s: %s' % (path, e)
+          format = 'empty'
+        elif data.startswith('GIF87a') or data.startswith('GIF89a'):
+          if is_animated_gif_cached(f, data):
+            format = 'agif'  # Animated GIF.
+          else:
+            format = 'gif'
+          if len(data) >= 10:
+            width, height = struct.unpack('<HH', data[6 : 10])
+        elif data.startswith('\xff\xd8\xff'):
+          format = 'jpeg'
+          width, height = get_jpeg_dimensions_cached(f, data)
+        elif data.startswith('\x0a\x04B\xd2\xd5N\x12'):
+          format = 'brn'
+          width, height = get_brn_dimensions_cached(f, data)
+        elif data.startswith('\211PNG\r\n\032\n'):
+          format = 'png'
+          if (data[8 : 11] == '\0\0\0' and
+              data[12 : 16] == 'IHDR' and len(data) >= 24):
+            width, height = struct.unpack('>II', data[16 : 24])
+        elif data.startswith('\xcf\x84') and LEPTON_HEADER_RE.match(data):
+          format = 'lepton'  # JPEG reencoded by Dropbox lepton.
+          # Width and height are not easily available: they need
+          # decompression.
+        elif data.startswith('BM') and BMP_HEADER_RE.match(data):
+          format = 'bmp'
+          match = BMP_HEADER_RE.match(data)
+          b = ord(match.group(1))
+          if b in (12, 64) and len(data) >= 22:
+            width, height = struct.unpack('<HH', data[18 : 22])
+          elif b in (40, 124) and len(data) >= 26:
+            width, height = struct.unpack('<II', data[18 : 26])
+        else:
+          pass  # format = '?'
+        s = sha256(data)
+        while 1:
+          data = f.read(bufsize)
+          if not data:
+            break
+          s.update(data)
+      finally:
+        f.close()
+      info = {'format': format, 'f': path, 'sha256': s.hexdigest(),
+              'mtime': int(st.st_mtime), 'size': int(st.st_size)}
+      if width is not None and height is not None and width >= 0 and height >= 0:
+        info['width'], info['height'] = width, height
+      yield info
+    except IOError, e:
+      print >>sys.stderr, 'error: Reading file %s: %s' % (path, e)
 
 
-def scan(path_iter, old_files):
+def scan(path_iter, old_files, do_th):
   dir_paths = []
   file_items = []
   if getattr(os, 'lstat', None):
@@ -429,7 +430,7 @@ def scan(path_iter, old_files):
     if (not old_item or old_item[0] != st.st_size or
         old_item[1] != st.st_mtime):
       #print >>sys.stderr, 'info: Scanning: %s' % path
-      for info in scanfile(path, st):
+      for info in scanfile(path, st, do_th):
         yield info
   while dir_paths:
     path = dir_paths.pop()
@@ -437,7 +438,7 @@ def scan(path_iter, old_files):
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
-    for info in scan(subpaths, old_files):
+    for info in scan(subpaths, old_files, do_th):
       yield info
 
 
@@ -475,6 +476,7 @@ def main(argv):
   outf = None
   old_files = {}  # Maps paths to (size, mtime) pairs.
   i = 1
+  do_th = True
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -492,12 +494,15 @@ def main(argv):
         f.close()
       # TODO(pts): Explicit close.
       outf = open(old_filename, 'a', 0)
+    elif arg.startswith('--th='):
+      value = arg[arg.find('=') + 1:].lower()
+      do_th = value in ('1', 'yes', 'true', 'on')
     else:
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:
     # For unbuffered appending.
     outf = os.fdopen(sys.stdout.fileno(), 'a', 0)
-  for info in scan(argv[i:], old_files):  # Not in original order.
+  for info in scan(argv[i:], old_files, do_th):  # Not in original order.
     outf.write(format_info(info))
     outf.flush()
 
