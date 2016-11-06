@@ -398,7 +398,7 @@ def scan(path_iter, old_files, do_th):
       elif stat.S_ISLNK(st.st_mode):
         try:
           st2 = os.stat(path)  # There is a race condition between lstat and stat.
-        except OSError:  # Typically: dangling symlink.
+        except OSError, e:  # Typically: dangling symlink.
           print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
           st2 = None
         if st2 and stat.S_ISREG(st2.st_mode):
@@ -410,7 +410,7 @@ def scan(path_iter, old_files, do_th):
     for path in path_iter:
       try:
         st = os.stat(path)
-      except OSError:
+      except OSError, e:
         print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
         st = None
       if not st:
