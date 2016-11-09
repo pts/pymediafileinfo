@@ -322,7 +322,7 @@ LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
 
 
 def scanfile(path, st, do_th):
-  if do_th or not path.endswith('.th.jpg'):
+  if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
     bufsize = 1 << 20
     width = height = None
     format = '?'
