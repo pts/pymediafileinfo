@@ -389,7 +389,8 @@ def scan(path_iter, old_files, do_th):
       try:
         st = os.lstat(path)
       except OSError, e:
-        print >>sys.stderr, 'warning: lstat %s: %s' % (path, e)
+        if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
+          print >>sys.stderr, 'warning: lstat %s: %s' % (path, e)
         st = None
       if not st:
         pass
@@ -399,7 +400,8 @@ def scan(path_iter, old_files, do_th):
         try:
           st2 = os.stat(path)  # There is a race condition between lstat and stat.
         except OSError, e:  # Typically: dangling symlink.
-          print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
+          if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
+            print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
           st2 = None
         if st2 and stat.S_ISREG(st2.st_mode):
           file_items.append((path, st2))
@@ -411,7 +413,8 @@ def scan(path_iter, old_files, do_th):
       try:
         st = os.stat(path)
       except OSError, e:
-        print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
+        if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
+          print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
         st = None
       if not st:
         pass
