@@ -434,7 +434,7 @@ def scan(path_iter, old_files, do_th):
     path, st = file_items.pop()
     old_item = old_files.get(path)
     if (not old_item or old_item[0] != st.st_size or
-        old_item[1] != st.st_mtime):
+        old_item[1] != int(st.st_mtime)):
       #print >>sys.stderr, 'info: Scanning: %s' % path
       for info in scanfile(path, st, do_th):
         yield info
