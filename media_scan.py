@@ -362,6 +362,9 @@ def scanfile(path, st, do_th):
             width, height = struct.unpack('<HH', data[18 : 22])
           elif b in (40, 124) and len(data) >= 26:
             width, height = struct.unpack('<II', data[18 : 26])
+        elif (data.startswith('PK\1\2') or data.startswith('PK\3\4') or
+              data.startswith('PK\5\6') or data.startswith('PK\7\x08')):
+          format = 'zip'
         else:
           pass  # format = '?'
         s = sha256(data)
