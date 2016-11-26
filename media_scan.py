@@ -365,6 +365,8 @@ def scanfile(path, st, do_th):
         elif (data.startswith('PK\1\2') or data.startswith('PK\3\4') or
               data.startswith('PK\5\6') or data.startswith('PK\7\x08')):
           format = 'zip'
+        elif data.startswith('JASC BROWS FILE\0'):
+          format = 'jbf'
         else:
           pass  # format = '?'
         s = sha256(data)
