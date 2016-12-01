@@ -29,6 +29,141 @@ except ImportError:
   if sys.version_info < (2, 5):
     sys.exit('fatal: Install hashlib from PyPI or use Python >=2.5.')
 
+# --- Image fingerprinting for similarity with findimagedupes.
+
+# by pts@fazekas.hu at Thu Dec  1 08:06:10 CET 2016
+FINGERPRINT_IMAGE_PERL_CODE = r'''
+use integer;
+use strict;
+use Graphics::Magick;
+
+my $inFP = 0;
+$SIG{SEGV} = sub { die $inFP ? "caught segfault in fingerprinting\n" : ()};
+
+sub try {
+  my ($err) = @_;
+  if ($err and $err !~ /Warning (?:315|330):/) {
+    die("GraphicMagick problem: $err\n");
+  }
+}
+
+# Similar to Mime::Base64::encode_base64, compatible with Python
+# base64.decodestrig and base64.standard_b64decode.
+sub base64_encode($) {
+  return undef if !defined($_[0]);
+  my $s = pack("u", $_[0]);  # We base base64 encoding on on uuencode.
+  $s =~ y{`!\"#\$\%&\x27()*+,\-./0-9:;<=>?\@A-Z[\\]^_`}{A-Za-z0-9+/};
+  $s =~ s@^(?:[ADGJMPSVYbehknqtwz258](\S+)\n|[BEHKNQTWZcfilorux0369]
+      (\S+)AA\n|[CFILORUXadgjmpsvy147](\S+)A\n|(.+))@
+      defined$1 ? $1 : defined$2 ? $2."==" : defined$3 ?
+      $3."=" : die("bad uu:$4\n") @msgex;
+  return $s;
+}
+
+# Code based on `findimagedupes` 2.18-4build3.
+sub fingerprint_image($) {
+  my $file = $_[0];
+  # GraphicMagick doesn't always catch output from the programs
+  # it spawns, so we have to clean up for it...
+  open(SAVED_OUT, ">&", \*STDOUT) or die("open(/dev/null): $!\n");
+  open(SAVED_ERR, ">&", \*STDERR) or die("open(/dev/null): $!\n");
+  open(STDOUT, ">/dev/null");
+  open(STDERR, ">/dev/null");
+  $inFP = 1;
+  my $result = eval {
+    my $image = Graphics::Magick->new;
+    die "file not found: $file\n" if !-f($file);
+    if (!$image->Ping($file)) {
+      die("unknown-type file: $file\n");
+    }
+    try $image->Read($file);
+    if ($#$image<0) {
+      die("fingerprint: not enough image data for $file\n");
+    }
+    else {
+      $#$image = 0;
+    }
+    try $image->Sample("160x160!");
+    try $image->Modulate(saturation=>-100);
+    try $image->Blur(radius=>3,sigma=>99);
+    try $image->Normalize();
+    try $image->Equalize();
+    try $image->Sample("16x16");
+    try $image->Threshold();
+    try $image->Set(magick=>'mono');
+    my $blob = $image->ImageToBlob();
+    if (!defined($blob)) {
+      die("This can't happen! undefined blob for: $file\n");
+    }
+    $blob;
+  };
+  $inFP = 0;
+  #@$image = ();  # TODO(pts): Do we need this for cleanup? It doesn't speed up.
+  open(STDOUT, ">&", \*SAVED_OUT) or die("open(/dev/null): $!\n");
+  open(STDERR, ">&", \*SAVED_ERR) or die("open(/dev/null): $!\n");
+  close(SAVED_OUT);
+  close(SAVED_ERR);
+  if (!defined($result)) {
+    my $msg = $@; chomp $msg; $msg =~ s@[\n\r]+@  @g; return "! $msg";
+  }
+  base64_encode($result);
+}
+
+print "! fingerprint_image ready\n";
+select((select(STDOUT), $| = 1)[0]);  # Flush.
+while (<STDIN>) {
+  chomp;
+  print fingerprint_image($_) . "\n";
+  select((select(STDOUT), $| = 1)[0]);  # Flush.
+}
+'''
+
+fingerprint_pipe_ary = []
+
+def init_fingerprint_pipe():
+  # This function is not thread-safe.
+
+  if not fingerprint_pipe_ary:
+    import subprocess
+    env = dict(os.environ)
+    env['PERL__CODE'] = FINGERPRINT_IMAGE_PERL_CODE
+    # Line-buffering seems to work with fast flushes in Perl and Python.
+    # TODO(pts): Catch OSError.
+    p = subprocess.Popen(('perl', '-we', '#fingerprint_image\neval $ENV{PERL__CODE}; die $@ if $@'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
+    fingerprint_pipe_ary.append(p)
+    line = p.stdout.readline()
+    if line != '! fingerprint_image ready\n':
+      # TODO(pts): Call p.wait if line is empty etc.
+      # TODO(pts): Don't init again if first one failed.
+      raise IOError('fingerprint_image init failed.')
+  return fingerprint_pipe_ary[0]
+
+
+def fingerprint_image(filename):
+  # This function is not thread-safe.
+  # Don't call this on non-images (e.g. videos), it may be slow.
+
+  p = init_fingerprint_pipe()
+  filename = str(filename)
+  if '\0' in filename or '\n' in filename:
+    raise ValueError('Unsupported filename: %r' % filename)
+  p.stdin.write('%s\n' % filename)
+  p.stdin.flush()  # Automatic, just to make sure.
+  fp = p.stdout.readline()
+  if not fp:
+    raise IOError('Unexpected EOF from fingerprint_image pipe: %s' % filename)
+  fp = fp.rstrip('\n')
+  if not fp:
+    raise IOError('Unexpected empty line from fingerprint_image pipe.' % filename)
+  if fp.startswith('! '):
+    raise IOError('Error in fingerprint_image: %s' % fp[2:])  # Filename is usually included.
+  if not (len(fp) == 44 and fp[-1] == '='):
+    raise IOError('Invalid fingerprint syntax for: %s' % filename)
+  return fp
+
+
+# ---
+
 
 def is_animated_gif(f, do_read_entire_file=False):
   """Returns bool indicating whether f contains an animaged GIF.
@@ -320,8 +455,12 @@ BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
 
 LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
 
+# All image file formats supported by GraphicsMagick.
+# TODO(pts): Try and support 'agif'.
+FINGERPRINTABLE_FORMATS = ('gif', 'jpeg', 'png', 'bmp')
 
-def scanfile(path, st, do_th):
+
+def scanfile(path, st, do_th, do_fp):
   if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
     bufsize = 1 << 20
     width = height = None
@@ -379,6 +518,10 @@ def scanfile(path, st, do_th):
         f.close()
       info = {'format': format, 'f': path, 'sha256': s.hexdigest(),
               'mtime': int(st.st_mtime), 'size': int(st.st_size)}
+      if do_fp and format in FINGERPRINTABLE_FORMATS:
+        # xfidfp: extra findimagedupes fingerprint.
+        # TODO(pts): Recover from errors.
+        info['xfidfp'] = fingerprint_image(path)
       if width is not None and height is not None and width >= 0 and height >= 0:
         info['width'], info['height'] = width, height
       yield info
@@ -386,7 +529,7 @@ def scanfile(path, st, do_th):
       print >>sys.stderr, 'error: Reading file %s: %s' % (path, e)
 
 
-def scan(path_iter, old_files, do_th):
+def scan(path_iter, old_files, do_th, do_fp):
   dir_paths = []
   file_items = []
   if getattr(os, 'lstat', None):
@@ -438,7 +581,7 @@ def scan(path_iter, old_files, do_th):
     if (not old_item or old_item[0] != st.st_size or
         old_item[1] != int(st.st_mtime)):
       #print >>sys.stderr, 'info: Scanning: %s' % path
-      for info in scanfile(path, st, do_th):
+      for info in scanfile(path, st, do_th, do_fp):
         yield info
   while dir_paths:
     path = dir_paths.pop()
@@ -446,7 +589,7 @@ def scan(path_iter, old_files, do_th):
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
-    for info in scan(subpaths, old_files, do_th):
+    for info in scan(subpaths, old_files, do_th, do_fp):
       yield info
 
 
@@ -485,6 +628,7 @@ def main(argv):
   old_files = {}  # Maps paths to (size, mtime) pairs.
   i = 1
   do_th = True
+  do_fp = False
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -505,12 +649,15 @@ def main(argv):
     elif arg.startswith('--th='):
       value = arg[arg.find('=') + 1:].lower()
       do_th = value in ('1', 'yes', 'true', 'on')
+    elif arg.startswith('--fp=') or arg.startswith('--xfidfp='):
+      value = arg[arg.find('=') + 1:].lower()
+      do_fp = value in ('1', 'yes', 'true', 'on')
     else:
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:
     # For unbuffered appending.
     outf = os.fdopen(sys.stdout.fileno(), 'a', 0)
-  for info in scan(argv[i:], old_files, do_th):  # Not in original order.
+  for info in scan(argv[i:], old_files, do_th, do_fp):  # Not in original order.
     outf.write(format_info(info))
     outf.flush()
 
