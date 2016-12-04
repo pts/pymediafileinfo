@@ -31,6 +31,40 @@ except ImportError:
 
 # --- Image fingerprinting for similarity with findimagedupes.
 
+# by pts@fazekas.hu at Thu Dec  1 21:07:48 CET 2016
+# Bit-by-bit identical output to the findimagedupes Perl script's.
+def fingerprint_image(filename, half_threshold_ary=[]):
+  import pgmagick  # sudo apt-get install python-pgmagick
+  if not half_threshold_ary:
+    half_threshold_ary.append((1 << (pgmagick.Image().depth() - 1)) - 1)  # 127
+  try:
+    # Ignores and hides warnings. Usage ing.read(filename) to convert a
+    # warning to a RuntimeError. For a ``Premature end of JPEG file'', this
+    # will still read the JPEG (partyially) to img.
+    img = pgmagick.Image(filename)
+    # Not doing this: img.verbose(True)
+    img.sample('160x160!')
+    img.modulate(100.0, -100.0, 100.0)  # saturation=-100.
+    img.blur(3, 99)  # radius=3, sigma=99.
+    img.normalize()
+    img.equalize()
+    img.sample('16x16')
+    img.threshold(half_threshold_ary[0])
+    img.magick('mono')
+    blob = pgmagick.Blob()
+    img.write(blob)
+    # Just for comaptibility check.
+    #try:
+    #  assert blob.base64() == fingerprint_image_with_perl(filename)
+    #except IOError:
+    #  pass
+    # 32 bytes encoded as 44 bytes base64, ending by '=='.
+    return blob.base64()
+  except (RuntimeError, IOError), e:
+    # Typically RuntimeError raised by pgmagick methods.
+    raise IOError(str(e))
+
+
 # by pts@fazekas.hu at Thu Dec  1 08:06:10 CET 2016
 FINGERPRINT_IMAGE_PERL_CODE = r'''
 use integer;
@@ -139,7 +173,9 @@ def init_fingerprint_pipe():
   return fingerprint_pipe_ary[0]
 
 
-def fingerprint_image(filename):
+# Currently unused.
+# TODO(pts): Use this if pgmagick is not available, but Graphics::Magick is.
+def fingerprint_image_with_perl(filename):
   # This function is not thread-safe.
   # Don't call this on non-images (e.g. videos), it may be slow.
 
@@ -520,8 +556,16 @@ def scanfile(path, st, do_th, do_fp):
               'mtime': int(st.st_mtime), 'size': int(st.st_size)}
       if do_fp and format in FINGERPRINTABLE_FORMATS:
         # xfidfp: extra findimagedupes fingerprint.
-        # TODO(pts): Recover from errors.
-        info['xfidfp'] = fingerprint_image(path)
+        try:
+          info['xfidfp'] = fingerprint_image(path)
+        except IOError, e:
+          e = str(e)
+          # Example e: Error in fingerprint_image: GraphicMagick problem: Exception 325: Corrupt JPEG data: premature end of data segment (foo/bar.jpg)
+          for suffix in (': ' + path, ' (%s)' % path):
+            if e.endswith(suffix):
+              e = e[:-len(suffix)]
+          print >>sys.stderr, 'warning: fingerprint_image %s: %s' % (path, e)
+          info['xfidfp'] = 'err'
       if width is not None and height is not None and width >= 0 and height >= 0:
         info['width'], info['height'] = width, height
       yield info
