@@ -30,13 +30,28 @@ except ImportError:
     sys.exit('fatal: Install hashlib from PyPI or use Python >=2.5.')
 
 # --- Image fingerprinting for similarity with findimagedupes.
+#
+# Clients should call fingerprint_image.
+#
+
+def fix_gm_filename(filename):
+  """Prevent GraphicsMagick from treating files like logo: specially."""
+  if not os.path.isabs(filename) and (
+     filename.startswith('-') or filename.startswith('+') or
+     ':' in filename):
+    return os.path.join('.', filename)
+  else:
+    return filename
+
 
 # by pts@fazekas.hu at Thu Dec  1 21:07:48 CET 2016
 # Bit-by-bit identical output to the findimagedupes Perl script's.
-def fingerprint_image(filename, half_threshold_ary=[]):
-  import pgmagick  # sudo apt-get install python-pgmagick
-  if not half_threshold_ary:
-    half_threshold_ary.append((1 << (pgmagick.Image().depth() - 1)) - 1)  # 127
+def fingerprint_image_with_pgmagick(filename, _half_threshold_ary=[]):
+  # Dependency: sudo apt-get install python-pgmagick
+  # Dependency (alt): pip install pgmagick
+  import pgmagick
+  if not _half_threshold_ary:
+    _half_threshold_ary.append((1 << (pgmagick.Image().depth() - 1)) - 1)  # 127
   try:
     # Ignores and hides warnings. Usage ing.read(filename) to convert a
     # warning to a RuntimeError. For a ``Premature end of JPEG file'', this
@@ -49,7 +64,7 @@ def fingerprint_image(filename, half_threshold_ary=[]):
     img.normalize()
     img.equalize()
     img.sample('16x16')
-    img.threshold(half_threshold_ary[0])
+    img.threshold(_half_threshold_ary[0])
     img.magick('mono')
     blob = pgmagick.Blob()
     img.write(blob)
@@ -65,6 +80,38 @@ def fingerprint_image(filename, half_threshold_ary=[]):
     raise IOError(str(e))
 
 
+def fingerprint_image_with_gm_convert(filename):
+  # Dependency: sudo apt-get install graphicsmagick
+
+  import base64
+  import subprocess
+  # ImageMagick `convert' tool doesn't work, it implements `-sample' in an
+  # incompatible way, the outputs don't match.
+  #
+  # The per-file overhead of calling a separate `gm convert' process is 0.02s
+  # in real time and 0.00255s in user time. This is how much faster
+  # fingerprint_image_with_gm_convert is.
+  gm_convert_cmd = (
+      'gm', 'convert', filename, '-sample', '160x160!',
+      '-modulate', '100,-100,100', '-blur', '3x99', '-normalize',
+      '-equalize', '-sample', '16x16', '-threshold', '50%', 'mono:-')
+  p = subprocess.Popen(gm_convert_cmd, stdin=subprocess.PIPE,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  try:
+    data, stderr_data = p.communicate('')
+  finally:
+    exit_code = p.wait()
+  if exit_code:
+    raise IOError('gm convert failed: exit_code=%d stderr=%r' %
+                  (exit_code, stderr_data))
+  # Don't print stderr_data here, example line:
+  # 'gm convert: Corrupt JPEG data: premature end of data segment (t.jpg).\n'.
+  if len(data) != 32:
+    raise IOError(
+        'gm convert returned bad data size: got=%d expected=32' % len(data))
+  return base64.b64encode(data)
+
+
 # by pts@fazekas.hu at Thu Dec  1 08:06:10 CET 2016
 FINGERPRINT_IMAGE_PERL_CODE = r'''
 use integer;
@@ -76,7 +123,8 @@ $SIG{SEGV} = sub { die $inFP ? "caught segfault in fingerprinting\n" : ()};
 
 sub try {
   my ($err) = @_;
-  if ($err and $err !~ /Warning (?:315|330):/) {
+  # Example: Exception 325: Corrupt JPEG data: premature end of data segment
+  if ($err and $err !~ /^(?:Warning (?:315|330)|Exception 325):/) {
     die("GraphicMagick problem: $err\n");
   }
 }
@@ -173,12 +221,10 @@ def init_fingerprint_pipe():
   return fingerprint_pipe_ary[0]
 
 
-# Currently unused.
-# TODO(pts): Use this if pgmagick is not available, but Graphics::Magick is.
 def fingerprint_image_with_perl(filename):
   # This function is not thread-safe.
-  # Don't call this on non-images (e.g. videos), it may be slow.
-
+  #
+  # Dependency: sudo apt-get install libgraphics-magick-perl
   p = init_fingerprint_pipe()
   filename = str(filename)
   if '\0' in filename or '\n' in filename:
@@ -192,10 +238,92 @@ def fingerprint_image_with_perl(filename):
   if not fp:
     raise IOError('Unexpected empty line from fingerprint_image pipe.' % filename)
   if fp.startswith('! '):
-    raise IOError('Error in fingerprint_image: %s' % fp[2:])  # Filename is usually included.
+    # Filename is usually included.
+    raise IOError('Graphics::Magick error: %s' % fp[2:])
   if not (len(fp) == 44 and fp[-1] == '='):
     raise IOError('Invalid fingerprint syntax for: %s' % filename)
   return fp
+
+
+def fingerprint_image(filename, _use_impl_ary=[]):
+  """Computes and returns a find visual image fingerprint.
+
+  This function is not thread-safe. Don't call it from multiple threads at
+  the same time.
+
+  Don't call this on non-images (e.g. videos or animated gifs), it may be
+  slow.
+
+  The output of this function seems to be bit-by-bit identical across
+  platforms and implementations:
+
+  * _with_pgmagick, _with_perl, _with_gm_convert
+  * i386, amd64
+  * Ubuntu 10.04, Ubuntu 14.04
+  * GraphicsMagick 1.3.5, GraphicsMagick 1.3.18
+  * findimagedupes -v fp -n, media_scan.py
+
+  This function silently ignores image processing warnings such as
+  ``Premature end of JPEG file'' and ``premature end of data segment''.
+
+  Args:
+    filename: The name of the file containing an image. Must be in a format
+      supported by GraphicsMagick. Don't pass non-images (e.g. videos or
+      animated gifs), it may be slow.
+    _use_impl_ary: Implementation detail, don't specify it. Contain an empty
+      list or a 1-element list of the implementation function to use. If empty,
+      the best available implementation will be autodetected and appended.
+  Returns:
+    A 256-bit string encoded as base64 in 44 bytes, ending with '='. It is
+    the same as the output of `findimagedupes -v fp -n'. The 256-bit string
+    contains an uncompressed 16x16 1-bit-per-pixel image. Based on the
+    fingerprints it's possible to assess how similar two uncropped images
+    are visually. findimagedupes calculates the number of 1-bits in the xor
+    of the 256-bit fingerprints, and it considers the two images are
+    identical iff the xor has at most 25 1-bits. See also:
+    https://github.com/pts/pyfindimagedupes .
+  Raises:
+    IOError: If fingerprinting has failed.
+    NotImplementedError: If no working implementation has been detected.
+  """
+
+  if not _use_impl_ary:
+    try:
+      import pgmagick
+      _use_impl_ary.append(fingerprint_image_with_pgmagick)  # Fastest.
+    except ImportError:
+      pass
+    if not _use_impl_ary:
+      import subprocess
+      try:
+        exit_code = subprocess.call(
+          ('perl', '-mGraphics::Magick', '-e0'), stderr=subprocess.PIPE)
+      except OSError:
+        exit_code = -1
+      if not exit_code:
+        _use_impl_ary.append(fingerprint_image_with_perl)  # Medium speed.
+    if not _use_impl_ary:
+      import subprocess
+      try:
+        p = subprocess.Popen(
+            ('gm', 'convert', 'xc:#000', '-sample', '1x1!', 'mono:-'),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+      except OSError:
+        p, exit_code = None, -1
+      if p:
+        try:
+          data, _ = p.communicate('')
+        finally:
+          exit_code = p.wait()
+      if not exit_code and data == '\0':
+        _use_impl_ary.append(fingerprint_image_with_gm_convert)  # Slowest.
+    if not _use_impl_ary:
+      raise NotImplementedError(
+          'No fingerpint_image backend found, '
+          'install pgmagick or graphicsmagick.')
+
+  return _use_impl_ary[0](fix_gm_filename(filename))
 
 
 # ---
@@ -560,7 +688,6 @@ def scanfile(path, st, do_th, do_fp):
           info['xfidfp'] = fingerprint_image(path)
         except IOError, e:
           e = str(e)
-          # Example e: Error in fingerprint_image: GraphicMagick problem: Exception 325: Corrupt JPEG data: premature end of data segment (foo/bar.jpg)
           for suffix in (': ' + path, ' (%s)' % path):
             if e.endswith(suffix):
               e = e[:-len(suffix)]
