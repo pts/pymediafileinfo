@@ -161,7 +161,7 @@ sub fingerprint_image($) {
     }
     try $image->Read($file);
     if ($#$image<0) {
-      die("fingerprint: not enough image data for $file\n");
+      die("not enough image data: $file\n");
     }
     else {
       $#$image = 0;
