@@ -620,6 +620,16 @@ def get_brn_dimensions_cached(f, data):
     f.seek(old_ofs)
 
 
+def is_html(data):
+  data = data[:256].lstrip().lower()
+  return (data.startswith('<!-- start header  --><html>') or
+          data.startswith('<html>') or
+          data.startswith('<head>') or
+          data.startswith('<body>') or
+          data.startswith(' <!doctype html ') or
+          data.startswith(' <!doctype html>'))
+
+
 BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
 
 LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
@@ -675,6 +685,8 @@ def scanfile(path, st, do_th, do_fp):
           format = 'zip'
         elif data.startswith('JASC BROWS FILE\0'):
           format = 'jbf'
+        elif is_html(data):
+          format = 'html'
         else:
           pass  # format = '?'
         s = sha256(data)
