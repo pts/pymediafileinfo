@@ -124,8 +124,12 @@ $SIG{SEGV} = sub { die $inFP ? "caught segfault in fingerprinting\n" : ()};
 sub try {
   my ($err) = @_;
   # Example: Exception 325: Corrupt JPEG data: premature end of data segment
-  # TODO(pts): Handle: GraphicMagick problem: Exception 450: Unsupported marker type 0x31
-  if ($err and $err !~ /^(?:Warning (?:315|330)|Exception 325):/) {
+  # Example: Exception 450: Unsupported marker type 0x6a
+  #     With this on Ubuntu 10.04, there will be ``not enough image data''.
+  #     But Unbutu 14.04 pgmagick is able to load the image.
+  # Example: Exception 350: Extra compression data
+  # Example: Exception 350: Incorrect sBIT chunk length
+  if ($err and $err !~ /^(?:Warning (?:315|330)|Exception (?:325|350|450)):/) {
     die("GraphicMagick problem: $err\n");
   }
 }
