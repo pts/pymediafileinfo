@@ -685,6 +685,11 @@ def scanfile(path, st, do_th, do_fp):
           format = 'zip'
         elif data.startswith('JASC BROWS FILE\0'):
           format = 'jbf'
+        elif (data.startswith('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') or
+              data.startswith('\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e')):
+          # Thumbs.db
+          # http://forensicswiki.org/wiki/OLE_Compound_File
+          format = 'olecf'
         elif is_html(data):
           format = 'html'
         else:
