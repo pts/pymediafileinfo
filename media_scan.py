@@ -920,7 +920,16 @@ LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
 FINGERPRINTABLE_FORMATS = ('gif', 'jpeg', 'png', 'bmp')
 
 
-def scanfile(path, st, do_th, do_fp, tags):
+def format_symlink(symlink):
+  return symlink.replace('%', '%25').replace(',', '%2C').replace(' ', ',')
+
+
+def scanfile_symlink(path, st, symlink):
+  yield  {'format': 'symlink', 'f': path, 'symlink': format_symlink(symlink),
+          'mtime': int(st.st_mtime), 'size': len(symlink)}
+
+
+def scanfile(path, st, do_th, do_fp, tags, symlink):
   if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
     bufsize = 1 << 20
     width = height = None
@@ -1001,10 +1010,8 @@ def scanfile(path, st, do_th, do_fp, tags):
       if tags is not None:
         # If tags is an empty string, we still want to save it.
         info['tags'] = tags
-      if stat.S_ISLNK(st.st_mode):
-        # This means that the symlink was followed, and the values printed are
-        # of the target.
-        info['symlink'] = '%'
+      if symlink is not None:
+        info['symlink'] = format_symlink(symlink)
       yield info
     except IOError, e:
       print >>sys.stderr, 'error: Reading file %s: %s' % (path, e)
@@ -1012,7 +1019,8 @@ def scanfile(path, st, do_th, do_fp, tags):
 
 def scan(path_iter, old_files, do_th, do_fp, tags_impl):
   dir_paths = []
-  file_items = []  # List of (path, st).
+  file_items = []  # List of (path, st, tags, symlink, is_symlink).
+  symlink = None
   if getattr(os, 'lstat', None):
     for path in path_iter:
       try:
@@ -1023,24 +1031,46 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
         st = None
       if not st:
         pass
+      # TODO(pts): Indicate block device, character device, pipe and socket
+      # nodes as well. Currently they are just omitted from the output.
       elif stat.S_ISREG(st.st_mode):
-        file_items.append((path, st))
+        tags = ''
+        if tags_impl:
+          # We could save ctime= to old_files, then compare it to st_ctime,
+          # and if it's equal, omit the (slow, disk-seeking) call to tags_impl
+          # below, because the tags haven't changed.
+          try:
+            tags = ','.join(tags_impl(path).strip().split())
+          except OSError, e:
+            print >>sys.stderr, 'warning: tags %s: %s' % (path, e)
+        file_items.append((path, st, tags, None, False))
       elif stat.S_ISLNK(st.st_mode):
+        try:
+          symlink = os.readlink(path)
+        except OSError, e:
+          # This shouldn't happen. It means that the symlink has vanished
+          # between the lstat and the readlink.
+          print >>sys.stderr, 'warning: symlink %s: %s' % (path, e)
+          symlink = '%'
         try:
           st2 = os.stat(path)  # There is a race condition between lstat and stat.
         except OSError, e:  # Typically: dangling symlink.
           if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
             print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
           st2 = None
+        # Don't do anything special with symlinks to directories.
         if st2 and stat.S_ISREG(st2.st_mode):
-          tst2 = type(st2)
-          st2 = list(st2)
-          st2[stat.ST_MODE] &= ~stat.S_IFREG
-          st2[stat.ST_MODE] |= stat.S_IFLNK  # Make it a symlink.
-          st2 = tst2(st2)
-          assert not stat.S_ISREG(st2.st_mode)
-          assert stat.S_ISLNK(st2.st_mode)
-          file_items.append((path, st2))
+          tags = ''
+          if tags_impl:
+            # We use os.path.realpath to avoid EPERM on lgetattr on symlink.
+            try:
+              tags = ','.join(tags_impl(os.path.realpath(path)).strip().split())
+            except OSError, e:
+              print >>sys.stderr, 'warning: symlink tags %s: %s' % (path, e)
+          file_items.append((path, st2, tags, symlink, False))
+        else:
+          # No tags for symlinks. This is to avoid EPERM on lgetattr.
+          file_items.append((path, st, '', symlink, True))
         # We don't follow symlinks pointing to directories.
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
@@ -1055,7 +1085,7 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
       if not st:
         pass
       elif stat.S_ISREG(st.st_mode):
-        file_items.append((path, st))
+        file_items.append((path, st, None, False))
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
 
@@ -1063,26 +1093,24 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
   dir_paths.reverse()
   file_items.sort()
   file_items.reverse()
-  tags = None
   while file_items:
-    path, st = file_items.pop()
+    path, st, tags, symlink, is_symlink = file_items.pop()
     old_item = old_files.get(path)
-    if tags_impl:
-      if stat.S_ISLNK(st.st_mode):
-        tags = ''  # No tags for symlinks. This is to avoid EPERM on lgetattr.
-      else:
-        # We could save ctime= to old_files, then compare it to st_ctime, and
-        # if it's equal, omit the (slow, disk-seeking) call to tags_impl
-        # below, because the tags haven't changed.
-        tags = ','.join(tags_impl(path).strip().split())
+    #assert path != 'blah.pl', [old_item, (st.st_size, int(st.st_mtime), tags, symlink, is_symlink)]
     if (not old_item or old_item[0] != st.st_size or
         old_item[1] != int(st.st_mtime) or
+        old_item[3] != symlink or
+        old_item[4] != is_symlink or
         # If old_item[2] is None (we don't know the tags) and tags == '',
         # this doesn't match. Good.
         (tags_impl and tags != old_item[2])):
       #print >>sys.stderr, 'info: Scanning: %s' % path
-      for info in scanfile(path, st, do_th, do_fp, tags):
-        yield info
+      if is_symlink:
+        for info in scanfile_symlink(path, st, symlink):
+          yield info
+      else:
+        for info in scanfile(path, st, do_th, do_fp, tags, symlink):
+          yield info
   while dir_paths:
     path = dir_paths.pop()
     subpaths = os.listdir(path)
@@ -1106,8 +1134,15 @@ def add_old_files(line_source, old_files):
         raise ValueError('Expected key=value, got: %s' % kv)
       info[kv[0]] = kv[1]
     #print info
+    is_symlink = info['format'] == 'symlink'
+    if is_symlink:
+      dtags = ''
+    else:
+      dtags = None
     try:
-      old_files[info['f']] = (int(info['size']), int(info['mtime']), info.get('tags'))
+      old_files[info['f']] = (int(info['size']), int(info['mtime']),
+                              info.get('tags', dtags), info.get('symlink'),
+                              is_symlink)
     except (KeyError, ValueError):
       pass
 
