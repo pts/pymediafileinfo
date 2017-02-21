@@ -1001,6 +1001,10 @@ def scanfile(path, st, do_th, do_fp, tags):
       if tags is not None:
         # If tags is an empty string, we still want to save it.
         info['tags'] = tags
+      if stat.S_ISLNK(st.st_mode):
+        # This means that the symlink was followed, and the values printed are
+        # of the target.
+        info['symlink'] = '%'
       yield info
     except IOError, e:
       print >>sys.stderr, 'error: Reading file %s: %s' % (path, e)
@@ -1029,6 +1033,13 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
             print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
           st2 = None
         if st2 and stat.S_ISREG(st2.st_mode):
+          tst2 = type(st2)
+          st2 = list(st2)
+          st2[stat.ST_MODE] &= ~stat.S_IFREG
+          st2[stat.ST_MODE] |= stat.S_IFLNK  # Make it a symlink.
+          st2 = tst2(st2)
+          assert not stat.S_ISREG(st2.st_mode)
+          assert stat.S_ISLNK(st2.st_mode)
           file_items.append((path, st2))
         # We don't follow symlinks pointing to directories.
       elif stat.S_ISDIR(st.st_mode):
@@ -1057,10 +1068,13 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
     path, st = file_items.pop()
     old_item = old_files.get(path)
     if tags_impl:
-      # We could save ctime= to old_files, then compare it to st_ctime, and
-      # if it's equal, omit the (slow, disk-seeking) call to tags_impl
-      # below, because the tags haven't changed.
-      tags = ','.join(tags_impl(path).strip().split())
+      if stat.S_ISLNK(st.st_mode):
+        tags = ''  # No tags for symlinks. This is to avoid EPERM on lgetattr.
+      else:
+        # We could save ctime= to old_files, then compare it to st_ctime, and
+        # if it's equal, omit the (slow, disk-seeking) call to tags_impl
+        # below, because the tags haven't changed.
+        tags = ','.join(tags_impl(path).strip().split())
     if (not old_item or old_item[0] != st.st_size or
         old_item[1] != int(st.st_mtime) or
         # If old_item[2] is None (we don't know the tags) and tags == '',
