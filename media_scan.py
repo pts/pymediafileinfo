@@ -1131,7 +1131,7 @@ def add_old_files(line_source, old_files):
     for item in line[:i].split(' '):
       kv = item.split('=', 1)
       if len(kv) != 2:
-        raise ValueError('Expected key=value, got: %s' % kv)
+        raise ValueError('Expected key=value, got: %s in line %r' % (kv, line))
       info[kv[0]] = kv[1]
     #print info
     is_symlink = info['format'] == 'symlink'
