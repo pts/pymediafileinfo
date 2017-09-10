@@ -1,6 +1,8 @@
 #! /usr/bin/python
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
+import cStringIO
+import re
 import struct
 import sys
 
@@ -889,6 +891,317 @@ def detect_mp4(f, info, header=''):
     if xtype == 'moov':  # Found all metadata.
       break
 
+
+# --- Image file formats.
+#
+# !! remove the need for seeking
+
+def is_animated_gif(f, do_read_entire_file=False):
+  """Returns bool indicating whether f contains an animaged GIF.
+
+  If it's a GIF, sometimes reads the entire file (or at least the 1st frame).
+
+  Args:
+    f: An object supporting the .read(size) method. Should be seeked to the
+        beginning of the file.
+    do_read_entire_file: If true, then read the entire file, even if we know
+        that it's an animated GIF.
+  Returns:
+    bool indicating whether the GIF file f contains an animaged GIF.
+  Raises:
+    ValueError: If not a GIF file or there is a syntax error in the GIF file.
+    IOError: If raised by f.read(size).
+  """
+
+  def read_all(f, size):
+    data = f.read(size)
+    if len(data) != size:
+      raise ValueError(
+          'Short read in GIF: wanted=%d got=%d' % (size, len(data)))
+    return data
+
+  header = f.read(13)
+  if len(header) < 13 or not (
+      header.startswith('GIF87a') or header.startswith('GIF89a')):
+    raise ValueError('Not a GIF file.')
+  pb = ord(header[10])
+  if pb & 128:  # Global Color Table present.
+    read_all(f, 6 << (pb & 7))  # Skip the Global Color Table.
+  has_repeat = False
+  has_delay = False
+  frame_count = 0
+  while 1:
+    b = ord(read_all(f, 1))
+    if b == 0x3B:  # End of file.
+      break
+    elif b == 0x21:  # Extension introducer.
+      b = ord(read_all(f, 1))
+      if b == 0xff:  # Application extension.
+        ext_id_size = ord(read_all(f, 1))
+        ext_id = read_all(f, ext_id_size)
+        if ext_id == 'NETSCAPE2.0':  # For the number of repetitions.
+          if not do_read_entire_file:
+            return True
+          has_repeat = True
+        ext_data_size = ord(read_all(f, 1))
+        ext_data = read_all(f, ext_data_size)
+        data_size = ord(read_all(f, 1))
+        while data_size:
+          read_all(f, data_size)
+          data_size = ord(read_all(f, 1))
+      else:
+        # TODO(pts): AssertionError: Unknown extension: 0x01; in badgif1.gif
+        if b not in (0xf9, 0xfe):
+          raise ValueError('Unknown GIF extension type: 0x%02x' % b)
+        ext_data_size = ord(read_all(f, 1))
+        if b == 0xf9:  # Graphic Control extension.
+          if ext_data_size != 4:
+            raise ValueError(
+                'Bad ext_data_size for GIF GCE: %d' % ext_data_size)
+        ext_data = read_all(f, ext_data_size)
+        # Graphic Control extension, delay for animation.
+        if b == 0xf9 and ext_data[1 : 3] != '\0\0':
+          if not do_read_entire_file:
+            return True
+          has_delay = True
+        data_size = ord(read_all(f, 1))
+        if b == 0xf9:
+          if data_size != 0:
+            raise ValueError('Bad data_size for GIF GCE: %d' % data_size)
+        while data_size:
+          read_all(f, data_size)
+          data_size = ord(read_all(f, 1))
+    elif b == 0x2C:  # Image Descriptor.
+      frame_count += 1
+      if frame_count > 1 and not do_read_entire_file:
+        return True
+      read_all(f, 8)
+      pb = ord(read_all(f, 1))
+      if pb & 128:  # Local Color Table present.
+        read_all(f, 6 << (pb & 7))  # Skip the Local Color Table.
+      read_all(f, 1)  # Skip LZW minimum code size.
+      data_size = ord(read_all(f, 1))
+      while data_size:
+        read_all(f, data_size)
+        data_size = ord(read_all(f, 1))
+    else:
+      raise ValueError('Unknown GIF block type: 0x%02x' % b)
+  if frame_count <= 0:
+    raise ValueError('No frames in GIF file.')
+  return bool(frame_count > 1 or has_repeat or has_delay)
+
+
+def is_animated_gif_cached(f, data):
+  # data is the first few bytes of f.
+
+  if len(data) >= 16:
+    try:
+      return is_animated_gif(cStringIO.StringIO(data))
+    except ValueError, e:
+      se = str(e)
+      if not se.startswith('Short read '):
+        return False
+  old_ofs = f.tell()
+  f.seek(0)
+  try:
+    try:
+      return is_animated_gif(f)
+    except ValueError, e:
+      return False
+  finally:
+    f.seek(old_ofs)
+
+
+def get_jpeg_dimensions(f):
+  """Returns (width, height) of a JPEG file.
+
+  Args:
+    f: An object supporting the .read(size) method. Should be seeked to the
+        beginning of the file.
+  Returns:
+    (width, height) pair of integers.
+  Raises:
+    ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
+    IOError: If raised by f.read(size).
+  """
+  # Implementation based on pts-qiv
+  #
+  # A typical JPEG file has markers in these order:
+  #   d8 e0_JFIF e1 e1 e2 db db fe fe c0 c4 c4 c4 c4 da d9.
+  #   The first fe marker (COM, comment) was near offset 30000.
+  # A typical JPEG file after filtering through jpegtran:
+  #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
+  #   The first fe marker (COM, comment) was at offset 20.
+
+  def read_all(f, size):
+    data = f.read(size)
+    if len(data) != size:
+      raise ValueError(
+          'Short read in JPEG: wanted=%d got=%d' % (size, len(data)))
+    return data
+
+  data = f.read(4)
+  if len(data) < 4 or not data.startswith('\xff\xd8\xff'):
+    raise ValueError('Not a JPEG file.')
+  m = ord(data[3])
+  while 1:
+    while m == 0xff:  # Padding.
+      m = ord(read_all(f, 1))
+    if m in (0xd8, 0xd9, 0xda):
+      # 0xd8: SOI unexpected.
+      # 0xd9: EOI unexpected before SOF.
+      # 0xda: SOS unexpected before SOF.
+      raise ValueError('Unexpected marker: 0x%02x' % m)
+    ss, = struct.unpack('>H', read_all(f, 2))
+    if ss < 2:
+      raise ValueError('Segment too short.')
+    ss -= 2
+    if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
+      if ss < 5:
+        raise ValueError('SOF segment too short.')
+      height, width = struct.unpack('>xHH', read_all(f, 5))
+      return width, height
+    read_all(f, ss)
+
+    # Read next marker to m.
+    m = read_all(f, 2)
+    if m[0] != '\xff':
+      raise ValueError('Marker expected.')
+    m = ord(m[1])
+  assert 0, 'Internal JPEG parser error.'
+
+
+def get_jpeg_dimensions_cached(f, data):
+  # data is the first few bytes of f.
+
+  if len(data) >= 4:
+    try:
+      return get_jpeg_dimensions(cStringIO.StringIO(data))
+    except ValueError, e:
+      se = str(e)
+      if not se.startswith('Short read '):
+        return None, None
+  old_ofs = f.tell()
+  f.seek(0)
+  try:
+    try:
+      return get_jpeg_dimensions(f)
+    except ValueError, e:
+      return None, None
+  finally:
+    f.seek(old_ofs)
+
+
+def get_brn_dimensions(f):
+  """Returns (width, height) of a BRN file.
+
+  Args:
+    f: An object supporting the .read(size) method. Should be seeked to the
+        beginning of the file.
+  Returns:
+    (width, height) pair of integers.
+  Raises:
+    ValueError: If not a BRN file or there is a syntax error in the BRN file.
+    IOError: If raised by f.read(size).
+  """
+  def read_all(f, size):
+    data = f.read(size)
+    if len(data) != size:
+      raise ValueError(
+          'Short read in BRN: wanted=%d got=%d' % (size, len(data)))
+    return data
+
+  def read_base128(f):
+    shift, result, c = 0, 0, 0
+    while 1:
+      b = f.read(1)
+      if not b:
+        raise ValueError('Short read in base128.')
+      c += 1
+      if shift > 57:
+        raise ValueError('base128 value too large.')
+      b = ord(b)
+      result |= (b & 0x7f) << shift
+      if not b & 0x80:
+        return result, c
+      shift += 7
+
+  data = f.read(7)
+  if len(data) < 7 or not data.startswith('\x0a\x04B\xd2\xd5N\x12'):
+    raise ValueError('Not a BRN file.')
+
+  header_remaining, _ = read_base128(f)
+  width = height = None
+  while header_remaining:
+    if header_remaining < 0:
+      raise ValueError('BRN header spilled over.')
+    marker = ord(read_all(f, 1))
+    header_remaining -= 1
+    if marker & 0x80 or marker & 0x5 or marker <= 2:
+      raise ValueError('Invalid marker.')
+    if marker == 0x8:
+      if width is not None:
+        raise ValueError('Multiple width.')
+      width, c = read_base128(f)
+      header_remaining -= c
+    elif marker == 0x10:
+      if height is not None:
+        raise ValueError('Multiple height.')
+      height, c = read_base128(f)
+      header_remaining -= c
+    else:
+      val, c = read_base128(f)
+      header_remaining -= c
+      if (marker & 7) == 2:
+        read_all(f, val)
+        header_remaining -= val
+  if width is not None and height is not None:
+    return width, height
+  else:
+    return None, None
+
+
+def get_brn_dimensions_cached(f, data):
+  # data is the first few bytes of f.
+
+  if len(data) >= 8:
+    try:
+      return get_brn_dimensions(cStringIO.StringIO(data))
+    except ValueError, e:
+      se = str(e)
+      if not se.startswith('Short read '):
+        return None, None
+  old_ofs = f.tell()
+  f.seek(0)
+  try:
+    try:
+      return get_brn_dimensions(f)
+    except ValueError, e:
+      return None, None
+  finally:
+    f.seek(old_ofs)
+
+
+def is_html(data):
+  data = data[:256].lstrip().lower()
+  return (data.startswith('<!-- start header  --><html>') or
+          data.startswith('<html>') or
+          data.startswith('<head>') or
+          data.startswith('<body>') or
+          data.startswith(' <!doctype html ') or
+          data.startswith(' <!doctype html>'))
+
+
+BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
+
+LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
+
+# All image file formats supported by GraphicsMagick.
+# TODO(pts): Try and support 'agif'.
+FINGERPRINTABLE_FORMATS = ('gif', 'jpeg', 'png', 'bmp')
+
+
+# ---
 
 def detect(f, info=None):
   """Detect file format, codecs and image dimensions in file f.
