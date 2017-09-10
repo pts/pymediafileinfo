@@ -820,6 +820,7 @@ def detect_mp4(f, info, header=''):
               raise ValueError('MP4E13')
             # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
             ysize, codec = struct.unpack('>L4s', data[i : i + 8])
+            codec = ''.join(codec.split())  # Remove whitespace, e.g. 'raw'.
             if ysize < 8 or i + ysize > len(data):
               raise ValueError('MP4E14')
             yitem = data[i + 8 : i + ysize]
@@ -828,6 +829,8 @@ def detect_mp4(f, info, header=''):
               # Video docs: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGICBJ
               if ysize < 28:
                 raise ValueError('Video stsd too short.')
+              # !! TODO(pts): Many of these for .mov files: Unreasonable height: 2
+              # !!            .mov dimen detection is not reliable yet.
               reserved1, data_reference_index, version, revision_level, vendor, temporal_quality, spatial_quality, width, height = struct.unpack('>6sHHH4sLLHH', yitem[:28])
               video_track_info = {'type': 'video', 'codec': codec}
               set_video_dimens(video_track_info, width, height)
