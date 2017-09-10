@@ -163,7 +163,7 @@ def detect_flv(f, info, header=''):
     if len(data) < 13:
       raise ValueError('Too short for flv.')
   elif len(data) != 13:
-    raise AssertionError('Header too short for flv: %d' % len(data))
+    raise AssertionError('Header too long for flv: %d' % len(data))
 
   if not data.startswith('FLV'):
     raise ValueError('flv signature not found.')
@@ -534,7 +534,7 @@ def detect_mkv(f, info, header=''):
 
   if len(header) > 4:
     # We can increase it by input buffering.
-    raise AssertionError('Header too long for MKV: %d' % len(header))
+    raise AssertionError('Header too long for mkv: %d' % len(header))
   header += f.read(4 - len(header))
   if len(header) != 4:
     raise ValueError('Too short for MKV.')
@@ -559,13 +559,13 @@ def detect_mkv(f, info, header=''):
       # 'matroska' for .mkv, 'webm' for .webm.
       if data not in ('matroska', 'webm'):
         raise ValueError('Unknown MKV DocType: %r' % data)
-      info['subtype'] = MKV_DOCTYPES[data]
-      if info['subtype'] == 'webm':
+      info['subformat'] = MKV_DOCTYPES[data]
+      if info['subformat'] == 'webm':
         info['brands'] = ['mkv', 'webm']
         info['format'] = 'webm'
       else:
         info['brands'] = ['mkv']
-  if 'subtype' not in info:
+  if 'subformat' not in info:
     raise('MKV DocType not found.')
   xid = read_id_skip_void(f)
   if xid != '\x18\x53\x80\x67':  # Segment.
@@ -711,6 +711,182 @@ def copy_info_from_tracks(info):
     info.setdefault('vcodec', '?')
 
 
+# --- mp4
+
+
+def detect_mp4(f, info, header=''):
+  # Documentation: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
+  info['type'] = 'mov'
+  info['minor_version'] = 0
+  info['brands'] = []
+  info['tracks'] = []
+  info['has_early_mdat'] = False
+
+  def skip(size, xtype):
+    if size < 65536:
+      data = f.read(size)
+      if len(data) != size:
+        raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
+    else:
+      # !! TODO(pts): What if not seekable?
+      f.seek(size, 1)  # We assume that the file is long enough.
+
+  # Empty or contains the type of the last hdlr.
+  last_hdlr_type_list = []
+
+  def process_box(size):
+    """Dumps the box, and must read it (size bytes)."""
+    xtype = xtype_path[-1]
+    xytype = '/'.join(xtype_path[-2:])
+    # Only the composites we care about.
+    is_composite = xytype in (
+        '/moov', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
+    if xtype == 'mdat':
+      info['has_early_mdat'] = False
+    if is_composite:
+      if xytype == 'trak/mdia':
+        if last_hdlr_type_list and 'd' not in last_hdlr_type_list:
+          # stsd not found, still report the track.
+          if last_hdlr_type_list[0] == 'vide':
+            info['tracks'].append({'type': 'video'})
+          elif last_hdlr_type_list[0] == 'soun':
+            info['tracks'].append({'type': 'audio'})
+        del last_hdlr_type_list[:]
+      ofs_limit = size
+      while ofs_limit > 0:  # Dump sequences of boxes inside.
+        if ofs_limit < 8:
+          raise ValueError('MP4E2')
+        size2, xtype2 = struct.unpack('>L4s', f.read(8))
+        if not (8 <= size2 <= ofs_limit):
+          raise ValueError('MP4E3 size=%d ofs_limit=%d' % (size2, ofs_limit))
+        ofs_limit -= size2
+        xtype_path.append(xtype2)
+        process_box(size2 - 8)
+        xtype_path.pop()
+    else:
+      if size > 16383 or xtype == 'free':
+        skip(size, xtype)
+      else:
+        data = f.read(size)
+        if len(data) != size:
+          raise ValueError('EOF in mp4 box, xtype=%r' % xtype)
+        if xytype == '/ftyp':
+          # See also: http://www.ftyps.com/
+          # See also: http://www.ftyps.com/3gpp.html
+          # Typically major_brand in (
+          #    'qt  ', 'dash', 'MSNV', 'M4A ', 'M4V ', 'f4v ',
+          #    '3gp5', 'avc1', 'iso2', 'iso5', 'iso6', 'isom', 'mp41', 'mp42').
+          if len(data) < 8:
+            raise ValueError('EOF in mp4 ftyp.')
+          major_brand, info['minor_version'] = struct.unpack('>4sL', data[:8])
+          info['minor_version'] = int(info['minor_version'])
+          if major_brand == 'qt  ':
+            info['type'] = 'mov'
+          elif major_brand == 'f4v ':
+            info['type'] = 'f4v'
+          else:
+            info['type'] = 'mp4'
+          info['subtype'] = major_brand
+          brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
+          brands.discard('\0\0\0\0')
+          brands.add(major_brand)
+          brands = sorted(brands)
+          info['brands'] = brands  # Example: ['isom', 'mp42'].
+        #elif xytype == 'trak/tkhd':  # /moov/trak/tkhd
+        #  # Don't process tkhd, it's unreliable in some mp4 files.
+        #  if track_tkhd_data[0] == '\0':  # 32-bit.
+        #    width, height = struct.unpack('>LL', track_tkhd_data[74 : 74 + 8])
+        #  else:  # 64-bit.
+        #    width, height = struct.unpack('>LL', track_tkhd_data[86 : 86 + 8])
+        elif xytype == 'mdia/hdlr':  # /moov/trak/mdia/hdlr
+          del last_hdlr_type_list[:]
+          if len(data) < 12:
+            raise ValueError('EOF in mp4 hdlr.')
+          last_hdlr_type_list.append(data[8 :12])
+        elif xytype == 'stbl/stsd':  # /moov/trak/mdia/minf/stbl/stsd
+          if not last_hdlr_type_list:
+            raise ValueError('Found stsd without a hdlr first.')
+          if len(data) < 8:
+            raise ValueError('MP4E11')
+          version_and_flags, count = struct.unpack('>LL', data[:8])
+          if version_and_flags:
+            raise ValueError('Bad mp4 stsd bad_version_and_flags=%d' % version_and_flags)
+          i = 8
+          while i < len(data):
+            # !! allow ysize==0 and nothing else.
+            if len(data) - i < 8:
+              raise ValueError('MP4E12')
+            if not count:
+              raise ValueError('MP4E13')
+            # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
+            ysize, codec = struct.unpack('>L4s', data[i : i + 8])
+            if ysize < 8 or i + ysize > len(data):
+              raise ValueError('MP4E14')
+            yitem = data[i + 8 : i + ysize]
+            last_hdlr_type_list.append('d')  # Signal above.
+            if last_hdlr_type_list[0] == 'vide':
+              # Video docs: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGICBJ
+              if ysize < 28:
+                raise ValueError('Video stsd too short.')
+              reserved1, data_reference_index, version, revision_level, vendor, temporal_quality, spatial_quality, width, height = struct.unpack('>6sHHH4sLLHH', yitem[:28])
+              video_track_info = {'type': 'video', 'codec': codec}
+              set_video_dimens(video_track_info, width, height)
+              info['tracks'].append(video_track_info)
+            elif last_hdlr_type_list[0] == 'soun':
+              # Audio: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGGHJH
+              # Version can be 0 or 1.
+              # Audio version 1 adds 4 new 4-byte fields (samples_per_packet, bytes_per_packet, bytes_per_frame, bytes_per_sample)
+              if ysize < 28:
+                raise ValueError('Audio stsd too short.')
+              reserved1, data_reference_index, version, revision_level, vendor, channel_count, sample_size_bits, compression_id, packet_size, sample_rate_hi, sample_rate_lo = struct.unpack('>6sHHHLHHHHHH', yitem[:28])
+              info['tracks'].append({
+                  'type': 'audio',
+                  'codec': codec,
+                  'channel_count': channel_count,
+                  'sample_size': sample_size_bits,
+                  'sample_rate': sample_rate_hi + (sample_rate_lo / 65536.0),
+              })
+            i += ysize
+            count -= 1
+          if count:
+            raise ValueError('MP4E15')
+
+  xtype_path = ['']
+  while 1:
+    if header:
+      if len(header) > 8:
+        raise AssertionError('Header too long for mp4: %d' % len(header))
+      data = str(header)
+      data += f.read(8 - len(data))
+      header = ''
+    else:
+      data = f.read(8)
+    if len(data) != 8:
+      # Sometimes this happens, there is a few bytes of garbage, but we
+      # don't reach it, because we break after 'moov' earlier below.
+      raise ValueError('EOF in top-level mp4 box header.')
+    size, xtype = struct.unpack('>L4s', data)
+    if size == 1:  # Read 64-bit size.
+      data = f.read(8)
+      if len(data) < 8:
+        raise ValueError('EOF in top-level 64-bit mp4 box size.')
+      size, = struct.unpack('>Q', data)
+      if size < 16:
+        raise ValueError('64-bit mp4 box size too small.')
+      size -= 16
+    elif size >= 8:
+      size -= 8
+    else:
+      # We don't allow size == 0 (meaning until EOF), because we want to
+      # finish the metadata boxes first (before EOF).
+      raise ValueError('mp4 box size too small: %d' % size)
+    xtype_path.append(xtype)
+    process_box(size)
+    xtype_path.pop()
+    if xtype == 'moov':  # Found all metadata.
+      break
+
+
 def detect(f, info=None):
   """Detect file format, codecs and image dimensions in file f.
 
@@ -749,7 +925,7 @@ def detect(f, info=None):
       header += f.read(8 - len(header))
     if header[4 : 8] == 'ftyp':
       info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
-      # !! Add detect_mp4.
+      detect_mp4(f, info, header)
   elif header.startswith('GIF8'):
     if len(header) < 6:
       header += f.read(6 - len(header))
@@ -953,7 +1129,24 @@ def detect(f, info=None):
     # TODO(pts): Make it compatible with 'winexe', in any order.
 
     info['format'] = '?'
-    if header.startswith('BM'):  # Move this down (short prefix).
+    if info['format'] == '?' and len(header) < 8:
+      # Mustn't be more than 8 bytes, for detect_mp4.
+      header += f.read(8 - len(header))
+    if (info['format'] == '?' and
+        header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
+      info['format'] = 'mov'
+      detect_mp4(f, info, header)
+    elif (info['format'] == '?' and
+          header.startswith('\0\0') and header[4 : 8] == 'wide'):
+      # Immediately followed by a 4-byte size, then 'mdat'.
+      info['format'] = 'mov'
+      detect_mp4(f, info, header)
+    elif (info['format'] == '?' and
+          header.startswith('\0\0') and header[4 : 8] == 'moov'):
+      info['format'] = 'mov'
+      detect_mp4(f, info, header)
+    if (info['format'] == '?' and
+        header.startswith('BM')):
       if len(header) < 10:
         header += f.read(10 - len(header))
       if header[6 : 10] == '\0\0\0\0':
@@ -969,21 +1162,6 @@ def detect(f, info=None):
       if ord(header[16]) <= 8 or ord(header[16]) == 24:
         # Unfortunately not all tga (targa) files have 'TRUEVISION-XFILE.\0'.
         format = 'tga'  # sam2p can read it.
-    if info['format'] == '?' and len(header) < 8:
-      header += f.read(8 - len(header))
-    if (info['format'] == '?' and
-        header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
-      info['format'] = 'mov'
-      # !! Add detection, similar to detect_mp4.
-    elif (info['format'] == '?' and
-          header.startswith('\0\0') and header[4 : 8] == 'wide'):
-      # Immediately followed by a 4-byte size, then 'mdat'.
-      info['format'] = 'mov'
-      # !! Add detection, similar to detect_mp4.
-    elif (info['format'] == '?' and
-          header.startswith('\0\0') and header[4 : 8] == 'moov'):
-      info['format'] = 'mov'
-      # !! Add detection, similar to detect_mp4.
 
   if not info.get('format'):
     info['format'] = '?'
@@ -994,6 +1172,8 @@ def detect(f, info=None):
 
 def format_info(info):
   def format_value(v):
+    if isinstance(v, bool):
+      return int(v)
     if isinstance(v, float):
       if abs(v) < 1e15 and int(v) == v:  # Remove the trailing '.0'.
         return int(v)
@@ -1021,6 +1201,8 @@ def main(argv):
       try:
         info = detect(f, info)
         had_error_here = False
+      except KeyboardInterrupt:
+        raise
       except (IOError, ValueError), e:
         info['error'] = 'bad_file'
         if e.__class__ == ValueError:
@@ -1037,7 +1219,7 @@ def main(argv):
       if not info.get('format'):
         info['format'] = '?'
       try:
-        info['header_end_offset'] = f.tell()
+        info['header_end_offset'] = int(f.tell())
         f.seek(0, 2)
         info['size'] = f.tell()
       except (IOError, OSError, AttributeError):
