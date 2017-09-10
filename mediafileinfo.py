@@ -25,23 +25,153 @@ def detect_flv(f, info, header=''):
   # Documented here (starting on page 68, Annex E):
   # http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
   #
-  # !!! how does the PHP code read it?
+  # !!! Compare it with medid for all (not only h264).
+
+  def parse_h264_sps(
+      data, expected, expected_sps_id,
+      _hextable='0123456789abcdef',
+      _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
+      ):
+    # Based on function read_seq_parameter_set_rbsp in
+    # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
+    # , except for the very first byte.
+    #
+    # The formula for width and height is based on:
+    # https://stackoverflow.com/a/31986720/97248
+    if len(data) < 5:
+      raise ValueError('flv h264 avcc sps too short.')
+    if data[0] != '\x67':  # nalu_type=7 nalu_reftype=3.
+      raise ValueError('Bad flv h264 avcc sps type.')
+    if not data[1 : 4].startswith(expected):
+      raise ValueError('Unexpected start of sps.')
+    if len(data) > 255:  # Typically just 22 bytes.
+      raise ValueError('flv h264 avcc sps too long.')
+    io = {}
+    io['chroma_format'] = 1
+    io['profile'] = ord(data[1])
+    io['compatibility'] = ord(data[2])
+    io['level'] = ord(data[3])
+    io['residual_color_transform_flag'] = 0
+    data = iter(''.join(  # Convert to binary.
+        _hex_to_bits[_hextable.find(c)]
+        for c in str(buffer(data, 4)).encode('hex')))
+    def read_1():
+      return int(data.next() == '1')
+    def read_n(n):
+      r = 0
+      for _ in xrange(n):
+        r = r << 1 | (data.next() == '1')
+      return r
+    def read_ue():  # Unsigned varint.
+      r = n = 0
+      while data.next() == '0' and n < 32:
+        n += 1
+      for _ in xrange(n):
+        r = r << 1 | (data.next() == '1')
+      return r + (1 << n) - 1
+    def read_se():  # Signed varint.
+      r = read_ue()
+      if r & 1:
+        return (r + 1) >> 1;
+      else:
+        return -(r >> 1)
+    def read_scaling_list(size):  # Return value ingored.
+      # Untested, based on h264_scale.c.
+      last_scale, next_scale = 8, 8
+      for j in xrange(size):
+        if next_scale:
+          next_scale = (last_scale + read_se()) & 255
+        if next_scale:
+          last_scale = next_scale
+    try:
+      io['sps_id'] = read_ue()
+      if io['sps_id'] != expected_sps_id:
+        raise ValueError('Unexpected flv h264 avcc sps id: expected=%d, got=%d' %
+                         (expecteD_sps_id, io['sps_id']))
+      if io['profile'] in (
+          100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
+        # Untested.
+        io['chroma_format'] = read_ue()
+        if io['chroma_format'] == 3:
+          io['residual_colour_transform_flag'] = read_1()
+        io['bit_depth_luma_minus8'] = read_ue()
+        io['bit_depth_chroma_minus8'] = read_ue()
+        io['qpprime_y_zero_transform_bypass_flag'] = read_1()
+        io['seq_scaling_matrix_present_flag'] = read_1()
+        if io['seq_scaling_matrix_present_flag']:
+          for si in xrange(8):
+            if read_1():
+              read_scaling_list((64, 16)[i < 6])
+      io['log2_max_frame_num'] = 4 + read_ue()
+      io['pic_order_cnt_type'] = read_ue()
+      if io['pic_order_cnt_type'] == 0:
+        io['log2_max_pic_order_cnt'] = 4 + read_ue()
+      elif io['pic_order_cnt_type'] == 1:
+        io['log2_max_pic_order_cnt'] = 0
+        io['delta_pic_order_always_zero_flag'] = read_1()
+        io['offset_for_non_ref_pic'] = read_se()
+        io['offset_for_top_to_bottom_field'] = read_se()
+        for _ in read_ue():
+          read_se()
+      elif io['pic_order_cnt_type'] == 2:
+        io['log2_max_pic_order_cnt'] = 0
+      else:
+        raise ValueError('Unknown flv h264 avcc sps pic_order_cnt_type: %d' %
+                         io['pic_order_cnt_type'])
+      io['num_ref_frames'] = read_ue()
+      io['gaps_in_frame_num_value_allowed_flag'] = read_1()
+      io['width_in_mbs'] = read_ue() + 1
+      io['height_in_map_units'] = read_ue() + 1
+      io['frame_mbs_only_flag'] = read_1()
+      if not io['frame_mbs_only_flag']:
+        io['mb_adaptive_frame_field_flag'] = read_1()
+      io['direct_8x8_inference_flag'] = read_1()
+      io['frame_cropping_flag'] = read_1()
+      if io['frame_cropping_flag']:
+        io['crop_left'] = read_ue()
+        io['crop_right'] = read_ue()
+        io['crop_top'] = read_ue()
+        io['crop_bottom'] = read_ue()
+      else:
+        io['crop_left'] = io['crop_right'] = 0
+        io['crop_top'] = io['crop_bottom'] = 0
+      # Stop parsing here, we are not interested in the VUI parameters which
+      # follow.
+
+      if io['chroma_format'] == 0:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = 'monochrome', 0, 0
+      elif io['chroma_format'] == 1:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:0', 2, 2
+      elif io['chroma_format'] == 2:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:2', 2, 1
+      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 0:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 1, 1
+      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 1:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 0, 0
+      else:
+        raise ValueError('Unknown flv h264 sps chroma_format: %d' % io['chroma_format'])
+      io['height_in_mbs'] = (2 - io['frame_mbs_only_flag']) * io['height_in_map_units']
+      io['width'] =  (io['width_in_mbs']  << 4) - io['sub_width_c']  * (io['crop_left'] + io['crop_right'])
+      io['height'] = (io['height_in_mbs'] << 4) - io['sub_height_c'] * (2 - io['frame_mbs_only_flag']) * (io['crop_top'] + io['crop_bottom'])
+      return io  # h264_sps_info.
+    except StopIteration:
+      raise ValueError('EOF in flv h264 avcc sps.')
 
   data = header
   if len(data) < 13:
     data += f.read(13 - len(data))
     if len(data) < 13:
-      raise ValueError('Too short for FLV.')
+      raise ValueError('Too short for flv.')
   elif len(data) != 13:
-    raise AssertionError('Header too short for FLV: %d' % len(data))
+    raise AssertionError('Header too short for flv: %d' % len(data))
 
   if not data.startswith('FLV'):
-    raise ValueError('FLV signature not found.')
+    raise ValueError('flv signature not found.')
   if data[3] != '\1':
     # Not found any files with other versions.
-    raise ValueError('Only FLV version 1 is supported.')
+    raise ValueError('Only flv version 1 is supported.')
   if data[5 : 9] != '\0\0\0\x09':
-    raise ValueError('Bad FLV header size.')
+    raise ValueError('Bad flv header size.')
   flags = ord(data[4])
   has_audio = bool(flags & 4)
   has_video = bool(flags & 1)
@@ -60,11 +190,16 @@ def detect_flv(f, info, header=''):
   if has_video:
     video_track_info = {'type': 'video'}
     info['tracks'].append(video_track_info)
+  nalu_size_size = None
+  max_nonaudio_frame_count = 4
 
   while audio_remaining or video_remaining:
     data = f.read(11)
     if len(data) != 11:
-      raise ValueError('EOF in tag header.')
+      if not data:
+        raise ValueError('EOF in flv, waiting for audio=%d video=%d' %
+                         (audio_remaining, video_remaining))
+      raise ValueError('EOF in flv tag header, got: %d' % len(data))
     size, timestamp, stream_id = struct.unpack('>LL3s', data)
     xtype, size = size >> 24, size & 0xffffff
     if xtype & 0xc0:  # Would affect size.
@@ -75,8 +210,11 @@ def detect_flv(f, info, header=''):
       raise ValueError('Unknown tag type: %d' % xtype)
     if stream_id != '\0\0\0':
       raise ValueError('Unexpected stream ID.')
+    if xtype != 8:
+      if max_nonaudio_frame_count <= 0:
+        break  # Don't wait for: EOF in flv, waiting for audio=1 video=0
+      max_nonaudio_frame_count -= 1
     if xtype == 8:  # Audio.
-      audio_remaining -= bool(audio_remaining)
       if size < 1:
         raise ValueError('Audio tag too small.')
       if size > 8191:  # !! Estimate better.
@@ -84,29 +222,32 @@ def detect_flv(f, info, header=''):
       data = f.read(size)
       if len(data) != size:
         raise ValueError('EOF in tag data.')
-      b = ord(data[0])
-      audio_codec_id = b >> 4
-      audio_track_info['codec'] = (
-          ('pcm', 'adpcm', 'mp3', 'pcm', 'nellymoser', 'nellymoser',
-           'nellymoser', 'alaw', 'mulaw', 'reserved9', 'aac',
-           'speex', 'reserved13', 'mp3', 'reserved15')[audio_codec_id])
-      audio_track_info['sample_rate'] = (  # Sample rate in Hz.
-          (5512, 11025, 22050, 44100)[(b >> 2) & 3])
-      audio_track_info['sample_size'] = (  # Sample size in bits.
-          (8, 16)[(b >> 1) & 1])
-      audio_track_info['channel_count'] = (1, 2)[b & 1]
+      if audio_remaining:
+        audio_remaining -= 1
+        b = ord(data[0])
+        audio_codec_id = b >> 4
+        audio_track_info['codec'] = (
+            ('pcm', 'adpcm', 'mp3', 'pcm', 'nellymoser', 'nellymoser',
+             'nellymoser', 'alaw', 'mulaw', 'reserved9', 'aac',
+             'speex', 'reserved13', 'mp3', 'reserved15')[audio_codec_id])
+        audio_track_info['sample_rate'] = (  # Sample rate in Hz.
+            (5512, 11025, 22050, 44100)[(b >> 2) & 3])
+        audio_track_info['sample_size'] = (  # Sample size in bits.
+            (8, 16)[(b >> 1) & 1])
+        audio_track_info['channel_count'] = (1, 2)[b & 1]
     elif xtype == 9:  # Video.
       if size < 4:
         raise ValueError('Video tag too small.')
       if size >= (1 << 22):  # !! Estimate better.
         raise ValueError('Video tag unreasonably large: %d' % size)
-      data = f.read(size)  # TODO(pts): Skip over most of it.
+      data = f.read(size)  # TODO(pts): Skip over most of the tag, save memory.
       if len(data) != size:
         raise ValueError('EOF in tag data.')
       b = ord(data[0])
       video_frame_type_id, video_codec_id = b >> 4, b & 15
-      if video_frame_type_id != 5:  # 5 doesn't contain dimensions.
-        video_remaining -= bool(video_remaining)
+      if (video_remaining and
+          video_frame_type_id != 5):  # 5 doesn't contain dimensions.
+        video_remaining -= 1
         video_track_info['codec'] = (
             ('reserved0', 'reserved1', 'h263', 'screen', 'vp6',
              'vp6alpha', 'screen2', 'h264', 'u8', 'u9', 'u10',
@@ -138,33 +279,36 @@ def detect_flv(f, info, header=''):
             width, height = ((352, 288), (176, 144), (128, 96), (320, 240),
                              (160, 120))[dimen_id - 2]
           set_video_dimens(video_track_info, width, height)
-        elif video_codec_id == 3:  # 'screen'.
-          # 0 of 1531 .flv files have this codec.
-          pass  # TODO(pts): Implement it.
-        elif video_codec_id == 5:  # 'screen2'.
-          # 0 of 1531 .flv files have this codec.
-          pass  # TODO(pts): Implement it.
+        elif video_codec_id in (3, 5):  # ('screen', 'screen2').
+          # 0 of 1531 .flv files have this codec. Untested.
+          # See SCREENVIDEOPACKET in swf-file-format-spec.pdf, v19.
+          # See SCREENV2VIDEOPACKET in swf-file-format-spec.pdf, v19.
+          if len(data) < 9:
+            raise ValueError('flv screen video frame too short.')
+          width, height = struct.unpack('>HH', data[1 : 9])
+          width, height = width & 4095, height & 4095
+          set_video_dimens(video_track_info, width, height)
         elif video_codec_id in (4, 5):  # ('vp6', 'vp6alpha').
           # https://wiki.multimedia.cx/index.php/On2_VP6#Format
           if len(data) < 10:
-            raise ValueError('vp6* video frame too short.')
+            raise ValueError('flv vp6* video frame too short.')
           b = ord(data[1])
           adjust_wd, adjust_ht = b >> 4, b & 15
-          if video_codec_id == 4:  # 23 of 1531 .flv files have this codec. 
+          if video_codec_id == 4:  # 23 of 1531 .flv files have this codec.
             i = 2
-          else:  # 0 of 1531 .flv files have this codec.
+          else:  # 0 of 1531 .flv files have this codec. Untested.
             color_frame_size = struct.unpack('>L', data[2 : 6])[0] >> 8
             if not (8 <= color_frame_size <= len(data) - 4):
               # Actually, AlphaData is also present afterwards, so instead of
               # `- 4' above, we could use `- 12' for stricter checking.
-              raise ValueError('Invalid vp6alpha color frame size.')
+              raise ValueError('Invalid flv vp6alpha color frame size.')
             if len(data) < 13:
-              raise ValueError('vp6alpha video frame too short.')
+              raise ValueError('flv vp6alpha video frame too short.')
             i = 5
           b = ord(data[i])
           frame_mode, qp, marker = b >> 7, (b >> 1) & 63, b & 1
           if frame_mode:
-            raise ValueError('Expected first frame as intra frame.')
+            raise ValueError('Expected first flv vp6* frame as intra frame.')
           version2 = (ord(data[i + 1]) >> 1) & 3
           i += 2 + 2 * (marker or version2 == 0)
           mb_ht16, mb_wd16, display_ht16, display_wd16 = struct.unpack(
@@ -175,36 +319,48 @@ def detect_flv(f, info, header=''):
           set_video_dimens(video_track_info, width, height)
         elif video_codec_id == 7:  # 'avc' and 'h264' are the same.
           # 772 of 1531 .flv files have this codec.
-          pass  # TODO(pts): Implement it.
-          # This will be tough, AVCDecoderConfigurationRecord doesn't have the
-          # dimensions. But there is NALU (NAL unit), which doesn't contain
-          # dimensions either easily. Sigh.
-          # Some info about NAL units:
-          # http://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/
+          #
+          # We extract the dimensions from the SPS in the AVCC.
+          # Best explanation of AVCC and NALU:
+          # https://stackoverflow.com/a/24890903/97248
+          packet_type = ord(data[1])
+          if packet_type:  # Packat types 0, 1 and 2 are valid; 0 first.
+            # Expecting packet_type 0: AVCDecoderConfigurationRecord (AVCC).
+            # Sampe as the avcC box in MP4.
+            raise ValueError('Unexpected flv h264 packet type: %d' %
+                             packet_type)
+          version, lsm, sps_count = ord(data[5]), ord(data[9]), ord(data[10])
+          if version != 1:
+            raise ValueError('Invalid flv h264 avcc version: %d' % version)
+          expected = data[6 : 9]
+          if (lsm | 3) != 255 or (sps_count | 31) != 255:
+            raise ValueError('flv h264 avcc reserved bits unset.')
+          sps_count &= 31  # Also: lsm &= 3.
+          if sps_count != 1:
+            raise ValueError('Expected 1 flv h264 avcc sps, got %d' % sps_count)
+          if len(data) < 13:
+            raise ValueError('EOF in flv h264 avcc sps size.')
+          sps_size, = struct.unpack('>H', data[11 : 13])
+          if 13 + sps_size > len(data):
+            raise ValueError('EOF in flv h264 avcc sps.')
+          h264_sps_info = parse_h264_sps(
+              buffer(data, 13, sps_size), expected, 0)
+          set_video_dimens(video_track_info,
+                           h264_sps_info['width'], h264_sps_info['height'])
     elif xtype in (15, 18):
       # The script tag for YouTube .flv doesn't contain width and height.
-      # There are width and height fields defined, they are just not filled.
-      # We need to parse video tag, which is codec-specific (sigh).
+      # There are width and height fields defined, they are just not filled
+      # in many .flv files, so instead of using this data, we do codec-specific
+      # video frame parsing above.
       # TODO(pts): Get more metadata from script.
       if size > 65535:  # !! Estimate better.
         raise ValueError('Script tag unreasonably large: %d' % size)
-      # The ScriptTagBody contains SCRIPTDATA encoded in the Action Message Format (AMF), which is a compact
-      # binary format used to serialize ActionScript object graphs. The specification for AMF0 is available at:
+      # The ScriptTagBody contains SCRIPTDATA encoded in the Action Message
+      # Format (AMF), which is a compact binary format used to serialize
+      # ActionScript object graphs. The specification for AMF0 is available
+      # at:
       # http://opensource.adobe.com/wiki/display/blazeds/Developer+Documentation
       script_format = ('amf0', 'amf3')[xtype == 15]
-      # !! {'duration': 159.4,
-# 'width': 434.0,
-# 'height': 326.0,
-# 'videodatarate': 364.0,
-# 'framerate': 30.0,
-# 'videocodecid': 4.0,
-# 'audiodatarate': 48.0,
-# 'audiodelay': 0.0,
-# 'audiocodecid': 2.0,
-# 'canSeekToEnd': 1.0,
-# 'creationdate': 'Wed Apr 26 21:09:07 2006
-#'}
-      #print 'SCRIPTX', (size, script_format)
       data = f.read(size)
       if len(data) != size:
         raise ValueError('EOF in tag data.')
@@ -216,6 +372,10 @@ def detect_flv(f, info, header=''):
       raise ValueError(
           'Unexpected PreviousTagSize: expected=%d got=%d' %
           (size + 11, prev_size))
+
+  if audio_remaining:
+    info['tracks'][:] = [track for track in info['tracks']
+                         if track['type'] != 'audio']
 
 
 # --- mkv
@@ -291,6 +451,7 @@ def detect_mkv(f, info, header=''):
   # !!! convert assert to ValueError in detect_mp4
   # !!! make everything work for nonseekable
   # !!! don't use f.tell()
+  # !!! diagnos all errors, e.g. lots of Unexpected PreviousTagSize: 
   def read_id(f):
     c = f.read(1)
     if not c:
