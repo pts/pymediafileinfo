@@ -1,21 +1,19 @@
 #! /usr/bin/python
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
-"""Detects codecs and dimensions in media formats."""
+""":" # mediafileinfo.py: Get metadata and dimension of media files.
 
-# TODO:
-#
-# * !! TODO(pts): Compare it with medid for all (not only h264).
-# * !! TODO(pts): Diagnose all errors, e.g. lots of Unexpected PreviousTagSize: ...
-# * !! TODO(pts): Diagnose all width= and height= missing.
-# * TODO(pts): Better format=html detection, longer strings etc.
-# * TODO(pts): Add some audio formats (e.g. MP3, FLAC).
-# * TODO(pts): Add type=video, type=audio, type=image.
-# * TODO(pts): Add JPEG-2000 (JPX).
-# * TODO(pts): Update media_scan.py.
+type python2.7 >/dev/null 2>&1 && exec python2.7 -- "$0" ${1+"$@"}
+type python2.6 >/dev/null 2>&1 && exec python2.6 -- "$0" ${1+"$@"}
+type python2.5 >/dev/null 2>&1 && exec python2.5 -- "$0" ${1+"$@"}
+type python2.4 >/dev/null 2>&1 && exec python2.4 -- "$0" ${1+"$@"}
+exec python -- ${1+"$@"}; exit 1
 
-import cStringIO
-import re
+This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
+
+Typical usage: mediafileinfo.py *.mp4
+"""
+
 import struct
 import sys
 
@@ -233,7 +231,7 @@ def detect_flv(f, info, header=''):
     if xtype == 8:  # Audio.
       if size < 1:
         raise ValueError('Audio tag too small.')
-      if size > 8191:  # !! Estimate better.
+      if size > 8191:  # TODO(pts): Estimate better.
         raise ValueError('Audio tag unreasonably large: %d' % size)
       data = f.read(size)
       if len(data) != size:
@@ -254,7 +252,7 @@ def detect_flv(f, info, header=''):
     elif xtype == 9:  # Video.
       if size < 4:
         raise ValueError('Video tag too small.')
-      if size >= (1 << 22):  # !! Estimate better.
+      if size >= (1 << 22):  # TODO(pts): Estimate better.
         raise ValueError('Video tag unreasonably large: %d' % size)
       data = f.read(size)  # TODO(pts): Skip over most of the tag, save memory.
       if len(data) != size:
@@ -369,7 +367,7 @@ def detect_flv(f, info, header=''):
       # in many .flv files, so instead of using this data, we do codec-specific
       # video frame parsing above.
       # TODO(pts): Get more metadata from script.
-      if size > 65535:  # !! Estimate better.
+      if size > 65535:  # TODO(pts): Estimate better.
         raise ValueError('Script tag unreasonably large: %d' % size)
       # The ScriptTagBody contains SCRIPTDATA encoded in the Action Message
       # Format (AMF), which is a compact binary format used to serialize
@@ -472,7 +470,7 @@ MKV_CODEC_IDS = {
 }
 
 
-def detect_mkv(f, info, header=''):
+def detect_mkv(f, info, fskip, header=''):
   # https://matroska.org/technical/specs/index.html
 
   # list so that inner functions can modify it.
@@ -564,9 +562,9 @@ def detect_mkv(f, info, header=''):
       if xid != '\xec':  # Void.
         return xid
       size = read_size(f)
-      data = read_n(size)  # !! Don't read too much to memory.
-      if len(data) != size:
+      if not fskip(size):
         raise ValueError('EOF in Void element.')
+      ofs_list[0] += size
 
   if len(header) > 4:
     # We can increase it by input buffering.
@@ -585,7 +583,7 @@ def detect_mkv(f, info, header=''):
   info['format'] = 'mkv'
   while ofs_list[0] < header_end:
     xid = read_id_skip_void(f)
-    size = read_size(f)  # !! Don't read too much. Limit it.
+    size = read_size(f)
     if ofs_list[0] + size > header_end:
       raise ValueError('Size of in-header element too large.')
     data = read_n(size)
@@ -850,7 +848,6 @@ def detect_mp4(f, info, fskip, header=''):
             raise ValueError('Bad mp4 stsd bad_version_and_flags=%d' % version_and_flags)
           i = 8
           while i < len(data):
-            # !! allow ysize==0 and nothing else.
             if len(data) - i < 8:
               raise ValueError('MP4E12')
             if not count:
@@ -867,8 +864,6 @@ def detect_mp4(f, info, fskip, header=''):
               # Video docs: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGICBJ
               if ysize < 28:
                 raise ValueError('Video stsd too short.')
-              # !! TODO(pts): Many of these for .mov files: Unreasonable height: 2
-              # !!            .mov dimen detection is not reliable yet.
               reserved1, data_reference_index, version, revision_level, vendor, temporal_quality, spatial_quality, width, height = struct.unpack('>6sHHH4sLLHH', yitem[:28])
               video_track_info = {'type': 'video', 'codec': codec}
               if codec == 'rle' and (width < 16 or height < 16):
@@ -1256,7 +1251,7 @@ def detect(f, info=None, is_seek_ok=False):
     detect_flv(f, info, header)
   elif header.startswith('\x1a\x45\xdf\xa3'):
     info['format'] = 'mkv'  # Can also be .webm as a subformat.
-    detect_mkv(f, info, header)
+    detect_mkv(f, info, fskip, header)
   elif (header.startswith('\0\0\0') and len(header) >= 4 and
         ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0):
     if len(header) < 8:
@@ -1571,11 +1566,20 @@ def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
     print >>sys.exit(
         'mediafileinfo.py: Get metadata and dimension of media files.\n'
+        'This is free software, GNU GPL >=2.0. '
+        'There is NO WARRANTY. Use at your risk.\n'
         'Usage: %s <filename> [...]' % argv[0])
     sys.exit(1)
+  if len(argv) > 1 and argv[1] == '--':
+    del argv[1]
   had_error = False
   for filename in argv[1:]:
-    f = open(filename, 'rb')
+    try:
+      f = open(filename, 'rb')
+    except IOError, e:
+      had_error = True
+      print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+      continue
     try:
       had_error_here, info = True, {}
       try:
