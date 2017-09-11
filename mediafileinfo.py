@@ -269,6 +269,7 @@ def detect_flv(f, info, header=''):
         if video_codec_id ==  2:  # 'h263'.
           # 736 of 1531 .flv files have this codec.
           # See H263VIDEOPACKET in swf-file-format-spec.pdf, v19.
+          # http://www.adobe.com/content/dam/Adobe/en/devnet/swf/pdf/swf-file-format-spec.pdf
           if len(data) < 9:
             raise ValueError('h263 video tag too short.')
           b, = struct.unpack('>Q', data[1 : 9])
@@ -404,7 +405,6 @@ MKV_CODEC_IDS = {
     #'V_REAL/$(TYPE)',   # $(TYPE) substituted.
     'V_MPEG4/ISO/SP': 'divx4',
     'V_MPEG4/ISO/ASP': 'divx5',
-    'V_MPEG4/ISO/ASP': 'divxasp',
     'V_MPEG4/ISO/AVC': 'h264',
     'V_MPEG4/ISO/HEVC': 'h265',
     'V_MPEG4/MS/V3': 'divx3',
@@ -431,7 +431,7 @@ MKV_CODEC_IDS = {
     'A_MPEG/L3': 'mp3',
     'A_MPEG/L2': 'mp2',
     'A_MPEG/L1': 'mp1',
-    'A_PCM/INT/BIG': 'pcm',
+    'A_PCM/INT/BIG': 'pcm',  # PCM == linear PCM == raw, uncompressed audio.
     'A_PCM/INT/LIT': 'pcm',
     'A_PCM/FLOAT/IEEE': 'pcm',
     'A_MPC': 'mpc',
@@ -754,6 +754,70 @@ def copy_info_from_tracks(info):
 
 # --- mp4
 
+# See all on: http://mp4ra.org/codecs.html
+# All keys are converted to lowercase, and whitespace-trimmed.
+MP4_VIDEO_CODECS = {
+    'avc1': 'h264',
+    'h264': 'h264',
+    'mp4v': 'divx5',  # https://en.wikipedia.org/wiki/MPEG-4_Part_2
+    'mp4s': 'divx5',
+    'rv60': 'rv6',  # RealVideo.
+    's263': 'h263',
+    'mjp2': 'mjpeg2000',
+    'mjpa': 'mjpeg',
+    'mjpb': 'mjpeg',
+    'mjpg': 'mjpeg',
+    'svq1': 'sorenson1',
+    'svq3': 'sorenson3',
+    'mpgv': 'mpeg2',
+    'div1': 'divx',
+    'divx': 'divx',
+    'dx50': 'divx5',
+    'xvid': 'divx',
+    'fmp4': 'divx5',
+    'dvav': 'h264',
+    'dvhc': 'h265',
+    'hev1': 'h265',
+    'hvc1': 'h265',
+    'vc-1': 'vc1',
+    'vp03': 'vp3',
+    'vp04': 'vp4',
+    'vp05': 'vp5',
+    'vp06': 'vp6',
+    'vp07': 'vp7',
+    'vp08': 'vp8',
+    'vp09': 'vp9',
+    'vp10': 'vp10',
+    'vp11': 'vp11',
+}
+
+# See all on: http://mp4ra.org/codecs.html
+# All keys are converted to lowercase, and whitespace-trimmed.
+MP4_AUDIO_CODECS = {
+    'raw':  'pcm',
+    'sowt': 'pcm',
+    'twos': 'pcm',
+    'in24': 'pcm',
+    'in32': 'pcm',
+    'fl32': 'pcm',
+    'fl64': 'pcm',
+    'alaw': 'alaw',   # Logarithmic PCM wih A-Law
+    'ulaw': 'mulaw',  # Logarithmic PCM wih mu-Law.
+    '.mp3': 'mp3',
+    'mp4a': 'mp4a',  # Similar to aac, but contains more.
+    'mp4s': 'mp4a',
+    'samr': 'samr',
+    'mpga': 'mp2',
+    'sawb': 'sawb',
+    'dts+': 'dts',
+    'dts-': 'dts',
+    'dtsc': 'dts',
+    'dtse': 'dts',
+    'dtsh': 'dts',
+    'dtsl': 'dts',
+    'dtsx': 'dts',
+}
+
 
 def detect_mp4(f, info, fskip, header=''):
   # Documentation: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
@@ -854,7 +918,7 @@ def detect_mp4(f, info, fskip, header=''):
               raise ValueError('MP4E13')
             # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
             ysize, codec = struct.unpack('>L4s', data[i : i + 8])
-            codec = codec.strip()  # Remove whitespace, e.g. 'raw'.
+            codec = codec.strip().lower()  # Remove whitespace, e.g. 'raw'.
             if ysize < 8 or i + ysize > len(data):
               raise ValueError('MP4E14')
             yitem = data[i + 8 : i + ysize]
@@ -865,7 +929,10 @@ def detect_mp4(f, info, fskip, header=''):
               if ysize < 28:
                 raise ValueError('Video stsd too short.')
               reserved1, data_reference_index, version, revision_level, vendor, temporal_quality, spatial_quality, width, height = struct.unpack('>6sHHH4sLLHH', yitem[:28])
-              video_track_info = {'type': 'video', 'codec': codec}
+              video_track_info = {
+                  'type': 'video',
+                  'codec': MP4_VIDEO_CODECS.get(codec, codec),
+              }
               if codec == 'rle' and (width < 16 or height < 16):
                 # Skip it, typically width=32 height=2. Some .mov files have it.
                 pass
@@ -881,7 +948,7 @@ def detect_mp4(f, info, fskip, header=''):
               reserved1, data_reference_index, version, revision_level, vendor, channel_count, sample_size_bits, compression_id, packet_size, sample_rate_hi, sample_rate_lo = struct.unpack('>6sHHHLHHHHHH', yitem[:28])
               info['tracks'].append({
                   'type': 'audio',
-                  'codec': codec,
+                  'codec': MP4_AUDIO_CODECS.get(codec, codec),
                   'channel_count': channel_count,
                   'sample_size': sample_size_bits,
                   'sample_rate': sample_rate_hi + (sample_rate_lo / 65536.0),
