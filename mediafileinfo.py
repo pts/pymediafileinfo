@@ -192,7 +192,9 @@ def detect_flv(f, info, header=''):
   # Number of tags after which we stop reading.
   audio_remaining, video_remaining = int(has_audio), int(has_video)
   need_script = 1
-  if (flags & ~5) != 0:
+  # Actually, flag bit 8 should also be 0, but there was an flv in the wild
+  # which had this bit set.
+  if (flags & ~(5 | 8)) != 0:
     raise ValueError('Nonzero reserved flags: 0x%x' % (flags & ~5))
   if data[9 : 13] != '\0\0\0\0':
     raise ValueError('PreviousTagSize is not 0.')
@@ -348,7 +350,9 @@ def detect_flv(f, info, header=''):
           if version != 1:
             raise ValueError('Invalid flv h264 avcc version: %d' % version)
           expected = data[6 : 9]
-          if (lsm | 3) != 255 or (sps_count | 31) != 255:
+          # The spec says it should be 255 for both, but here are some .flv
+          # files in the wild where these reserved bits are all 0.
+          if not ((lsm | 3) in (3, 255) or (sps_count | 31) in (31, 255)):
             raise ValueError('flv h264 avcc reserved bits unset.')
           sps_count &= 31  # Also: lsm &= 3.
           if sps_count != 1:
@@ -383,10 +387,14 @@ def detect_flv(f, info, header=''):
     if len(data) != 4:
       raise ValueError('EOF in PreviousTagSize.')
     prev_size, = struct.unpack('>L', data)
-    if prev_size not in (0, size + 11):
-      raise ValueError(
-          'Unexpected PreviousTagSize: expected=%d got=%d' %
-          (size + 11, prev_size))
+    # Many .flv files have garbage in the prev_size field, so we are not
+    # not checking it. Some garbage: expected=983 got=173;
+    # expected=990 got=64880640; expected=533 got=173; expected=29 got=224.
+    # The values are sometimes even larger than the file size.
+    #if prev_size not in (0, size + 11):
+    #  raise ValueError(
+    #      'Unexpected PreviousTagSize: expected=%d got=%d' %
+    #      (size + 11, prev_size))
 
   if audio_remaining:
     info['tracks'][:] = [track for track in info['tracks']
@@ -978,7 +986,8 @@ def detect_mp4(f, info, fskip, header=''):
       if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
         # This happens. The mdat can be any video, we could detect
         # recursively. (But it's too late to seek back.)
-        raise ValueError('mp4 file with only an mdat box.')
+        # TODO(pts): Convert this to bad_file_mdat_only error.
+        raise ValueError('mov file with only an mdat box.')
       if 'moov' in toplevel_xtypes:  # Can't happen, see break below.
         raise AssertionError('moov forgotten.')
       raise ValueError('mp4 moov box not found.')
