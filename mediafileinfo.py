@@ -1,7 +1,7 @@
 #! /usr/bin/python
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
-""":" # mediafileinfo.py: Get metadata and dimension of media files.
+""":" # mediafileinfo.py: Get codecs and dimension of media files.
 
 type python2.7 >/dev/null 2>&1 && exec python2.7 -- "$0" ${1+"$@"}
 type python2.6 >/dev/null 2>&1 && exec python2.6 -- "$0" ${1+"$@"}
@@ -912,9 +912,9 @@ def detect_mp4(f, info, fskip, header=''):
         # This happens. The mdat can be any video, we could detect
         # recursively. (But it's too late to seek back.)
         raise ValueError('mp4 file with only an mdat box.')
-      if 'moov' not in toplevel_xtypes:  # Can't happen, see break below.
+      if 'moov' in toplevel_xtypes:  # Can't happen, see break below.
         raise AssertionError('moov forgotten.')
-      raise ValueError('Metadata not found in mp4 moov box.')
+      raise ValueError('mp4 moov box not found.')
     size, xtype = struct.unpack('>L4s', data)
     if size == 1:  # Read 64-bit size.
       data = f.read(8)
@@ -928,13 +928,13 @@ def detect_mp4(f, info, fskip, header=''):
       size -= 8
     else:
       # We don't allow size == 0 (meaning until EOF), because we want to
-      # finish the metadata boxes first (before EOF).
+      # finish the small track parameter boxes first (before EOF).
       raise ValueError('mp4 box size too small: %d' % size)
     toplevel_xtypes.add(xtype)
     xtype_path.append(xtype)
     process_box(size)
     xtype_path.pop()
-    if xtype == 'moov':  # Found all metadata.
+    if xtype == 'moov':  # All track parameters already found, stop looking.
       break
 
 
@@ -1565,7 +1565,7 @@ def format_info(info):
 def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
     print >>sys.exit(
-        'mediafileinfo.py: Get metadata and dimension of media files.\n'
+        'mediafileinfo.py: Get parameters and dimension of media files.\n'
         'This is free software, GNU GPL >=2.0. '
         'There is NO WARRANTY. Use at your risk.\n'
         'Usage: %s <filename> [...]' % argv[0])
