@@ -1,6 +1,22 @@
 #! /usr/bin/python
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
+"""Detects codecs and dimensions in media formats."""
+
+# TODO:
+#
+# * !! TODO(pts): Compare it with medid for all (not only h264).
+# * !! TODO(pts): Diagnose all errors, e.g. lots of Unexpected PreviousTagSize: ...
+# * !! TODO(pts): Diagnose all width= and height= missing.
+# * !!! TODO(pts): Make everything work for nonseekable.
+# * !!! TODO(pts): Don't use f.tell().
+# * !!! TODO(pts): Add dimen detection for image formats.
+# * TODO(pts): Better format=html detection, longer strings etc.
+# * TODO(pts): Add some audio formats (e.g. MP3, FLAC).
+# * TODO(pts): Add type=video, type=audio, type=image.
+# * TODO(pts): Add JPEG-2000 (JPX).
+# * TODO(pts): Update media_scan.py.
+
 import cStringIO
 import re
 import struct
@@ -9,13 +25,13 @@ import sys
 
 def set_video_dimens(video_track_info, width, height):
   if width is not None and height is not None:
+    video_track_info['width'] = width
+    video_track_info['height'] = height
     # We don't check `(height & 7) == 0', because sometimes height == 262.
     if not (16 <= width <= 16383):
       raise ValueError('Unreasonable width: %d' % width)
     if not (16 <= height <= 16383):
       raise ValueError('Unreasonable height: %d' % height)
-    video_track_info['width'] = width
-    video_track_info['height'] = height
 
 
 # --- flv
@@ -27,11 +43,11 @@ def detect_flv(f, info, header=''):
   # Documented here (starting on page 68, Annex E):
   # http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
   #
-  # !!! Compare it with medid for all (not only h264).
 
   def parse_h264_sps(
       data, expected, expected_sps_id,
       _hextable='0123456789abcdef',
+      # TODO(pts): Precompute this, don't run it each time detect_flv runs.
       _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
       ):
     # Based on function read_seq_parameter_set_rbsp in
@@ -54,6 +70,7 @@ def detect_flv(f, info, header=''):
     io['compatibility'] = ord(data[2])
     io['level'] = ord(data[3])
     io['residual_color_transform_flag'] = 0
+    # TODO(pts): Maybe bit shifting is faster.
     data = iter(''.join(  # Convert to binary.
         _hex_to_bits[_hextable.find(c)]
         for c in str(buffer(data, 4)).encode('hex')))
@@ -449,11 +466,6 @@ MKV_CODEC_IDS = {
 def detect_mkv(f, info, header=''):
   # https://matroska.org/technical/specs/index.html
 
-  # !!! merge and refactor mp4 from dump_mp4.py
-  # !!! convert assert to ValueError in detect_mp4
-  # !!! make everything work for nonseekable
-  # !!! don't use f.tell()
-  # !!! diagnos all errors, e.g. lots of Unexpected PreviousTagSize: 
   def read_id(f):
     c = f.read(1)
     if not c:
@@ -696,6 +708,13 @@ def copy_info_from_tracks(info):
   # Copy video fields.
   video_track_infos = [track for track in info['tracks']
                        if track['type'] == 'video']
+  if len(video_track_infos) > 1:
+    # Some .mov files have the same (width, height) with codec=mp4a first,
+    # and then with codec=jpeg. We keep only the first video track.
+    dimens_set = set((vti.get('width'), vti.get('height'))
+                     for vti in video_track_infos)
+    if len(dimens_set) == 1:
+      del video_track_infos[1:]
   if len(video_track_infos) == 1:
     for key, value in sorted(video_track_infos[0].iteritems()):
       if key == 'codec':
@@ -716,22 +735,13 @@ def copy_info_from_tracks(info):
 # --- mp4
 
 
-def detect_mp4(f, info, header=''):
+def detect_mp4(f, info, fskip, header=''):
   # Documentation: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
-  info['type'] = 'mov'
+  info['format'] = 'mov'
   info['minor_version'] = 0
   info['brands'] = []
   info['tracks'] = []
   info['has_early_mdat'] = False
-
-  def skip(size, xtype):
-    if size < 65536:
-      data = f.read(size)
-      if len(data) != size:
-        raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
-    else:
-      # !! TODO(pts): What if not seekable?
-      f.seek(size, 1)  # We assume that the file is long enough.
 
   # Empty or contains the type of the last hdlr.
   last_hdlr_type_list = []
@@ -744,7 +754,7 @@ def detect_mp4(f, info, header=''):
     is_composite = xytype in (
         '/moov', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
     if xtype == 'mdat':
-      info['has_early_mdat'] = False
+      info['has_early_mdat'] = True
     if is_composite:
       if xytype == 'trak/mdia':
         if last_hdlr_type_list and 'd' not in last_hdlr_type_list:
@@ -766,8 +776,9 @@ def detect_mp4(f, info, header=''):
         process_box(size2 - 8)
         xtype_path.pop()
     else:
-      if size > 16383 or xtype == 'free':
-        skip(size, xtype)
+      if size > 16383 or xtype in ('free', 'skip', 'wide'):
+        if not fskip(size):
+          raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
       else:
         data = f.read(size)
         if len(data) != size:
@@ -781,14 +792,16 @@ def detect_mp4(f, info, header=''):
           if len(data) < 8:
             raise ValueError('EOF in mp4 ftyp.')
           major_brand, info['minor_version'] = struct.unpack('>4sL', data[:8])
+          # Usually 0, but has some high (binary) value for major_brand ==
+          # 'qt '.
           info['minor_version'] = int(info['minor_version'])
           if major_brand == 'qt  ':
-            info['type'] = 'mov'
+            info['format'] = 'mov'
           elif major_brand == 'f4v ':
-            info['type'] = 'f4v'
+            info['format'] = 'f4v'
           else:
-            info['type'] = 'mp4'
-          info['subtype'] = major_brand
+            info['format'] = 'mp4'
+          info['subformat'] = major_brand
           brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
           brands.discard('\0\0\0\0')
           brands.add(major_brand)
@@ -804,7 +817,7 @@ def detect_mp4(f, info, header=''):
           del last_hdlr_type_list[:]
           if len(data) < 12:
             raise ValueError('EOF in mp4 hdlr.')
-          last_hdlr_type_list.append(data[8 :12])
+          last_hdlr_type_list.append(data[8 : 12])
         elif xytype == 'stbl/stsd':  # /moov/trak/mdia/minf/stbl/stsd
           if not last_hdlr_type_list:
             raise ValueError('Found stsd without a hdlr first.')
@@ -822,11 +835,12 @@ def detect_mp4(f, info, header=''):
               raise ValueError('MP4E13')
             # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
             ysize, codec = struct.unpack('>L4s', data[i : i + 8])
-            codec = ''.join(codec.split())  # Remove whitespace, e.g. 'raw'.
+            codec = codec.strip()  # Remove whitespace, e.g. 'raw'.
             if ysize < 8 or i + ysize > len(data):
               raise ValueError('MP4E14')
             yitem = data[i + 8 : i + ysize]
             last_hdlr_type_list.append('d')  # Signal above.
+            # The 'rle ' codec has ysize < 28.
             if last_hdlr_type_list[0] == 'vide':
               # Video docs: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGICBJ
               if ysize < 28:
@@ -835,8 +849,12 @@ def detect_mp4(f, info, header=''):
               # !!            .mov dimen detection is not reliable yet.
               reserved1, data_reference_index, version, revision_level, vendor, temporal_quality, spatial_quality, width, height = struct.unpack('>6sHHH4sLLHH', yitem[:28])
               video_track_info = {'type': 'video', 'codec': codec}
-              set_video_dimens(video_track_info, width, height)
-              info['tracks'].append(video_track_info)
+              if codec == 'rle' and (width < 16 or height < 16):
+                # Skip it, typically width=32 height=2. Some .mov files have it.
+                pass
+              else:
+                info['tracks'].append(video_track_info)
+                set_video_dimens(video_track_info, width, height)
             elif last_hdlr_type_list[0] == 'soun':
               # Audio: https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-BBCGGHJH
               # Version can be 0 or 1.
@@ -857,6 +875,7 @@ def detect_mp4(f, info, header=''):
             raise ValueError('MP4E15')
 
   xtype_path = ['']
+  toplevel_xtypes = set()
   while 1:
     if header:
       if len(header) > 8:
@@ -869,7 +888,16 @@ def detect_mp4(f, info, header=''):
     if len(data) != 8:
       # Sometimes this happens, there is a few bytes of garbage, but we
       # don't reach it, because we break after 'moov' earlier below.
-      raise ValueError('EOF in top-level mp4 box header.')
+      toplevel_xtypes.discard('free')
+      toplevel_xtypes.discard('skip')
+      toplevel_xtypes.discard('wide')
+      if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
+        # This happens. The mdat can be any video, we could detect
+        # recursively. (But it's too late to seek back.)
+        raise ValueError('mp4 file with only an mdat box.')
+      if 'moov' not in toplevel_xtypes:  # Can't happen, see break below.
+        raise AssertionError('moov forgotten.')
+      raise ValueError('Metadata not found in mp4 moov box.')
     size, xtype = struct.unpack('>L4s', data)
     if size == 1:  # Read 64-bit size.
       data = f.read(8)
@@ -885,6 +913,7 @@ def detect_mp4(f, info, header=''):
       # We don't allow size == 0 (meaning until EOF), because we want to
       # finish the metadata boxes first (before EOF).
       raise ValueError('mp4 box size too small: %d' % size)
+    toplevel_xtypes.add(xtype)
     xtype_path.append(xtype)
     process_box(size)
     xtype_path.pop()
@@ -893,10 +922,8 @@ def detect_mp4(f, info, header=''):
 
 
 # --- Image file formats.
-#
-# !! remove the need for seeking
 
-def is_animated_gif(f, do_read_entire_file=False):
+def is_animated_gif(f, header='', do_read_entire_file=False):
   """Returns bool indicating whether f contains an animaged GIF.
 
   If it's a GIF, sometimes reads the entire file (or at least the 1st frame).
@@ -920,7 +947,10 @@ def is_animated_gif(f, do_read_entire_file=False):
           'Short read in GIF: wanted=%d got=%d' % (size, len(data)))
     return data
 
-  header = f.read(13)
+  if len(header) < 13:
+    header += f.read(13 - len(header))
+  elif len(header) > 13:
+    raise AssertionError('Header too long for GIF: %d' % len(header))
   if len(header) < 13 or not (
       header.startswith('GIF87a') or header.startswith('GIF89a')):
     raise ValueError('Not a GIF file.')
@@ -991,33 +1021,13 @@ def is_animated_gif(f, do_read_entire_file=False):
   return bool(frame_count > 1 or has_repeat or has_delay)
 
 
-def is_animated_gif_cached(f, data):
-  # data is the first few bytes of f.
-
-  if len(data) >= 16:
-    try:
-      return is_animated_gif(cStringIO.StringIO(data))
-    except ValueError, e:
-      se = str(e)
-      if not se.startswith('Short read '):
-        return False
-  old_ofs = f.tell()
-  f.seek(0)
-  try:
-    try:
-      return is_animated_gif(f)
-    except ValueError, e:
-      return False
-  finally:
-    f.seek(old_ofs)
-
-
-def get_jpeg_dimensions(f):
+def get_jpeg_dimensions(f, header=''):
   """Returns (width, height) of a JPEG file.
 
   Args:
     f: An object supporting the .read(size) method. Should be seeked to the
         beginning of the file.
+    header: The first few bytes already read from f.
   Returns:
     (width, height) pair of integers.
   Raises:
@@ -1040,7 +1050,11 @@ def get_jpeg_dimensions(f):
           'Short read in JPEG: wanted=%d got=%d' % (size, len(data)))
     return data
 
-  data = f.read(4)
+  data = header
+  if len(data) < 4:
+    data += f.read(4 - len(data))
+  elif len(data) > 4:
+    raise AssertionError('Header too long for JPEG: %d' % len(data))
   if len(data) < 4 or not data.startswith('\xff\xd8\xff'):
     raise ValueError('Not a JPEG file.')
   m = ord(data[3])
@@ -1068,36 +1082,16 @@ def get_jpeg_dimensions(f):
     if m[0] != '\xff':
       raise ValueError('Marker expected.')
     m = ord(m[1])
-  assert 0, 'Internal JPEG parser error.'
+  raise AssertionError('Internal JPEG parser error.')
 
 
-def get_jpeg_dimensions_cached(f, data):
-  # data is the first few bytes of f.
-
-  if len(data) >= 4:
-    try:
-      return get_jpeg_dimensions(cStringIO.StringIO(data))
-    except ValueError, e:
-      se = str(e)
-      if not se.startswith('Short read '):
-        return None, None
-  old_ofs = f.tell()
-  f.seek(0)
-  try:
-    try:
-      return get_jpeg_dimensions(f)
-    except ValueError, e:
-      return None, None
-  finally:
-    f.seek(old_ofs)
-
-
-def get_brn_dimensions(f):
+def get_brn_dimensions(f, header=''):
   """Returns (width, height) of a BRN file.
 
   Args:
     f: An object supporting the .read(size) method. Should be seeked to the
         beginning of the file.
+    header: The first few bytes already read from f.
   Returns:
     (width, height) pair of integers.
   Raises:
@@ -1126,7 +1120,11 @@ def get_brn_dimensions(f):
         return result, c
       shift += 7
 
-  data = f.read(7)
+  data = header
+  if len(data) < 7:
+    data += f.read(7 - len(data))
+  elif len(data) > 7:
+    raise AssertionError('Header too long for BRN: %d' % len(data))
   if len(data) < 7 or not data.startswith('\x0a\x04B\xd2\xd5N\x12'):
     raise ValueError('Not a BRN file.')
 
@@ -1158,28 +1156,7 @@ def get_brn_dimensions(f):
   if width is not None and height is not None:
     return width, height
   else:
-    return None, None
-
-
-def get_brn_dimensions_cached(f, data):
-  # data is the first few bytes of f.
-
-  if len(data) >= 8:
-    try:
-      return get_brn_dimensions(cStringIO.StringIO(data))
-    except ValueError, e:
-      se = str(e)
-      if not se.startswith('Short read '):
-        return None, None
-  old_ofs = f.tell()
-  f.seek(0)
-  try:
-    try:
-      return get_brn_dimensions(f)
-    except ValueError, e:
-      return None, None
-  finally:
-    f.seek(old_ofs)
+    raise ValueError('Dimensions not found in BRN.')
 
 
 def is_html(data):
@@ -1188,22 +1165,14 @@ def is_html(data):
           data.startswith('<html>') or
           data.startswith('<head>') or
           data.startswith('<body>') or
-          data.startswith(' <!doctype html ') or
-          data.startswith(' <!doctype html>'))
+          data.startswith('<!doctype html ') or
+          data.startswith('<!doctype html>'))
 
 
-BMP_HEADER_RE = re.compile(r'(?s)BM....\0\0\0\0....([\014-\177])\0\0\0')
-
-LEPTON_HEADER_RE = re.compile(r'\xcf\x84[\1\2][XYZ]')
-
-# All image file formats supported by GraphicsMagick.
-# TODO(pts): Try and support 'agif'.
-FINGERPRINTABLE_FORMATS = ('gif', 'jpeg', 'png', 'bmp')
+# --- Generic detection for many formats.
 
 
-# ---
-
-def detect(f, info=None):
+def detect(f, info=None, is_seek_ok=False):
   """Detect file format, codecs and image dimensions in file f.
 
   For videos, info['tracks'] is a list with an item for each video or audio
@@ -1211,9 +1180,13 @@ def detect(f, info=None):
   are not detected.
 
   Args:
-    f: File-like object with a .read(n) method and an optional .seek(n) method.
-        Seeking will be avoided if possible.
+    f: File-like object with a .read(n) method and an optional .seek(n) method,
+        should do buffering for speed, and must return exactly n bytes unless
+        at EOF. Seeking will be avoided if possible.
     info: A dict to update with the detected info, or None.
+    is_seek_ok: Boolean indicating whether seeking in f is OK. Even if true,
+      but the f doesn't support seeking, detect still works fine. Seeking is
+      only used for skipping ahead a large number of bytes.
   Returns:
     The info dict.
   """
@@ -1221,6 +1194,33 @@ def detect(f, info=None):
     info = {}
   if 'f' not in info and getattr(f, 'name', None):
     info['f'] = f.name.replace('\n', '{\\n}')
+  file_size_for_seek = None
+  if is_seek_ok:
+    try:
+      f.seek(0, 2)
+      info['size'] = file_size_for_seek = int(f.tell())
+    except (IOError, OSError, AttributeError):
+      pass
+    if info.get('size'):
+      f.seek(0)  # Can raise IOError, which we propagate.
+  if file_size_for_seek is None:
+    def fskip(size):
+      """Returns bool indicating whther f was long enough."""
+      while size >= 32768:
+        if len(f.read(32768)) != 32768:
+          return False
+        size -= 32768
+      return size == 0 or len(f.read(size)) == size
+  else:
+    def fskip(size, file_size=file_size_for_seek):
+      """Returns bool indicating whther f was long enough."""
+      if size < 32768:
+        data = f.read(size)
+        return len(data) == size
+      else:
+        f.seek(size, 1)
+        return f.tell() <= file_size
+
   # Set it early, in case of an exception.
   info.setdefault('format', '?')
   header = f.read(4)
@@ -1241,49 +1241,72 @@ def detect(f, info=None):
       header += f.read(8 - len(header))
     if header[4 : 8] == 'ftyp':
       info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
-      detect_mp4(f, info, header)
+      detect_mp4(f, info, fskip, header)
   elif header.startswith('GIF8'):
     if len(header) < 6:
       header += f.read(6 - len(header))
     if header.startswith('GIF87a') or header.startswith('GIF89a'):
-      info['format'] = 'gif'  # TODO(pts): Distinguish 'agif' (animated GIF).
+      info['format'], info['codec'] = 'gif', 'lzw'
+      if len(header) < 10:
+        # Still short enough for is_animated_gif.
+        header += f.read(10 - len(header))
+        if len(header) < 10:
+          raise ValueError('EOF in GIF header.')
+      info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
+      if is_animated_gif(f, header):  # This may read the entire input.
+        info['format'] = 'agif'
   elif header.startswith('\xff\xd8\xff'):
     # TODO(pts): Which JPEG marker can be header[3]?
-    info['format'] = 'jpeg'
-    # !! TODO(pts): Copy much code for image formats media_scan.py.
-    #    No need for seeking.
-    #    is_animated_gif
-    #    dimensions for: jpeg, gif, brn, png, bmp, html
+    info['format'], info['codec'] = 'jpeg', 'jpeg'
+    info['width'], info['height'] = get_jpeg_dimensions(f, header)
   elif header.startswith('<?xm'):
     info['format'] = 'xml'
   elif (header.startswith('<!--') or
         header[:4].lower() in ('<htm', '<hea', '<bod', '<!do')):
-    # We could be more strict here, e.g. non-HTML docypes.
-    # TODO(pts): Check: '<html>', '<head>', '<body>', '<!doctype html'.
-    info['format'] = 'html'
+    # We could be more strict here, e.g. rejecting non-HTML docypes.
+    # TODO(pts): Ignore whitespace in the beginning above.
+    if len(header) < 256:
+      header += f.read(256 - len(header))
+    if is_html(header):
+      info['format'] = 'html'
   elif header.startswith('\x0a\x04B\xd2'):
     if len(header) < 7:
       header += f.read(7 - len(header))
     if header.startswith('\x0a\x04B\xd2\xd5N\x12'):
-      info['format'] = 'brn'
+      info['format'], inf['codec'] = 'brn', 'brn'
+      info['width'], info['height'] = get_brn_dimensions(f, header)
   elif header.startswith('\211PNG'):
-    if len(header) < 8:
-      header += f.read(8 - len(header))
-    if header.startswith('\211PNG\r\n\032\n'):
-      info['format'] = 'png'
-  elif header.startswith('\xcf\x84'):
-    # TODO(pts): Be more strict.
-    info['format'] = 'lepton'  # JPEG reencoded by Dropbox lepton.
+    if len(header) < 11:
+      header += f.read(11 - len(header))
+    if header.startswith('\211PNG\r\n\032\n\0\0\0'):
+      info['format'], info['codec'] = 'png', 'flate'
+      if len(header) < 24:
+        header += f.read(24 - len(header))
+        if len(header) < 24:
+          raise ValueError('EOF in PNG header.')
+      if header[12 : 16] == 'IHDR':
+        info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
+  elif (header.startswith('\xcf\x84') and
+        header[2] in '\1\2' and header[3] in 'XYZ'):
+    # JPEG reencoded by Dropbox lepton.
+    info['format'], info['codec'] = 'lepton', 'lepton'
   elif (header.startswith('MM\x00\x2a') or
         header.startswith('II\x2a\x00')):
     # Also includes 'nikon-nef' raw images.
     info['format'] = 'tiff'
-  elif header.startswith('P1 ') or header.startswith('P4'):
-    info['format'] = 'pbm'
-  elif header.startswith('P2 ') or header.startswith('P5'):
-    info['format'] = 'pgm'
-  elif header.startswith('P3 ') or header.startswith('P6'):
-    info['format'] = 'ppm'
+  elif header.startswith('P1 '):
+    # TODO(pts): Get dimens for all ppm.
+    info['format'], info['codec'] = 'pbm', 'rawascii'
+  elif header.startswith('P4'):
+    info['format'], info['codec'] = 'pbm', 'raw'
+  elif header.startswith('P2 '):
+    info['format'], info['codec'] = 'pgm', 'rawascii'
+  elif header.startswith('P5'):
+    info['format'], info['codec'] = 'pgm', 'raw'
+  elif header.startswith('P3 '):
+    info['format'], info['codec'] = 'ppm', 'rawascii'
+  elif header.startswith('P6'):
+    info['format'], info['codec'] = 'ppm', 'raw'
   elif header.startswith('/* X'):
     if len(header) < 9:
       header += f.read(9 - len(header))
@@ -1335,11 +1358,12 @@ def detect(f, info=None):
         header.startswith('FUJIFILMCCD-RAW 0201FF383501')):
       # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
       # Dimensions are not easy to extract, maybe from the CFA IDs.
-      info['format'] = 'fuji-raf'
+      # Please note that codec=raw also applies to uncompressed RGB 8-bit.
+      info['format'], info['codec'] = 'fuji-raf', 'raw'
   elif (header.startswith('PK\1\2') or header.startswith('PK\3\4') or
         header.startswith('PK\5\6') or header.startswith('PK\7\x08') or
         header.startswith('PK\6\6')):  # ZIP64.
-    info['format'] = 'zip'
+    info['format'], info['codec'] = 'zip', 'flate'
   elif header.startswith('JASC'):
     info['format'] = 'jbf'
   elif header.startswith('Rar!'):
@@ -1348,7 +1372,7 @@ def detect(f, info=None):
         header.startswith('zPQ') and 1 <= ord(header[3]) <= 127):
     info['format'] = 'zpaq'
   elif header.startswith('\037\213\010'):
-    info['format'] = 'gz'
+    info['format'], info['codec'] = 'gz', 'flate'
   elif header.startswith('BZh'):
     info['format'] = 'bz2'
   elif header.startswith('LZIP'):
@@ -1440,7 +1464,8 @@ def detect(f, info=None):
       info['format'] = 'winexe'
   elif (header.startswith('\x78\x01') or header.startswith('\x78\x5e') or
         header.startswith('\x78\x9c') or header.startswith('\x78\xda')):
-    info['format'] = 'flate'  # Compressed in ZLIB format (/FlateEncode).
+    # Compressed in ZLIB format (/FlateEncode).
+    info['format'], info['codec'] = 'flate', 'flate'
   else:  # Last few matchers, with very short header.
     # TODO(pts): Make it compatible with 'winexe', in any order.
 
@@ -1463,10 +1488,22 @@ def detect(f, info=None):
       detect_mp4(f, info, header)
     if (info['format'] == '?' and
         header.startswith('BM')):
-      if len(header) < 10:
+      if len(header) < 10:  # Don't read too much, for other formats later.
         header += f.read(10 - len(header))
       if header[6 : 10] == '\0\0\0\0':
-        info['format'] = 'bmp'
+        if len(header) < 18:
+          header += f.read(18 - len(header))
+        if header[15 : 18] == '\0\0\0' and 12 <= ord(header[14]) <= 127:
+          if len(header) < 26:
+            header += f.read(26 - len(header))
+          info['format'] = 'bmp'
+          b = ord(header[14])
+          if b in (12, 64) and len(header) >= 22:
+            info['width'], info['height'] = struct.unpack(
+                '<HH', header[18 : 22])
+          elif b in (40, 124) and len(header) >= 26:
+            info['width'], info['height'] = struct.unpack(
+                '<LL', header[18 : 26])
     if (info['format'] == '?' and
         header[0] == '\n' and header[2] == '\1' and ord(header[1]) <= 5 and
         header[3] in '\1\2\4\x08'):  # Move this down.
@@ -1515,9 +1552,9 @@ def main(argv):
     try:
       had_error_here, info = True, {}
       try:
-        info = detect(f, info)
+        info = detect(f, info, is_seek_ok=True)
         had_error_here = False
-      except KeyboardInterrupt:
+      except (KeyboardInterrupt, SystemExit):
         raise
       except (IOError, ValueError), e:
         info['error'] = 'bad_file'
@@ -1535,9 +1572,9 @@ def main(argv):
       if not info.get('format'):
         info['format'] = '?'
       try:
-        info['header_end_offset'] = int(f.tell())
-        f.seek(0, 2)
-        info['size'] = f.tell()
+        # header_end_offset, hdr_done_at: Offset we reached after parsing
+        # headers.
+        info['hdr_done_at'] = int(f.tell())
       except (IOError, OSError, AttributeError):
         pass
       sys.stdout.write(format_info(info))
