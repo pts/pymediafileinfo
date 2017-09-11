@@ -1560,16 +1560,16 @@ def detect(f, info=None, is_seek_ok=False):
     if (info['format'] == '?' and
         header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
       info['format'] = 'mov'
-      detect_mp4(f, info, header)
+      detect_mp4(f, info, fskip, header)
     elif (info['format'] == '?' and
           header.startswith('\0\0') and header[4 : 8] == 'wide'):
       # Immediately followed by a 4-byte size, then 'mdat'.
       info['format'] = 'mov'
-      detect_mp4(f, info, header)
+      detect_mp4(f, info, fskip, header)
     elif (info['format'] == '?' and
           header.startswith('\0\0') and header[4 : 8] == 'moov'):
       info['format'] = 'mov'
-      detect_mp4(f, info, header)
+      detect_mp4(f, info, fskip, header)
     if (info['format'] == '?' and
         header.startswith('BM')):
       if len(header) < 10:  # Don't read too much, for other formats later.
@@ -1662,6 +1662,7 @@ def main(argv):
           print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
               filename, e.__class__.__module__, e.__class__.__name__, e)
       except Exception, e:
+        raise
         info['error'] = 'error'
         print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
