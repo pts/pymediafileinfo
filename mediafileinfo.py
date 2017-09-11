@@ -8,9 +8,6 @@
 # * !! TODO(pts): Compare it with medid for all (not only h264).
 # * !! TODO(pts): Diagnose all errors, e.g. lots of Unexpected PreviousTagSize: ...
 # * !! TODO(pts): Diagnose all width= and height= missing.
-# * !!! TODO(pts): Make everything work for nonseekable.
-# * !!! TODO(pts): Don't use f.tell().
-# * !!! TODO(pts): Add dimen detection for image formats.
 # * TODO(pts): Better format=html detection, longer strings etc.
 # * TODO(pts): Add some audio formats (e.g. MP3, FLAC).
 # * TODO(pts): Add type=video, type=audio, type=image.
@@ -410,7 +407,10 @@ MKV_CODEC_IDS = {
     'V_MPEG4/ISO/SP': 'divx4',
     'V_MPEG4/ISO/ASP': 'divx5',
     'V_MPEG4/ISO/ASP': 'divxasp',
+    'V_MPEG4/ISO/AVC': 'h264',
+    'V_MPEG4/ISO/HEVC': 'h265',
     'V_MPEG4/MS/V3': 'divx3',
+    'V_MPEGH/ISO/HEVC': 'h265',
     'V_MPEG1': 'mpeg1',
     'V_MPEG2': 'mpeg2',	
     'V_REAL/RV10': 'rv5',
@@ -420,7 +420,15 @@ MKV_CODEC_IDS = {
     'V_QUICKTIME': 'qt',  # Sorenson or Cinepak, more info in CodecPrivate.
     'V_THEORA': 'theora',
     'V_PRORES': 'prores',
+    'V_VP3': 'vp3',
+    'V_VP4': 'vp4',
+    'V_VP5': 'vp5',
+    'V_VP6': 'vp6',
+    'V_VP7': 'vp7',
     'V_VP8': 'vp8',
+    'V_VP9': 'vp9',
+    'V_VP10': 'vp10',
+    'V_VP11': 'vp11',
 
     'A_MPEG/L3': 'mp3',
     'A_MPEG/L2': 'mp2',
@@ -445,6 +453,7 @@ MKV_CODEC_IDS = {
     'A_REAL/ATRC': 'altrac3',
     'A_MS/ACM': 'acm',
     #'A_AAC/$(TYPE)/$(SUBTYPE)',
+    'A_AAC': 'aac',
     'A_AAC/MPEG2/MAIN': 'aac',
     'A_AAC/MPEG2/LC': 'aac',
     'A_AAC/MPEG2/LC/SBR': 'aac',
@@ -466,36 +475,49 @@ MKV_CODEC_IDS = {
 def detect_mkv(f, info, header=''):
   # https://matroska.org/technical/specs/index.html
 
+  # list so that inner functions can modify it.
+  #
+  # Invariant: ofs_list[0] == f.tell().
+  #
+  # We use ofs_list so that we don't have to call f.tell(). This is useful
+  # for unseekable files.
+  ofs_list = [len(header)]
+
+  def read_n(n):
+    data = f.read(n)
+    ofs_list[0] += len(data)
+    return data
+
   def read_id(f):
-    c = f.read(1)
+    c = read_n(1)
     if not c:
       raise ValueError('MKVE1')
     b = ord(c)
     if b > 127:
       return c
     if b > 63:
-      data = f.read(1)
+      data = read_n(1)
       if not data:
         raise ValueError('MKVE2')
       return c + data
     if b > 31:
-      data = f.read(2)
+      data = read_n(2)
       if len(data) != 2:
         raise ValueError('MKVE3')
       return c + data
     if b > 15:
-      data = f.read(3)
+      data = read_n(3)
       if len(data) != 3:
         raise ValueError('MKVE4')
       return c + data
     raise ValueError('Invalid ID prefix: %d' % b)
 
   def read_size(f):
-    c = f.read(1)
+    c = read_n(1)
     if not c:
       raise ValueError('MKVE5')
     if c == '\1':
-      data = f.read(7)
+      data = read_n(7)
       if len(data) != 7:
         raise ValueError('MKVE6')
       if data == '\xff\xff\xff\xff\xff\xff\xff':  # Streaming size.
@@ -505,32 +527,32 @@ def detect_mkv(f, info, header=''):
     if b > 127:
       return b & 127
     if b > 63:
-      data = f.read(1)
+      data = read_n(1)
       if not data:
         raise ValueError('MKVE8')
       return (b & 63) << 8 | ord(data)
     if b > 31:
-      data = f.read(2)
+      data = read_n(2)
       if not len(data) != 2:
         raise ValueError('MKVE9')
       return (b & 31) << 16 | struct.unpack('>H', data)[0]
     if b > 15:
-      data = f.read(3)
+      data = read_n(3)
       if not len(data) != 3:
         raise ValueError('MKVE10')
       return (b & 15) << 24 | struct.unpack('>L', '\0' + data)[0]
     if b > 7:
-      data = f.read(4)
+      data = read_n(4)
       if not len(data) != 4:
         raise ValueError('MKVE11')
       return (b & 7) << 32 | struct.unpack('>L', data)[0]
     if b > 3:
-      data = f.read(5)
+      data = read_n(5)
       if not len(data) != 5:
         raise ValueError('MKVE11')
       return (b & 3) << 40 | struct.unpack('>Q', '\0\0\0' + data)[0]
     if b > 1:
-      data = f.read(6)
+      data = read_n(6)
       if not len(data) != 6:
         raise ValueError('MKVE11')
       return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
@@ -542,14 +564,14 @@ def detect_mkv(f, info, header=''):
       if xid != '\xec':  # Void.
         return xid
       size = read_size(f)
-      data = f.read(size)  # !! Don't read too much to memory.
+      data = read_n(size)  # !! Don't read too much to memory.
       if len(data) != size:
         raise ValueError('EOF in Void element.')
 
   if len(header) > 4:
     # We can increase it by input buffering.
     raise AssertionError('Header too long for mkv: %d' % len(header))
-  header += f.read(4 - len(header))
+  header += read_n(4 - len(header))
   if len(header) != 4:
     raise ValueError('Too short for MKV.')
 
@@ -559,14 +581,14 @@ def detect_mkv(f, info, header=''):
   size = read_size(f)
   if size >= 256:
     raise ValueError('MKV header unreasonably large: %d' % size)
-  header_end = f.tell() + size
+  header_end = ofs_list[0] + size
   info['format'] = 'mkv'
-  while f.tell() < header_end:
+  while ofs_list[0] < header_end:
     xid = read_id_skip_void(f)
     size = read_size(f)  # !! Don't read too much. Limit it.
-    if f.tell() + size > header_end:
+    if ofs_list[0] + size > header_end:
       raise ValueError('Size of in-header element too large.')
-    data = f.read(size)
+    data = read_n(size)
     if len(data) != size:
       raise ValueError('EOF in header element.')
     if xid == '\x42\x82':  # DocType.
@@ -585,44 +607,44 @@ def detect_mkv(f, info, header=''):
   if xid != '\x18\x53\x80\x67':  # Segment.
     raise ValueError('Expected Segment element, got: %s' % xid.encode('hex'))
   size = read_size(f)
-  segment_end = f.tell() + size
+  segment_end = ofs_list[0] + size
   info['tracks'] = []
-  while f.tell() < segment_end:
+  while ofs_list[0] < segment_end:
     xid = read_id_skip_void(f)
     size = read_size(f)
-    if f.tell() + size > segment_end:
+    if ofs_list[0] + size > segment_end:
       raise ValueError('Size of in-Segment element too large.')
     if (xid == '\x11\x4d\x9b\x74' or  # SeekHead.
         xid == '\x15\x49\xa9\x66'):  # Info.
-      data = f.read(size)
+      data = read_n(size)
       if len(data) != size:
         raise ValueError('EOF in SeekHead or Info element.')
     elif xid == '\x16\x54\xae\x6b':  # Tracks.
-      tracks_end = f.tell() + size
-      while f.tell() < tracks_end:
+      tracks_end = ofs_list[0] + size
+      while ofs_list[0] < tracks_end:
         xid = read_id_skip_void(f)
         size = read_size(f)
-        if f.tell() + size > tracks_end:
+        if ofs_list[0] + size > tracks_end:
           raise ValueError('Size of in-Tracks element too large.')
         if xid != '\xae':  # Track.
           raise ValueError('Expected Track element, got: %s' % xid.encode('hex'))
-        track_end = f.tell() + size
+        track_end = ofs_list[0] + size
         track_info = {}
-        while f.tell() < track_end:
+        while ofs_list[0] < track_end:
           xid = read_id_skip_void(f)
           size = read_size(f)
-          if f.tell() + size > track_end:
+          if ofs_list[0] + size > track_end:
             raise ValueError('Size of in-Track element too large.')
           if xid == '\xe0':  # Video.
             track_info['type'] = 'video'
-            video_end = f.tell() + size
+            video_end = ofs_list[0] + size
             width = height = None
-            while f.tell() < video_end:
+            while ofs_list[0] < video_end:
               xid = read_id_skip_void(f)
               size = read_size(f)
-              if f.tell() + size > video_end:
+              if ofs_list[0] + size > video_end:
                 raise ValueError('Size of in-Video element too large.')
-              data = f.read(size)
+              data = read_n(size)
               if len(data) != size:
                 raise ValueError('EOF in Video element.')
               #print [xid.encode('hex')]
@@ -633,14 +655,14 @@ def detect_mkv(f, info, header=''):
             set_video_dimens(track_info, width, height)
           elif xid == '\xe1':  # Audio.
             track_info['type'] = 'audio'
-            audio_end = f.tell() + size
+            audio_end = ofs_list[0] + size
             width = height = None
-            while f.tell() < audio_end:
+            while ofs_list[0] < audio_end:
               xid = read_id_skip_void(f)
               size = read_size(f)
-              if f.tell() + size > audio_end:
+              if ofs_list[0] + size > audio_end:
                 raise ValueError('Size of in-Audio element too large.')
-              data = f.read(size)
+              data = read_n(size)
               if len(data) != size:
                 raise ValueError('EOF in Audio element.')
               if xid == '\xb5':  # SamplingFrequency. In Hz.
@@ -657,17 +679,17 @@ def detect_mkv(f, info, header=''):
                 track_info['sample_size'], = struct.unpack(
                     '>Q', '\0' * (8 - len(data)) + data)
           elif xid == '\x86':  # Codec ID.
-            data = f.read(size)
+            data = read_n(size)
             if len(data) != size:
               raise ValueError('EOF in Track element.')
             track_info['codec'] = MKV_CODEC_IDS.get(data, data)
           elif xid == '\x25\x86\x88':  # Codec Name.
-            data = f.read(size)
+            data = read_n(size)
             if len(data) != size:
               raise ValueError('EOF in Track element.')
             track_info['codec_name'] = data  # Usually not set in .webm.
           else:
-            data = f.read(size)
+            data = read_n(size)
             if len(data) != size:
               raise ValueError('EOF in Track element.')
         if 'type' in track_info:
@@ -1546,6 +1568,11 @@ def format_info(info):
 
 
 def main(argv):
+  if len(argv) < 2 or argv[1] == '--help':
+    print >>sys.exit(
+        'mediafileinfo.py: Get metadata and dimension of media files.\n'
+        'Usage: %s <filename> [...]' % argv[0])
+    sys.exit(1)
   had_error = False
   for filename in argv[1:]:
     f = open(filename, 'rb')
