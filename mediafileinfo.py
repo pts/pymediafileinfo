@@ -845,7 +845,16 @@ def detect_mp4(f, info, fskip, header=''):
     # Only the composites we care about.
     is_composite = xytype in (
         '/moov', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
-    if xtype == 'mdat':
+    if xtype == 'mdat':  # 816 of 2962 mp4 files have it.
+      # Videos downloaded by youtube-dl (usually) don't have it: in the corpus
+      # only 11 of 1418 videos have it, but maybe they were downloaded
+      # differently.
+      #
+      # mdat boxes are huge (because they contain all the audio and video
+      # frames), and an early mdat box (before the moov box) indicates that
+      # the user needs to download the entire file before playback can start
+      # (because the interpretation of the mdat box depends on the contents
+      # of the moov box).
       info['has_early_mdat'] = True
     if is_composite:
       if xytype == 'trak/mdia':
