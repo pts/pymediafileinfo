@@ -1028,7 +1028,9 @@ def detect_mp4(f, info, fskip, header=''):
 
 # --- avi
 
-# See all on: http://www.fourcc.org/
+# See some on: http://www.fourcc.org/
+# See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
+# See all on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
 # All keys are converted to lowercase, and whitespace-trimmed.
 # TODO(pts): Merge this with MP4_VIDEO_CODECS?
 # !! TODO(pts): Fill this.
@@ -1041,6 +1043,7 @@ AVI_VIDEO_CODECS = {
     'divx': 'divx',
     'div3': 'divx',
     'div4': 'divx',
+    'dvx4': 'divx',
     '3iv2': 'divx',
     'h264': 'h264',
     'xvid': 'divx',
@@ -1076,7 +1079,8 @@ AVI_VIDEO_CODECS = {
 }
 
 # http://www.onicos.com/staff/iz/formats/wav.html
-# https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
+# See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
+# See many on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
 # !! TODO(pts): Find more.
 AVI_AUDIO_FORMATS = {
     0x0001: 'pcm',
@@ -1093,6 +1097,7 @@ AVI_AUDIO_FORMATS = {
     0x0017: 'adpcm',
     0x0018: 'adpcm',
     0x0020: 'adpcm',
+    0x0028: 'lrc',
     0x0030: 'ac2',
     0x0036: 'adpcm',
     0x003b: 'adpcm',
@@ -1115,6 +1120,7 @@ AVI_AUDIO_FORMATS = {
     0x1610: 'mpeg_heaac',
     0x2000: 'dvm',
     0x2001: 'dts2',
+    0xfffe: 'extensible-?',
 }
 
 def detect_avi(f, info, fskip, header=''):
@@ -1135,13 +1141,14 @@ def detect_avi(f, info, fskip, header=''):
 
   in_strl_chunks = {}
   info['tracks'] = []
+  do_stop_ary = []
 
   def process_list(ofs_limit, parent_id):
     if parent_id == 'RIFF':
       what = 'top-level'
     else:
       what = 'in-%s' % parent_id
-    while ofs_limit is None or ofs_limit > 0:
+    while ofs_limit is None or ofs_limit > 0 and not do_stop_ary:
       if ofs_limit is not None and ofs_limit < 8:
         raise ValueError('No room for avi %s chunk.' % what)
       data = f.read(8)
@@ -1151,12 +1158,16 @@ def detect_avi(f, info, fskip, header=''):
       size += size & 1
       if ofs_limit is not None:
         ofs_limit -= 8 + size
-      if (size >= 4 and (ofs_limit is None or ofs_limit >= 0) and
+      if (size >= 4 and (ofs_limit is None or ofs_limit + size >= 4) and
           chunk_id == 'LIST'):
         chunk_id = f.read(4) + '+'
         if len(chunk_id) < 5:
           raise ValueError('EOF in avi %s LIST chunk ID.' % what)
         size -= 4
+      # Some buggy .avi files have this within hdrl.
+      if chunk_id == 'movi+':
+        do_stop_ary.append('s')
+        break
       if ofs_limit is not None and ofs_limit < 0:
         raise ValueError('avi %s chunk too long: id=%r' % (what, chunk_id))
       if chunk_id == 'hdrl+' and parent_id == 'RIFF':
@@ -1184,8 +1195,16 @@ def detect_avi(f, info, fskip, header=''):
             video_codec = strf_data[16 : 20].strip().lower()
           else:
             video_codec = strh_data[4 : 8].strip().lower()
-          if '\0' in video_codec:
-            raise ValueError('NUL in avi video codec.')
+          if video_codec == '\0\0\0\0':
+            video_codec = 'raw'
+          elif video_codec in ('\1\0\0\x10', '\2\0\0\x10'):
+            video_codec = 'mpeg'
+          elif video_codec == '\2\0\0\x10':
+            video_codec = 'mpeg'
+          elif video_codec in ('\1\0\0\0', '\2\0\0\0'):
+            video_codec = 'rle'
+          elif '\0' in video_codec:
+            raise ValueError('NUL in avi video codec %r.' % video_codec)
           video_codec = AVI_VIDEO_CODECS.get(video_codec, video_codec)
           track_info = {'type': 'video', 'codec': video_codec}
           set_video_dimens(track_info, width, height)
@@ -1196,30 +1215,32 @@ def detect_avi(f, info, fskip, header=''):
           wave_format, = struct.unpack('<H', strf_data[:2])
           if wave_format == 0xfffe:  # WAVE_FORMAT_EXTENSIBLE
             # The structure is interpreted as a WAVEFORMATEXTENSIBLE structure.
+            # It starts with WAVEFORMATEX afterwards.
             # https://msdn.microsoft.com/en-us/library/ms788113.aspx
-            # !! TODO(pts): Implement. Does it also start with WAVEFORMATEX?
-            raise ValueError(
-                'Unsupported WAVE_FORMAT_EXTENSIBLE in avi audio track.')
-          else:
-            # Everything else including WAVE_FORMAT_MPEG and
-            # MPEGLAYER3WAVEFORMAT also start with WAVEFORMATEX.
-            # sample_size is in bits.
-            channel_count, sample_rate, _, _,  sample_size = struct.unpack(
-                '<HLLHH', strf_data[2 : 16])
-            info['tracks'].append({
-                'type': 'audio',
-                'codec': AVI_AUDIO_FORMATS.get(
-                    wave_format, '0x%x' % wave_format),
-                'channel_count': channel_count,
-                'sample_rate': sample_rate,
-                # With 'codec': 'mp3', sample_size is usually 0.
-                'sample_size': sample_size or 16,
-            })
+            # TODO(pts): Detect the wave_format from the UUID field in
+            # WAVEFORMATEXTENSIBLE::SubFormat. We need a new mapping.
+            pass
+          # Everything else including WAVE_FORMAT_MPEG and
+          # MPEGLAYER3WAVEFORMAT also start with WAVEFORMATEX.
+          # sample_size is in bits.
+          channel_count, sample_rate, _, _,  sample_size = struct.unpack(
+              '<HLLHH', strf_data[2 : 16])
+          info['tracks'].append({
+              'type': 'audio',
+              'codec': AVI_AUDIO_FORMATS.get(
+                  wave_format, '0x%x' % wave_format),
+              'channel_count': channel_count,
+              'sample_rate': sample_rate,
+              # With 'codec': 'mp3', sample_size is usually 0.
+              'sample_size': sample_size or 16,
+          })
       elif chunk_id in ('strh', 'strf') and parent_id == 'strl':
         if chunk_id in in_strl_chunks:
           raise ValueError('Duplicate %s chunk in avi %s chunk.' %
                            (chunk_id, parent_id))
-        if size > 8191:  # Typically shorter than 100 bytes.
+        # Typically shorter than 100 bytes, but found 66000 bytes in the
+        # wild.
+        if size > 99999:
           raise ValueError(
               'Unreasonable size of avi %s chunk: id=%r size=%r' %
               (what, chunk_id, size))
@@ -1583,6 +1604,8 @@ def detect(f, info=None, is_seek_ok=False):
     if header[4 : 8] == 'ftyp':
       info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
       detect_mp4(f, info, fskip, header)
+  elif header.startswith('OggS'):
+    info['format'] = 'ogg'  # TODO(pts): Detect parameters.
   elif header.startswith('GIF8'):
     if len(header) < 6:
       header += f.read(6 - len(header))
@@ -1767,6 +1790,8 @@ def detect(f, info=None, is_seek_ok=False):
       detect_avi(f, info, fskip, header)
     elif header[8 : 12] == 'WAVE':
       info['format'] = 'wav'
+    elif header[8 : 12] == 'CDXA':
+      info['format'] = 'mpeg-cdxa'  # Video CD (VCD).
   elif header.startswith('\0\0\1') and header[3] in (
       '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
     info['format'] = 'mpeg'  # Video.
