@@ -50,9 +50,9 @@ A2. For only a couple of new formats, please open a an issue or send a patch.
 
     If you need many more, see FAQ entry Q3.
 
-Q3. What are the alternative of mediafileinfo.py?
+Q3. What are the alternatives of mediafileinfo.py?
 
-A3.
+A3. Some of them:
 
     * MediaInfo (https://mediaarea.net/en/MediaInfo) is a library in C++
       with the command-line tool mediainfo(1) and also some GUI tools. It
@@ -136,6 +136,18 @@ Q4. How fast is mediafileinfo.py?
 
     All tools were run twice, and the 2nd run was measured, so that we're not
     measuring disk read speed.
+
+Q5. Is mediafileinfo.py able to extract duration info (e.g. number of
+    seconds, number of frames, number of keyframes)?
+
+A5. No, it isn't. Probably this feature won't be added, because it's
+    complicated to implement reliably for most video formats.
+
+Q6. Is mediafileinfo.py able to extract duration info about subtitles and
+    other tracks?
+
+A6. No, it isn't. This feature is not high priority, but feel free to send
+    a patch if you have an implementation.
 
 TODO
 ~~~~
