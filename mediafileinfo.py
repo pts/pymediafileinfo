@@ -181,6 +181,7 @@ def detect_flv(f, info, header=''):
 
   if not data.startswith('FLV'):
     raise ValueError('flv signature not found.')
+  info['type'] = 'flv'
   if data[3] != '\1':
     # Not found any files with other versions.
     raise ValueError('Only flv version 1 is supported.')
@@ -497,37 +498,37 @@ def detect_mkv(f, info, fskip, header=''):
   def read_id(f):
     c = read_n(1)
     if not c:
-      raise ValueError('MKVE1')
+      raise ValueError('EOF in mkv ID 1')
     b = ord(c)
     if b > 127:
       return c
     if b > 63:
       data = read_n(1)
       if not data:
-        raise ValueError('MKVE2')
+        raise ValueError('EOF in mkv ID 2')
       return c + data
     if b > 31:
       data = read_n(2)
       if len(data) != 2:
-        raise ValueError('MKVE3')
+        raise ValueError('EOF in mkv ID 3')
       return c + data
     if b > 15:
       data = read_n(3)
       if len(data) != 3:
-        raise ValueError('MKVE4')
+        raise ValueError('EOF in mkv ID 4')
       return c + data
     raise ValueError('Invalid ID prefix: %d' % b)
 
   def read_size(f):
     c = read_n(1)
     if not c:
-      raise ValueError('MKVE5')
+      raise ValueError('EOF in mkv element size 5')
     if c == '\1':
       data = read_n(7)
       if len(data) != 7:
-        raise ValueError('MKVE6')
+        raise ValueError('EOF in mkv element size 6')
       if data == '\xff\xff\xff\xff\xff\xff\xff':  # Streaming size.
-        raise ValueError('MKVE7')
+        raise ValueError('EOF in mkv element size 7')
       return struct.unpack('>Q', '\0' + data)[0]
     b = ord(c)
     if b > 127:
@@ -535,32 +536,32 @@ def detect_mkv(f, info, fskip, header=''):
     if b > 63:
       data = read_n(1)
       if not data:
-        raise ValueError('MKVE8')
+        raise ValueError('EOF in mkv element size 8')
       return (b & 63) << 8 | ord(data)
     if b > 31:
       data = read_n(2)
       if not len(data) != 2:
-        raise ValueError('MKVE9')
+        raise ValueError('EOF in mkv element size 9')
       return (b & 31) << 16 | struct.unpack('>H', data)[0]
     if b > 15:
       data = read_n(3)
       if not len(data) != 3:
-        raise ValueError('MKVE10')
+        raise ValueError('EOF in mkv element size 10')
       return (b & 15) << 24 | struct.unpack('>L', '\0' + data)[0]
     if b > 7:
       data = read_n(4)
       if not len(data) != 4:
-        raise ValueError('MKVE11')
+        raise ValueError('EOF in mkv element size 11')
       return (b & 7) << 32 | struct.unpack('>L', data)[0]
     if b > 3:
       data = read_n(5)
       if not len(data) != 5:
-        raise ValueError('MKVE11')
+        raise ValueError('EOF in mkv element size 12')
       return (b & 3) << 40 | struct.unpack('>Q', '\0\0\0' + data)[0]
     if b > 1:
       data = read_n(6)
       if not len(data) != 6:
-        raise ValueError('MKVE11')
+        raise ValueError('EOF in mkv element size 13')
       return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
     raise ValueError('Invalid ID prefix: %d' % b)
 
@@ -579,14 +580,14 @@ def detect_mkv(f, info, fskip, header=''):
     raise AssertionError('Header too long for mkv: %d' % len(header))
   header += read_n(4 - len(header))
   if len(header) != 4:
-    raise ValueError('Too short for MKV.')
+    raise ValueError('Too short for mkv.')
 
   xid = header[:4]  # xid = read_id(f)
   if xid != '\x1a\x45\xdf\xa3':
-    raise ValueError('MKV signature not found.')
+    raise ValueError('mkv signature not found.')
   size = read_size(f)
   if size >= 256:
-    raise ValueError('MKV header unreasonably large: %d' % size)
+    raise ValueError('mkv header unreasonably large: %d' % size)
   header_end = ofs_list[0] + size
   info['format'] = 'mkv'
   while ofs_list[0] < header_end:
@@ -600,7 +601,7 @@ def detect_mkv(f, info, fskip, header=''):
     if xid == '\x42\x82':  # DocType.
       # 'matroska' for .mkv, 'webm' for .webm.
       if data not in ('matroska', 'webm'):
-        raise ValueError('Unknown MKV DocType: %r' % data)
+        raise ValueError('Unknown mkv DocType: %r' % data)
       info['subformat'] = MKV_DOCTYPES[data]
       if info['subformat'] == 'webm':
         info['brands'] = ['mkv', 'webm']
@@ -608,7 +609,7 @@ def detect_mkv(f, info, fskip, header=''):
       else:
         info['brands'] = ['mkv']
   if 'subformat' not in info:
-    raise('MKV DocType not found.')
+    raise('mkv DocType not found.')
   xid = read_id_skip_void(f)
   if xid != '\x18\x53\x80\x67':  # Segment.
     raise ValueError('Expected Segment element, got: %s' % xid.encode('hex'))
@@ -684,20 +685,20 @@ def detect_mkv(f, info, fskip, header=''):
               if xid == '\x62\x64':  # BitDepth.
                 track_info['sample_size'], = struct.unpack(
                     '>Q', '\0' * (8 - len(data)) + data)
-          elif xid == '\x86':  # Codec ID.
+          elif xid == '\x86':  # CodecID.
             data = read_n(size)
             if len(data) != size:
-              raise ValueError('EOF in Track element.')
+              raise ValueError('EOF in CodecID element.')
             track_info['codec'] = MKV_CODEC_IDS.get(data, data)
-          elif xid == '\x25\x86\x88':  # Codec Name.
+          elif xid == '\x25\x86\x88':  # CodecName.
             data = read_n(size)
             if len(data) != size:
-              raise ValueError('EOF in Track element.')
+              raise ValueError('EOF in CodecName element.')
             track_info['codec_name'] = data  # Usually not set in .webm.
           else:
             data = read_n(size)
             if len(data) != size:
-              raise ValueError('EOF in Track element.')
+              raise ValueError('EOF in in-Track element.')
         if 'type' in track_info:
           info['tracks'].append(track_info)
       break  #  in Segment, don't read anything beyond Tracks, they are large.
@@ -780,8 +781,8 @@ MP4_VIDEO_CODECS = {
     'mpgv': 'mpeg2',
     'div1': 'divx',
     'divx': 'divx',
-    'dx50': 'divx5',
     'xvid': 'divx',
+    'dx50': 'divx5',
     'fmp4': 'divx5',
     'dvav': 'h264',
     'dvhc': 'h265',
@@ -828,7 +829,9 @@ MP4_AUDIO_CODECS = {
 
 
 def detect_mp4(f, info, fskip, header=''):
-  # Documentation: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
+  # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
+  # Also apple.com has some .mov docs.
+
   info['format'] = 'mov'
   info['minor_version'] = 0
   info['brands'] = []
@@ -1023,7 +1026,243 @@ def detect_mp4(f, info, fskip, header=''):
       break
 
 
+# --- avi
+
+# See all on: http://www.fourcc.org/
+# All keys are converted to lowercase, and whitespace-trimmed.
+# TODO(pts): Merge this with MP4_VIDEO_CODECS?
+# !! TODO(pts): Fill this.
+AVI_VIDEO_CODECS = {
+    'avc1': 'h264',
+    'dx50': 'divx5',
+    'fmp4': 'divx5',
+    'mpg4': 'divx5',
+    'mp42': 'divx5',  # Isn't compatible with mpg4.
+    'divx': 'divx',
+    'div3': 'divx',
+    'div4': 'divx',
+    '3iv2': 'divx',
+    'h264': 'h264',
+    'xvid': 'divx',
+    'mjpg': 'mjpeg',
+    'msvc': 'msvc',
+    'cram': 'msvc',
+    'x265': 'h264',
+    'iv50': 'indeo5',
+    'iv41': 'indeo4',
+    'dvsd': 'dv',
+    'dvsl': 'dv',
+    'dvhd': 'dv',
+    'mpeg': 'mpeg',
+    'wmv3': 'wmv3',
+    'vp30': 'vp3',
+    'vp40': 'vp4',
+    'vp50': 'vp5',
+    'vp60': 'vp6',
+    'vp6f': 'vp6',
+    'vp70': 'vp7',
+    'vp80': 'vp8',
+    'vp90': 'vp9',
+    'iv31': 'indeo3',
+    'iv32': 'indeo3',
+    'vcr2': 'vcr2',
+    # TODO(pts): Add these.
+    # 26 flv1
+    # 13 ffds
+    #  7 uldx
+    #  6 pim1
+    #  4 divf
+    #  2 1cva
+}
+
+# http://www.onicos.com/staff/iz/formats/wav.html
+# https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
+# !! TODO(pts): Find more.
+AVI_AUDIO_FORMATS = {
+    0x0001: 'pcm',
+    0x0002: 'adpcm',
+    0x0003: 'pcm',  #  'ieee_float',
+    0x0006: 'alaw',
+    0x0007: 'mulaw',
+    0x0009: 'drm',
+    0x000a: 'wma',
+    0x0010: 'adpcm',
+    0x0011: 'adpcm',
+    0x0012: 'adpcm',
+    0x0013: 'adpcm',
+    0x0017: 'adpcm',
+    0x0018: 'adpcm',
+    0x0020: 'adpcm',
+    0x0030: 'ac2',
+    0x0036: 'adpcm',
+    0x003b: 'adpcm',
+    0x0050: 'mp2',  # MPEG-1 or MPEG-2.
+    0x0055: 'mp3',
+    0x0064: 'adpcm',
+    0x0065: 'adpcm',
+    0x0075: 'rt29',  # Voxware MetaSound.
+    0x0092: 'ac3',  # 'dolby_ac3_spdif'.
+    0x00ff: 'aac',  # 'raw_aac1',
+    0x0160: 'wmav1',
+    0x0161: 'wmav2',
+    0x0162: 'wma-pro',
+    0x0163: 'wma-lossless',
+    0x0200: 'adpcm',
+    0x0240: 'raw_sport',
+    0x0241: 'esst_ac3',
+    0x1600: 'aac',  # mpeg_adts_aac',
+    0x1602: 'mpeg_loas',
+    0x1610: 'mpeg_heaac',
+    0x2000: 'dvm',
+    0x2001: 'dts2',
+}
+
+def detect_avi(f, info, fskip, header=''):
+  # Documented here: https://msdn.microsoft.com/en-us/library/ms779636.aspx
+  #
+  # OpenDML (ODML, for >2GB AVI) documented here:
+  # http://www.jmcgowan.com/odmlff2.pdf
+  #
+  # We don't care about OpenDML, because the 'hdrl' (track info) is near the
+  # beginning of the file, which is a regular AVI.
+  #
+  # In addition to the chunks we use here:
+  #
+  # * hdrl contains non-LIST avih.
+  # * strh may contain non-LIST indx and vprp.
+  # * RIFF may contain LIST info, which may contain non-LIST ISFT.
+  #
+
+  in_strl_chunks = {}
+  info['tracks'] = []
+
+  def process_list(ofs_limit, parent_id):
+    if parent_id == 'RIFF':
+      what = 'top-level'
+    else:
+      what = 'in-%s' % parent_id
+    while ofs_limit is None or ofs_limit > 0:
+      if ofs_limit is not None and ofs_limit < 8:
+        raise ValueError('No room for avi %s chunk.' % what)
+      data = f.read(8)
+      if len(data) < 8:
+        raise ValueError('EOF in avi %s chunk header.' % what)
+      chunk_id, size = struct.unpack('<4sL', data)
+      size += size & 1
+      if ofs_limit is not None:
+        ofs_limit -= 8 + size
+      if (size >= 4 and (ofs_limit is None or ofs_limit >= 0) and
+          chunk_id == 'LIST'):
+        chunk_id = f.read(4) + '+'
+        if len(chunk_id) < 5:
+          raise ValueError('EOF in avi %s LIST chunk ID.' % what)
+        size -= 4
+      if ofs_limit is not None and ofs_limit < 0:
+        raise ValueError('avi %s chunk too long: id=%r' % (what, chunk_id))
+      if chunk_id == 'hdrl+' and parent_id == 'RIFF':
+        process_list(size, chunk_id[:4])
+        break
+      elif chunk_id == 'strl+' and parent_id == 'hdrl':
+        in_strl_chunks.clear()
+        process_list(size, chunk_id[:4])
+        strh_data = in_strl_chunks.get('strh')
+        strf_data = in_strl_chunks.get('strf')
+        in_strl_chunks.clear()
+        if strh_data is None:
+          raise ValueError('Missing strh in strl.')
+        if strf_data is None:
+          raise ValueError('Missing strf in strl.')
+        if len(strh_data) < ((1 + (strh_data[:4] == 'vids')) << 2):
+          raise ValueError('avi strh chunk to short.')
+        if strh_data[:4] == 'vids':
+          if len(strf_data) < 20:
+            raise ValueError('avi strf chunk to short for video track.')
+          # BITMAPINFO starts with BITMAPINFOHEADER.
+          # https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
+          width, height = struct.unpack('<LL', strf_data[4 : 12])
+          if strh_data[4 : 8] == '\0\0\0\0':
+            video_codec = strf_data[16 : 20].strip().lower()
+          else:
+            video_codec = strh_data[4 : 8].strip().lower()
+          if '\0' in video_codec:
+            raise ValueError('NUL in avi video codec.')
+          video_codec = AVI_VIDEO_CODECS.get(video_codec, video_codec)
+          track_info = {'type': 'video', 'codec': video_codec}
+          set_video_dimens(track_info, width, height)
+          info['tracks'].append(track_info)
+        elif strh_data[:4] == 'auds':
+          if len(strf_data) < 16:
+            raise ValueError('avi strf chunk to short for audio track.')
+          wave_format, = struct.unpack('<H', strf_data[:2])
+          if wave_format == 0xfffe:  # WAVE_FORMAT_EXTENSIBLE
+            # The structure is interpreted as a WAVEFORMATEXTENSIBLE structure.
+            # https://msdn.microsoft.com/en-us/library/ms788113.aspx
+            # !! TODO(pts): Implement. Does it also start with WAVEFORMATEX?
+            raise ValueError(
+                'Unsupported WAVE_FORMAT_EXTENSIBLE in avi audio track.')
+          else:
+            # Everything else including WAVE_FORMAT_MPEG and
+            # MPEGLAYER3WAVEFORMAT also start with WAVEFORMATEX.
+            # sample_size is in bits.
+            channel_count, sample_rate, _, _,  sample_size = struct.unpack(
+                '<HLLHH', strf_data[2 : 16])
+            info['tracks'].append({
+                'type': 'audio',
+                'codec': AVI_AUDIO_FORMATS.get(
+                    wave_format, '0x%x' % wave_format),
+                'channel_count': channel_count,
+                'sample_rate': sample_rate,
+                # With 'codec': 'mp3', sample_size is usually 0.
+                'sample_size': sample_size or 16,
+            })
+      elif chunk_id in ('strh', 'strf') and parent_id == 'strl':
+        if chunk_id in in_strl_chunks:
+          raise ValueError('Duplicate %s chunk in avi %s chunk.' %
+                           (chunk_id, parent_id))
+        if size > 8191:  # Typically shorter than 100 bytes.
+          raise ValueError(
+              'Unreasonable size of avi %s chunk: id=%r size=%r' %
+              (what, chunk_id, size))
+        data = f.read(size)
+        if len(data) < size:
+          raise ValueError('EOF in avi %s chunk: id=%r' % (what, chunk_id))
+        in_strl_chunks[chunk_id] = data
+      elif (parent_id == 'RIFF' and
+            chunk_id in ('idx1', 'indx', 'movi+') or chunk_id.startswith('00')):
+        raise ValueError(
+            'Unexpected avi %s chunk id=%r before hdrl.' % (what, chunk_id))
+      elif size >= (1 << (16 + 4 * (chunk_id == 'JUNK'))):
+        # 'JUNK' can be everywhere. We skip it here and elsewhere.
+        raise ValueError(
+            'Unreasonable size of avi %s chunk: id=%r size=%r' %
+            (what, chunk_id, size))
+      else:
+        if not fskip(size):
+          raise ValueError('EOF in avi %s chunk: id=%r' % (what, chunk_id))
+    else:  # No `break.'
+      if parent_id == 'RIFF':
+        raise ValueError('Missing avi hdrl chunk.')
+
+  data = header
+  if len(data) < 12:
+    data += f.read(12 - len(data))
+    if len(data) < 12:
+      raise ValueError('Too short for avi.')
+  elif len(data) != 12:
+    raise AssertionError('Header too long for avi: %d' % len(data))
+  riff_id, ofs_limit, avi_id = struct.unpack('<4sL4s', header)
+  if riff_id != 'RIFF' or avi_id != 'AVI ':
+    raise ValueError('avi signature not found.')
+  info['type'] = 'avi'
+  if ofs_limit == 0:
+    ofs_limit = None
+  else:
+    ofs_limit -= 4  # len(avi_id).
+  process_list(ofs_limit, 'RIFF')
+
+
 # --- Image file formats.
+
 
 def is_animated_gif(f, header='', do_read_entire_file=False):
   """Returns bool indicating whether f contains an animaged GIF.
@@ -1263,7 +1502,7 @@ def get_brn_dimensions(f, header=''):
 
 def is_html(data):
   data = data[:256].lstrip().lower()
-  return (data.startswith('<!-- start header  --><html>') or
+  return (data.startswith('<!-- ') or
           data.startswith('<html>') or
           data.startswith('<head>') or
           data.startswith('<body>') or
@@ -1525,15 +1764,12 @@ def detect(f, info=None, is_seek_ok=False):
       header += f.read(12 - len(header))
     if header[8 : 12] == 'AVI ':
       info['format'] = 'avi'
-      # TODO(pts): Add detection of width and height.
+      detect_avi(f, info, fskip, header)
     elif header[8 : 12] == 'WAVE':
       info['format'] = 'wav'
   elif header.startswith('\0\0\1') and header[3] in (
       '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
-    info['format'] = 'mpeg'
-  elif (header[0] == '\x47' and header[2] == '\0' and
-        (ord(header[1]) & 0x5f) == 0x40 and (ord(header[3]) & 0x10) == 0x10):
-    info['format'] = 'mpegts'  # .ts, MPEG transport stream.
+    info['format'] = 'mpeg'  # Video.
   elif header.startswith('\212MNG'):
     if len(header) < 8:
       header += f.read(8 - len(header))
@@ -1606,6 +1842,24 @@ def detect(f, info=None, is_seek_ok=False):
           elif b in (40, 124) and len(header) >= 26:
             info['width'], info['height'] = struct.unpack(
                 '<LL', header[18 : 26])
+    if (info['format'] == '?' and header[0] == '\x47'):
+      # https://en.wikipedia.org/wiki/MPEG_transport_stream
+      b, = struct.unpack('>L', header[:4])
+      tei = (b >> 23) & 1
+      pusi = (b >> 22) & 1
+      tp = (b >> 21) & 1
+      packet_id = (b >> 8) & 0x1fff  # 13-bit.
+      tsc = (b >> 6) & 3
+      afc = (b >> 4) & 3
+      cc = b & 15
+      if tei == 0 and cc == 0 and tsc == 0 and packet_id == 0x11:
+        info['format'] = 'mpegts'
+        #print (tei, pusi, tp, packet_id, tsc, afc, cc)
+        # packet_id=0x11 is
+        # https://en.wikipedia.org/wiki/Service_Description_Table
+      elif (header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
+            (ord(header[3]) & 0x10) == 0x10):
+        info['format'] = 'mpegts'  # Old detection.
     if (info['format'] == '?' and
         header[0] == '\n' and header[2] == '\1' and ord(header[1]) <= 5 and
         header[3] in '\1\2\4\x08'):  # Move this down.
