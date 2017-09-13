@@ -833,7 +833,6 @@ def detect_mp4(f, info, fskip, header=''):
   # Also apple.com has some .mov docs.
 
   info['format'] = 'mov'
-  info['minor_version'] = 0
   info['brands'] = []
   info['tracks'] = []
   info['has_early_mdat'] = False
@@ -1523,7 +1522,7 @@ def get_brn_dimensions(f, header=''):
 
 def is_html(data):
   data = data[:256].lstrip().lower()
-  return (data.startswith('<!-- ') or
+  return (data.startswith('<!--') or
           data.startswith('<html>') or
           data.startswith('<head>') or
           data.startswith('<body>') or
@@ -1590,6 +1589,9 @@ def detect(f, info=None, is_seek_ok=False):
     info['format'] = 'empty'
   elif len(header) < 4:
     info['format'] = 'short%d' % len(header)
+
+  # Videos.
+
   elif header.startswith('FLV\1'):
     # \1 is the version number, but there is no version later than 1 in 2017.
     info['format'] = 'flv'
@@ -1597,15 +1599,46 @@ def detect(f, info=None, is_seek_ok=False):
   elif header.startswith('\x1a\x45\xdf\xa3'):
     info['format'] = 'mkv'  # Can also be .webm as a subformat.
     detect_mkv(f, info, fskip, header)
-  elif (header.startswith('\0\0\0') and len(header) >= 4 and
-        ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0):
-    if len(header) < 8:
-      header += f.read(8 - len(header))
-    if header[4 : 8] == 'ftyp':
-      info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
-      detect_mp4(f, info, fskip, header)
   elif header.startswith('OggS'):
     info['format'] = 'ogg'  # TODO(pts): Detect parameters.
+  elif header.startswith('\x30\x26\xb2\x75'):
+    info['format'] = 'asf'  # Also 'wmv'.
+  elif header.startswith('RIFF'):
+    if len(header) < 12:
+      header += f.read(12 - len(header))
+    if header[8 : 12] == 'AVI ':
+      info['format'] = 'avi'
+      detect_avi(f, info, fskip, header)
+    elif header[8 : 12] == 'WAVE':
+      info['format'] = 'wav'
+    elif header[8 : 12] == 'CDXA':
+      info['format'] = 'mpeg-cdxa'  # Video CD (VCD).
+  elif header.startswith('\0\0\1') and header[3] in (
+      '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
+    info['format'] = 'mpeg'  # Video.
+  elif header.startswith('\212MNG'):
+    if len(header) < 8:
+      header += f.read(8 - len(header))
+    if header.startswith('\212MNG\r\n\032\n'):
+      info['format'] = 'mng'
+  elif header.startswith('FWS') or header.startswith('CWS'):
+    info['format'] = 'swf'
+  elif header.startswith('.RMF'):
+    if len(header) < 7:
+      header += f.read(7 - len(header))
+    if header.startswith('.RMF\0\0\0'):
+      info['format'] = 'rm'
+  elif header.startswith('DVDV'):
+    if len(header) < 12:
+      header += f.read(12 - len(header))
+    if (header.startswith('DVDVIDEO-VTS') or
+        header.startswith('DVDVIDEO-VMG')):
+      info['format'] = 'dvd-bup'  # .bup and .ifo files on DVD.
+  elif header.startswith('\x1f\x07\x00'):
+    info['format'] = 'dv'  # DIF DV (digital video).
+
+  # --- Images.
+
   elif header.startswith('GIF8'):
     if len(header) < 6:
       header += f.read(6 - len(header))
@@ -1623,22 +1656,6 @@ def detect(f, info=None, is_seek_ok=False):
     # TODO(pts): Which JPEG marker can be header[3]?
     info['format'], info['codec'] = 'jpeg', 'jpeg'
     info['width'], info['height'] = get_jpeg_dimensions(f, header)
-  elif header.startswith('<?xm'):
-    info['format'] = 'xml'
-  elif (header.startswith('<!--') or
-        header[:4].lower() in ('<htm', '<hea', '<bod', '<!do')):
-    # We could be more strict here, e.g. rejecting non-HTML docypes.
-    # TODO(pts): Ignore whitespace in the beginning above.
-    if len(header) < 256:
-      header += f.read(256 - len(header))
-    if is_html(header):
-      info['format'] = 'html'
-  elif header.startswith('\x0a\x04B\xd2'):
-    if len(header) < 7:
-      header += f.read(7 - len(header))
-    if header.startswith('\x0a\x04B\xd2\xd5N\x12'):
-      info['format'], inf['codec'] = 'brn', 'brn'
-      info['width'], info['height'] = get_brn_dimensions(f, header)
   elif header.startswith('\211PNG'):
     if len(header) < 11:
       header += f.read(11 - len(header))
@@ -1724,12 +1741,69 @@ def detect(f, info=None, is_seek_ok=False):
       # Dimensions are not easy to extract, maybe from the CFA IDs.
       # Please note that codec=raw also applies to uncompressed RGB 8-bit.
       info['format'], info['codec'] = 'fuji-raf', 'raw'
+
+  # --- Music.
+
+  elif header.startswith('ID3'):
+    info['format'] = 'mp3'
+  elif header.startswith('ADIF'):
+    info['format'] = 'aac'
+
+  # --- Non-media data.
+
+  elif header[:4].lower().startswith('@ech'):
+    if len(header) < 9:
+      header += f.read(9 - len(header))
+    if header[:9].lower().startswith('@echo off'):
+      info['format'] = 'windows-cmd'  # Or DOS .bat file.
+  elif header.startswith('<?xm'):
+    if len(header) < 5:
+      header += f.read(5 - len(header))
+    if header.startswith('<?xml'):
+      info['format'] = 'xml'
+  elif header[:4].lower().startswith('<?ph'):
+    if len(header) < 5:
+      header += f.read(5 - len(header))
+    if header[:5].lower().startswith('<?php'):
+      info['format'] = 'php'
+  elif (header.startswith('<!--') or
+        header[:4].lower() in ('<htm', '<hea', '<bod', '<!do')):
+    # We could be more strict here, e.g. rejecting non-HTML docypes.
+    # TODO(pts): Ignore whitespace in the beginning above.
+    if len(header) < 256:
+      header += f.read(256 - len(header))
+    if is_html(header):
+      info['format'] = 'html'
+  elif header.startswith('\x0a\x04B\xd2'):
+    if len(header) < 7:
+      header += f.read(7 - len(header))
+    if header.startswith('\x0a\x04B\xd2\xd5N\x12'):
+      info['format'], inf['codec'] = 'brn', 'brn'
+      info['width'], info['height'] = get_brn_dimensions(f, header)
+  elif header.startswith('JASC'):
+    info['format'] = 'jbf'
+  elif header.startswith('\xca\xfe\xba\xbe'):
+    info['format'] = 'java-class'
+  elif (header.startswith('\xd0\xcf\x11\xe0') or
+        header.startswith('\x0e\x11\xfc\x0d')):
+    if len(header) < 8:
+      header += f.read(8 - len(header))
+    if (header.startswith('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') or
+        header.startswith('\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e')):
+      # OLE compound file, including Thumbs.db
+      # http://forensicswiki.org/wiki/OLE_Compound_File
+      info['format'] = 'olecf'
+  elif header.startswith('ADMY'):
+    info['format'] = 'avidemux-mpeg-index'
+  elif header.startswith('//AD'):
+    info['format'] = 'avidemux-project'
+
+  # --- Compressed.
+
   elif (header.startswith('PK\1\2') or header.startswith('PK\3\4') or
         header.startswith('PK\5\6') or header.startswith('PK\7\x08') or
         header.startswith('PK\6\6')):  # ZIP64.
     info['format'], info['codec'] = 'zip', 'flate'
-  elif header.startswith('JASC'):
-    info['format'] = 'jbf'
   elif header.startswith('Rar!'):
     info['format'] = 'rar'
   elif (header.startswith('7kSt') or
@@ -1771,84 +1845,49 @@ def detect(f, info=None, is_seek_ok=False):
     if (len(header) >= 7 and header[4] in '\1\2' and header[5] in '\1\2' and
         header[6] == '\1'):
       info['format'] = 'elf'
-  elif (header.startswith('\xd0\xcf\x11\xe0') or
-        header.startswith('\x0e\x11\xfc\x0d')):
-    if len(header) < 8:
-      header += f.read(8 - len(header))
-    if (header.startswith('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') or
-        header.startswith('\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e')):
-      # OLE compound file, including Thumbs.db
-      # http://forensicswiki.org/wiki/OLE_Compound_File
-      info['format'] = 'olecf'
-  elif header.startswith('\x30\x26\xb2\x75'):
-    info['format'] = 'asf'  # Also 'wmv'.
-  elif header.startswith('RIFF'):
-    if len(header) < 12:
-      header += f.read(12 - len(header))
-    if header[8 : 12] == 'AVI ':
-      info['format'] = 'avi'
-      detect_avi(f, info, fskip, header)
-    elif header[8 : 12] == 'WAVE':
-      info['format'] = 'wav'
-    elif header[8 : 12] == 'CDXA':
-      info['format'] = 'mpeg-cdxa'  # Video CD (VCD).
-  elif header.startswith('\0\0\1') and header[3] in (
-      '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
-    info['format'] = 'mpeg'  # Video.
-  elif header.startswith('\212MNG'):
-    if len(header) < 8:
-      header += f.read(8 - len(header))
-    if header.startswith('\212MNG\r\n\032\n'):
-      info['format'] = 'mng'
-  elif header.startswith('FWS') or header.startswith('CWS'):
-    info['format'] = 'swf'
-  elif header.startswith('.RMF'):
-    if len(header) < 7:
-      header += f.read(7 - len(header))
-    if header.startswith('.RMF\0\0\0'):
-      info['format'] = 'rm'
   elif header.startswith('#!/') or header.startswith('#! /'):
     info['format'] = 'unixscript'  # Unix script with shebang.
   elif header.startswith('\367\002'):  # Move this down (short prefix).
     info['format'] = 'dvi'
     # TODO(pts): 10 byte prefix? "\367\002\001\203\222\300\34;\0\0"
-  elif header.startswith('MZ'):  # Move this down (short prefix).
-    # Windows .exe file (PE, Portable Executable).
-    if len(header) < 64:
-      header += f.read(64 - len(header))
-    pe_ofs, = struct.unpack('<L', header[60: 64])
-    if pe_ofs < 8180 and len(header) < pe_ofs + 6:
-      header += f.read(pe_ofs + 6 - len(header))
-    if (len(header) >= pe_ofs + 6 and
-        header.startswith('MZ') and
-        header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
-        # Only i386 and amd64 detected.
-        header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
-      info['format'] = 'winexe'
   elif (header.startswith('\x78\x01') or header.startswith('\x78\x5e') or
         header.startswith('\x78\x9c') or header.startswith('\x78\xda')):
     # Compressed in ZLIB format (/FlateEncode).
     info['format'], info['codec'] = 'flate', 'flate'
+
+  # --- Anything with very short header. Has to come last.
+
   else:  # Last few matchers, with very short header.
     # TODO(pts): Make it compatible with 'winexe', in any order.
-
     info['format'] = '?'
     if info['format'] == '?' and len(header) < 8:
       # Mustn't be more than 8 bytes, for detect_mp4.
       header += f.read(8 - len(header))
     if (info['format'] == '?' and
+        header.startswith('\0\0\0') and len(header) >= 4 and
+        ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0 and
+        header[4 : 8] == 'ftyp'):
+      info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
+      detect_mp4(f, info, fskip, header)
+    if (info['format'] == '?' and
         header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
       info['format'] = 'mov'
       detect_mp4(f, info, fskip, header)
-    elif (info['format'] == '?' and
-          header.startswith('\0\0') and header[4 : 8] == 'wide'):
+    if (info['format'] == '?' and
+          header.startswith('\0\0') and
+          header[4 : 8] in ('wide', 'free', 'skip')):
       # Immediately followed by a 4-byte size, then 'mdat'.
       info['format'] = 'mov'
       detect_mp4(f, info, fskip, header)
-    elif (info['format'] == '?' and
-          header.startswith('\0\0') and header[4 : 8] == 'moov'):
+    if (info['format'] == '?' and
+        header[0] == '\0' and header[1] in '\0\1\2\3\4\5\6\7\x08' and
+        header[4 : 8] == 'moov'):
       info['format'] = 'mov'
       detect_mp4(f, info, fskip, header)
+    if (info['format'] == '?' and
+          header.startswith('\0\0\0') and
+          header[4 : 8] == 'pnot'):
+      info['format'] = 'pnot'  # Seems to contain an image.
     if (info['format'] == '?' and
         header.startswith('BM')):
       if len(header) < 10:  # Don't read too much, for other formats later.
@@ -1896,6 +1935,24 @@ def detect(f, info=None, is_seek_ok=False):
       if ord(header[16]) <= 8 or ord(header[16]) == 24:
         # Unfortunately not all tga (targa) files have 'TRUEVISION-XFILE.\0'.
         format = 'tga'  # sam2p can read it.
+    if (info['format'] == '?' and
+        (header.startswith('\xff\xfa') or header.startswith('\xff\xfb')) and
+         ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12):
+      # The technically more correct term is MPEG ADTS.
+      info['format'] = 'mp3'
+    if (info['format'] == '?' and header.startswith('MZ')):
+      # Windows .exe file (PE, Portable Executable).
+      if len(header) < 64:
+        header += f.read(64 - len(header))
+      pe_ofs, = struct.unpack('<L', header[60: 64])
+      if pe_ofs < 8180 and len(header) < pe_ofs + 6:
+        header += f.read(pe_ofs + 6 - len(header))
+      if (len(header) >= pe_ofs + 6 and
+          header.startswith('MZ') and
+          header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
+          # Only i386 and amd64 detected.
+          header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
+        info['format'] = 'winexe'
 
   if not info.get('format'):
     info['format'] = '?'
@@ -1914,6 +1971,7 @@ def format_info(info):
       return repr(v)
     return v
   output = ['format=%s' % (info.get('format') or '?')]
+  # TODO(pts): Display brands list.
   output.extend(
       ' %s=%s' % (k, '___'.join(str(format_value(v)).split()))
       for k, v in sorted(info.iteritems())
