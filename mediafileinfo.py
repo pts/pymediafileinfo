@@ -2068,24 +2068,31 @@ def detect(f, info=None, is_seek_ok=False):
           elif b in (40, 124) and len(header) >= 26:
             info['width'], info['height'] = struct.unpack(
                 '<LL', header[18 : 26])
-    if (info['format'] == '?' and header[0] == '\x47'):
+
+    if (info['format'] == '?' and
+        (header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
       # https://en.wikipedia.org/wiki/MPEG_transport_stream
-      b, = struct.unpack('>L', header[:4])
-      tei = (b >> 23) & 1
-      pusi = (b >> 22) & 1
-      tp = (b >> 21) & 1
-      packet_id = (b >> 8) & 0x1fff  # 13-bit.
-      tsc = (b >> 6) & 3
-      afc = (b >> 4) & 3
-      cc = b & 15
-      if tei == 0 and cc == 0 and tsc == 0 and packet_id == 0x11:
-        info['format'] = 'mpegts'
-        #print (tei, pusi, tp, packet_id, tsc, afc, cc)
-        # packet_id=0x11 is
-        # https://en.wikipedia.org/wiki/Service_Description_Table
-      elif (header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
-            (ord(header[3]) & 0x10) == 0x10):
-        info['format'] = 'mpegts'  # Old detection.
+      i = header.find('\x47')
+      if len(header) >= i + 4:
+        b, = struct.unpack('>L', header[i : i + 4])
+        tei = (b >> 23) & 1
+        pusi = (b >> 22) & 1
+        tp = (b >> 21) & 1
+        packet_id = (b >> 8) & 0x1fff  # 13-bit.
+        tsc = (b >> 6) & 3
+        afc = (b >> 4) & 3
+        cc = b & 15
+        # TODO(pts): If packet_id == 8191, then it's the null packet, and find
+        # the next packet.
+        if tei == 0 and cc == 0 and tsc == 0 and packet_id in (0, 0x11, 8191):
+          # Also applies to .m2ts.
+          info['format'] = 'mpegts'
+          # packet_id=0 is Program Association Table (PAT)
+          # packet_id=0x11 is
+          # https://en.wikipedia.org/wiki/Service_Description_Table
+        elif (header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
+              (ord(header[3]) & 0x10) == 0x10):
+          info['format'] = 'mpegts'  # Old detection.
     if (info['format'] == '?' and
         header[0] == '\n' and header[2] == '\1' and ord(header[1]) <= 5 and
         header[3] in '\1\2\4\x08'):  # Move this down.
