@@ -6,8 +6,8 @@ audio, video). It needs just Python 2.4, 2.5, 2.6 or 2.7, no module
 installation. mediafileinfo.py can read the input in a streaming way
 (without seeking), and it stops reading after the parameters have been found.
 
-Supported video formats for dimension detection include mp4, mkv, webm, flv,
-avi.
+Supported video formats for dimension and codec detection include mp4, mkv,
+webm, flv, avi, asf, wmv, wma.
 
 Supported image formats for dimension detection include JPEG, PNG, GIF,
 BMP.

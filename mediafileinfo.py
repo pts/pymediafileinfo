@@ -1025,7 +1025,7 @@ def detect_mp4(f, info, fskip, header=''):
       break
 
 
-# --- avi
+# --- Windows
 
 # See some on: http://www.fourcc.org/
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
@@ -1033,7 +1033,7 @@ def detect_mp4(f, info, fskip, header=''):
 # All keys are converted to lowercase, and whitespace-trimmed.
 # TODO(pts): Merge this with MP4_VIDEO_CODECS?
 # !! TODO(pts): Fill this.
-AVI_VIDEO_CODECS = {
+WINDOWS_VIDEO_CODECS = {
     'avc1': 'h264',
     'dx50': 'divx5',
     'fmp4': 'divx5',
@@ -1077,11 +1077,27 @@ AVI_VIDEO_CODECS = {
     #  2 1cva
 }
 
+
+def get_windows_video_codec(codec):
+  codec = codec.strip().lower()
+  if codec == '\0\0\0\0':
+    codec = 'raw'
+  elif codec in ('\1\0\0\x10', '\2\0\0\x10'):
+    codec = 'mpeg'
+  elif codec == '\2\0\0\x10':
+    codec = 'mpeg'
+  elif codec in ('\1\0\0\0', '\2\0\0\0'):
+    codec = 'rle'
+  elif '\0' in codec:
+    raise ValueError('NUL in Windows video codec %r.' % codec)
+  return WINDOWS_VIDEO_CODECS.get(codec, codec)
+
+
 # http://www.onicos.com/staff/iz/formats/wav.html
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
 # !! TODO(pts): Find more.
-AVI_AUDIO_FORMATS = {
+WINDOWS_AUDIO_FORMATS = {
     0x0001: 'pcm',
     0x0002: 'adpcm',
     0x0003: 'pcm',  #  'ieee_float',
@@ -1134,7 +1150,7 @@ def guid(s):
 
 # See some near the end of: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
 # See many with prefix KSDATAFORMAT_SUBTYPE_ in: https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h
-AVI_GUID_AUDIO_FORMATS = {
+WINDOWS_GUID_AUDIO_FORMATS = {
     guid('00000003-0cea-0010-8000-00aa00389b71'): 'mp1',
     guid('00000004-0cea-0010-8000-00aa00389b71'): 'mp2',
     guid('00000005-0cea-0010-8000-00aa00389b71'): 'mp3',
@@ -1159,6 +1175,9 @@ AVI_GUID_AUDIO_FORMATS = {
     guid('e06d8033-db46-11cf-b4d1-00805f6cbbea'): 'dts',
     guid('e06d8034-db46-11cf-b4d1-00805f6cbbea'): 'sdds',
 }
+
+
+# --- avi
 
 
 def detect_avi(f, info, fskip, header=''):
@@ -1230,20 +1249,10 @@ def detect_avi(f, info, fskip, header=''):
           # https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
           width, height = struct.unpack('<LL', strf_data[4 : 12])
           if strh_data[4 : 8] == '\0\0\0\0':
-            video_codec = strf_data[16 : 20].strip().lower()
+            video_codec = strf_data[16 : 20]
           else:
-            video_codec = strh_data[4 : 8].strip().lower()
-          if video_codec == '\0\0\0\0':
-            video_codec = 'raw'
-          elif video_codec in ('\1\0\0\x10', '\2\0\0\x10'):
-            video_codec = 'mpeg'
-          elif video_codec == '\2\0\0\x10':
-            video_codec = 'mpeg'
-          elif video_codec in ('\1\0\0\0', '\2\0\0\0'):
-            video_codec = 'rle'
-          elif '\0' in video_codec:
-            raise ValueError('NUL in avi video codec %r.' % video_codec)
-          video_codec = AVI_VIDEO_CODECS.get(video_codec, video_codec)
+            video_codec = strh_data[4 : 8]
+          video_codec = get_windows_video_codec(video_codec)
           track_info = {'type': 'video', 'codec': video_codec}
           set_video_dimens(track_info, width, height)
           info['tracks'].append(track_info)
@@ -1262,12 +1271,12 @@ def detect_avi(f, info, fskip, header=''):
             guid_str = strf_data[24 : 24 + 16]
             if guid_str.endswith('\0\0\0\0\x10\0\x80\0\0\xaa\0\x38\x9b\x71'):
               wave_format, = struct.unpack('<H', guid_str[:2])
-            elif guid_str in AVI_GUID_AUDIO_FORMATS:
-              codec = AVI_GUID_AUDIO_FORMATS[guid_str]
+            elif guid_str in WINDOWS_GUID_AUDIO_FORMATS:
+              codec = WINDOWS_GUID_AUDIO_FORMATS[guid_str]
             else:
               codec = 'guid-?-' + guid_str.encode('hex')  # Fallback.
           if codec is None:
-            codec = AVI_AUDIO_FORMATS.get(wave_format, '0x%x' % wave_format)
+            codec = WINDOWS_AUDIO_FORMATS.get(wave_format, '0x%x' % wave_format)
           # Everything else including WAVE_FORMAT_MPEG and
           # MPEGLAYER3WAVEFORMAT also start with WAVEFORMATEX.
           # sample_size is in bits.
@@ -1328,6 +1337,103 @@ def detect_avi(f, info, fskip, header=''):
   else:
     ofs_limit -= 4  # len(avi_id).
   process_list(ofs_limit, 'RIFF')
+
+
+# --- asf
+
+ASF_Header_Object = guid('75b22630-668e-11cf-a6d9-00aa0062ce6c')
+ASF_Stream_Properties_Object = guid('b7dc0791-a9b7-11cf-8ee6-00c00c205365')
+ASF_Audio_Media = guid('f8699e40-5b4d-11cf-a8fd-00805f5c442b')
+ASF_Video_Media = guid('bc19efc0-5b4d-11cf-a8fd-00805f5c442b')
+
+
+def detect_asf(f, info, fskip, header):
+  if len(header) < 30:
+    header += f.read(30 - len(header))
+    if len(header) < 30:
+      raise ValueError('Too short for asf.')
+  guid, size, count, reserved12 = struct.unpack('<16sQLH', header)
+  if guid != ASF_Header_Object:
+    raise ValueError('asf signature not found.')
+  if reserved12 != 0x201:
+    raise ValueError('Unexpected asf reserved12 value: 0x%x' % reserved12)
+  if size < 54:
+    raise ValueError('Too short for asf with header object.')
+  ofs_limit = size - 30
+  if ofs_limit > 500000:  # Typical maximum size is 5500 bytes.
+    raise ValueError('Unreasonable size of asf header object: %d' % ofs_limit)
+  info['tracks'] = []
+  info['format'] = 'asf'
+  while ofs_limit > 0:
+    if count <= 0:
+      raise ValueError('Expected no more objects in asf header.')
+    if ofs_limit < 24:
+      raise ValueError('No room for asf in-header object header.')
+    data = f.read(24)
+    if len(data) < 24:
+      raise ValueError('EOF in asf in-header object header.')
+    guid, size = struct.unpack('<16sQ', data)
+    if size < 24:
+      raise ValueError('asf in-header object too small.')
+    ofs_limit -= size
+    count -= 1
+    if ofs_limit < 0:
+      raise ValueError('No room for asf in-header object.')
+    size -= 24
+    if size > 350000:  # Typical maximum size is 4500 bytes.
+      raise ValueError('Unreasonable size of asf in-header object: %d' % size)
+    if guid == ASF_Stream_Properties_Object:
+      data = f.read(size)
+      if len(data) < size:
+        raise ValueError('EOF in asf stream properties.')
+      (stream_type_guid, error_correction_type_guid, time_offset, ts_size,
+       ec_size, flags, reserved) = struct.unpack('<16s16sQLLHL', data[:54])
+      if 54 + ts_size > len(data):
+        raise ValueError('No room for asf stream properties.')
+      if stream_type_guid == ASF_Audio_Media:
+        if len(data) < 70:
+          raise ValueError('asf audio properties too short.')
+        (wave_format, channel_count, sample_rate, _, _, sample_size,
+        ) = struct.unpack('<HHLLHH', data[54 : 70])
+        # TODO(pts): Try to detect GUID if codec == 'unexpected-?'.
+        info['tracks'].append({
+            'type': 'audio',
+            'codec': WINDOWS_AUDIO_FORMATS.get(
+                wave_format, '0x%x' % wave_format),
+            'channel_count': channel_count,
+            'sample_rate': sample_rate,
+            # With 'codec': 'mp3', sample_size is usually 0.
+            'sample_size': sample_size or 16,
+        })
+      elif stream_type_guid == ASF_Video_Media:
+        if len(data) < 85:
+          raise ValueError('asf video properties too short.')
+        (width, height, reserved, format_data_size, format_data_size2, width2,
+         height2, reserved2, bits_per_pixel, video_codec,
+        ) = struct.unpack('<LLBHLLLHH4s', data[54 : 85])
+        if format_data_size != format_data_size2:
+          raise ValueError('Mismatch in asf video format_data_size.')
+        if format_data_size + 11 != ts_size:
+          raise ValueError('Unexpected asf video format_data_size.')
+        if width != width2 or height != height2:
+          raise ValueError('Mismatch in asf video dimensions.')
+        video_codec = get_windows_video_codec(video_codec)
+        track_info = {'type': 'video', 'codec': video_codec}
+        set_video_dimens(track_info, width, height)
+        info['tracks'].append(track_info)
+    elif not fskip(size):
+      raise ValueError('EOF in asf in-header object.')
+  # Not failing on this, some ASF files have it in the wild.
+  #if count != 0:
+  #  raise ValueError('Expected more objects in asf header.')
+  # We ignore anything beyond the ASF_Header_Object.
+
+  if [1 for track in info['tracks'] if track['type'] == 'video']:
+    info['format'] = 'wmv'
+  elif [1 for track in info['tracks'] if track['type'] == 'audio']:
+    info['format'] = 'wma'
+  else:
+    info['format'] = 'asf'
 
 
 # --- Image file formats.
@@ -1656,6 +1762,7 @@ def detect(f, info=None, is_seek_ok=False):
       header += f.read(16 - len(header))
     if header.startswith('0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel'):
       info['format'] = 'asf'  # Also 'wmv'.
+      detect_asf(f, info, fskip, header)
   elif header.startswith('RIFF'):
     if len(header) < 12:
       header += f.read(12 - len(header))
