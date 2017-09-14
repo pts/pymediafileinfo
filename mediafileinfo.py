@@ -1087,6 +1087,7 @@ AVI_AUDIO_FORMATS = {
     0x0003: 'pcm',  #  'ieee_float',
     0x0006: 'alaw',
     0x0007: 'mulaw',
+    0x0009: 'dts',
     0x0009: 'drm',
     0x000a: 'wma',
     0x0010: 'adpcm',
@@ -1111,6 +1112,7 @@ AVI_AUDIO_FORMATS = {
     0x0161: 'wmav2',
     0x0162: 'wma-pro',
     0x0163: 'wma-lossless',
+    0x0164: 'wma-spdif',
     0x0200: 'adpcm',
     0x0240: 'raw_sport',
     0x0241: 'esst_ac3',
@@ -1121,6 +1123,43 @@ AVI_AUDIO_FORMATS = {
     0x2001: 'dts2',
     0xfffe: 'extensible-?',
 }
+
+
+def guid(s):
+  """Encodes hex and shuffles bytes around."""
+  s = s.replace('-', '').decode('hex')
+  args = struct.unpack('<LHH8s', s)
+  return struct.pack('>LHH8s', *args)
+
+
+# See some near the end of: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
+# See many with prefix KSDATAFORMAT_SUBTYPE_ in: https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h
+AVI_GUID_AUDIO_FORMATS = {
+    guid('00000003-0cea-0010-8000-00aa00389b71'): 'mp1',
+    guid('00000004-0cea-0010-8000-00aa00389b71'): 'mp2',
+    guid('00000005-0cea-0010-8000-00aa00389b71'): 'mp3',
+    guid('00000006-0cea-0010-8000-00aa00389b71'): 'aac',
+    guid('00000008-0cea-0010-8000-00aa00389b71'): 'atrac',
+    guid('00000009-0cea-0010-8000-00aa00389b71'): '1bit',
+    guid('0000000a-0cea-0010-8000-00aa00389b71'): 'dolby-digitalplus',
+    guid('0000000b-0cea-0010-8000-00aa00389b71'): 'dts-hd',
+    guid('0000000c-0cea-0010-8000-00aa00389b71'): 'dolby-mlp',
+    guid('0000000d-0cea-0010-8000-00aa00389b71'): 'dst',
+    guid('36523b22-8ee5-11d1-8ca3-0060b057664a'): 'mp1',
+    guid('36523b24-8ee5-11d1-8ca3-0060b057664a'): 'mp2',
+    guid('36523b25-8ee5-11d1-8ca3-0060b057664a'): 'ac3',
+    guid('518590a2-a184-11d0-8522-00c04fd9baf3'): 'dsound',
+    guid('58cb7144-23e9-bfaa-a119-fffa01e4ce62'): 'atrac3',
+    guid('6dba3190-67bd-11cf-a0f7-0020afd156e4'): 'analog',
+    guid('ad98d184-aac3-11d0-a41c-00a0c9223196'): 'vc',
+    guid('a0af4f82-e163-11d0-bad9-00609744111a'): 'dss',
+    guid('e06d802b-db46-11cf-b4d1-00805f6cbbea'): 'mp2',
+    guid('e06d802c-db46-11cf-b4d1-00805f6cbbea'): 'ac3',
+    guid('e06d8032-db46-11cf-b4d1-00805f6cbbea'): 'pcm',
+    guid('e06d8033-db46-11cf-b4d1-00805f6cbbea'): 'dts',
+    guid('e06d8034-db46-11cf-b4d1-00805f6cbbea'): 'sdds',
+}
+
 
 def detect_avi(f, info, fskip, header=''):
   # Documented here: https://msdn.microsoft.com/en-us/library/ms779636.aspx
@@ -1212,22 +1251,32 @@ def detect_avi(f, info, fskip, header=''):
           if len(strf_data) < 16:
             raise ValueError('avi strf chunk to short for audio track.')
           wave_format, = struct.unpack('<H', strf_data[:2])
+          codec = None
           if wave_format == 0xfffe:  # WAVE_FORMAT_EXTENSIBLE
             # The structure is interpreted as a WAVEFORMATEXTENSIBLE structure.
             # It starts with WAVEFORMATEX afterwards.
             # https://msdn.microsoft.com/en-us/library/ms788113.aspx
-            # TODO(pts): Detect the wave_format from the UUID field in
-            # WAVEFORMATEXTENSIBLE::SubFormat. We need a new mapping.
-            pass
+            if len(strf_data) < 40:
+              raise ValueError(
+                  'avi strf chunk to short for extensible audio track.')
+            guid_str = strf_data[24 : 24 + 16]
+            if guid_str.endswith('\0\0\0\0\x10\0\x80\0\0\xaa\0\x38\x9b\x71'):
+              wave_format, = struct.unpack('<H', guid_str[:2])
+            elif guid_str in AVI_GUID_AUDIO_FORMATS:
+              codec = AVI_GUID_AUDIO_FORMATS[guid_str]
+            else:
+              codec = 'guid-?-' + guid_str.encode('hex')  # Fallback.
+          if codec is None:
+            codec = AVI_AUDIO_FORMATS.get(wave_format, '0x%x' % wave_format)
           # Everything else including WAVE_FORMAT_MPEG and
           # MPEGLAYER3WAVEFORMAT also start with WAVEFORMATEX.
           # sample_size is in bits.
+          # WAVEFORMATEX: https://msdn.microsoft.com/en-us/library/ms788112.aspx
           channel_count, sample_rate, _, _,  sample_size = struct.unpack(
               '<HLLHH', strf_data[2 : 16])
           info['tracks'].append({
               'type': 'audio',
-              'codec': AVI_AUDIO_FORMATS.get(
-                  wave_format, '0x%x' % wave_format),
+              'codec': codec,
               'channel_count': channel_count,
               'sample_rate': sample_rate,
               # With 'codec': 'mp3', sample_size is usually 0.
@@ -1584,6 +1633,7 @@ def detect(f, info=None, is_seek_ok=False):
 
   # Set it early, in case of an exception.
   info.setdefault('format', '?')
+  # We can't read more than 4 bytes here, detect_mkv would fail.
   header = f.read(4)
   if not header:
     info['format'] = 'empty'
@@ -1619,6 +1669,8 @@ def detect(f, info=None, is_seek_ok=False):
   elif header.startswith('\0\0\1') and header[3] in (
       '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
     info['format'] = 'mpeg'  # Video.
+    # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
+    # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
   elif header.startswith('\212MNG'):
     if len(header) < 8:
       header += f.read(8 - len(header))
