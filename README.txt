@@ -149,6 +149,13 @@ Q6. Is mediafileinfo.py able to extract duration info about subtitles and
 A6. No, it isn't. This feature is not high priority, but feel free to send
     a patch if you have an implementation.
 
+Q7. Does mediafileinfo.py support MPEG?
+
+A7. mediafileinfo.py can detect MPEG files (unless there is junk before the
+    MPEG header in the file), but it's not able to extract media parameters
+    (e.g. codec). MPEG has many subformats and it would be a large amount of
+    work to extract from all.
+
 TODO
 ~~~~
 
