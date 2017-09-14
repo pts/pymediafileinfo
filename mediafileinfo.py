@@ -1602,7 +1602,10 @@ def detect(f, info=None, is_seek_ok=False):
   elif header.startswith('OggS'):
     info['format'] = 'ogg'  # TODO(pts): Detect parameters.
   elif header.startswith('\x30\x26\xb2\x75'):
-    info['format'] = 'asf'  # Also 'wmv'.
+    if len(header) < 16:
+      header += f.read(16 - len(header))
+    if header.startswith('0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel'):
+      info['format'] = 'asf'  # Also 'wmv'.
   elif header.startswith('RIFF'):
     if len(header) < 12:
       header += f.read(12 - len(header))
