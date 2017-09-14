@@ -1771,6 +1771,24 @@ def detect(f, info=None, is_seek_ok=False):
       detect_avi(f, info, fskip, header)
     elif header[8 : 12] == 'WAVE':
       info['format'] = 'wav'
+      if len(header) < 36:
+        header += f.read(36 - len(header))
+        if len(header) < 36:
+          raise ValueError('wav too short.')
+        if header[12 : 16] != 'fmt ':
+          raise ValueError('wav fmt chunk missing.')
+        wave_format, channel_count, sample_rate, _, _, sample_size = (
+            struct.unpack('<HHLLHH', header[20 : 36]))
+        info['tracks'] = []
+        info['tracks'].append({
+            'type': 'audio',
+            'codec': WINDOWS_AUDIO_FORMATS.get(
+                wave_format, '0x%x' % wave_format),
+            'channel_count': channel_count,
+            'sample_rate': sample_rate,
+            # With 'codec': 'mp3', sample_size is usually 0.
+            'sample_size': sample_size or 16,
+        })
     elif header[8 : 12] == 'CDXA':
       info['format'] = 'mpeg-cdxa'  # Video CD (VCD).
   elif header.startswith('\0\0\1') and header[3] in (
