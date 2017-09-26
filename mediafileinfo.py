@@ -2025,6 +2025,13 @@ def detect(f, info=None, is_seek_ok=False):
     if (len(header) >= 7 and header[4] in '\1\2' and header[5] in '\1\2' and
         header[6] == '\1'):
       info['format'] = 'elf'
+  elif header.startswith('form'):
+    if len(header) < 7:
+      header += f.read(7 - len(header))
+    if header.startswith('format='):
+      # Filename extension: .mfo
+      # Example: output of pymediafileinfo.
+      info['format'] = 'fileinfo'
   elif header.startswith('#!/') or header.startswith('#! /'):
     info['format'] = 'unixscript'  # Unix script with shebang.
   elif header.startswith('\367\002'):  # Move this down (short prefix).
