@@ -2139,14 +2139,23 @@ def detect(f, info=None, is_seek_ok=False):
       if len(header) < 64:
         header += f.read(64 - len(header))
       pe_ofs, = struct.unpack('<L', header[60: 64])
-      if pe_ofs < 8180 and len(header) < pe_ofs + 6:
-        header += f.read(pe_ofs + 6 - len(header))
+      if pe_ofs < 8180 and len(header) < pe_ofs + 300:
+        header += f.read(pe_ofs + 300 - len(header))
       if (len(header) >= pe_ofs + 6 and
           header.startswith('MZ') and
           header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
+          header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
           # Only i386 and amd64 detected.
           header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
         info['format'] = 'winexe'
+        # 108 bytes instead of 92 bytes for PE32+.
+        rva_ofs = pe_ofs + 24 + 92 + 16 * (
+            header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
+        rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
+        if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
+          vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
+          if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
+            info['format'] = 'dotnetexe'  # .NET executable assembly.
 
   if not info.get('format'):
     info['format'] = '?'
