@@ -1757,6 +1757,12 @@ def detect(f, info=None, is_seek_ok=False):
     detect_mkv(f, info, fskip, header)
   elif header.startswith('OggS'):
     info['format'] = 'ogg'  # TODO(pts): Detect parameters.
+    # https://en.wikipedia.org/wiki/Ogg#File_format
+    # https://xiph.org/ogg/doc/oggstream.html
+    # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
+    # Theora: identification header in https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
+    # Can contain other codecs as well, each with codec-specific identification header.
+    # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
   elif header.startswith('\x30\x26\xb2\x75'):
     if len(header) < 16:
       header += f.read(16 - len(header))
