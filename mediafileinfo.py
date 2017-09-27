@@ -1473,9 +1473,20 @@ def is_animated_gif(f, header='', do_read_entire_file=False):
   pb = ord(header[10])
   if pb & 128:  # Global Color Table present.
     read_all(f, 6 << (pb & 7))  # Skip the Global Color Table.
-  has_repeat = False
-  has_delay = False
   frame_count = 0
+  # These fields are related to animated GIFs:
+  # 
+  # * The Netscape Looping Extension (b == 0xff, ext_id == 'NETSCAPE2.0',
+  #   ext_data[0] == '\1') contains the number of repetitions (can be
+  #   infinite).
+  # * The AnimExts Looping Application Extension (b == 0xff, ext_id =
+  #   'ANIMEXTS1.0', ext_data[0] == '\1') is identical to the Netscape
+  #   Looping Extension, it also contains the number of repetitions.
+  # * The Graphics Control Extension (b == 0xf9) contains the delay time
+  #   between animation frames.
+  #
+  # However, we ignore these fields, because even if they specify values, the
+  # GIF is still not animated unless it has more than 1 frame.
   while 1:
     b = ord(read_all(f, 1))
     if b == 0x3B:  # End of file.
@@ -1485,10 +1496,6 @@ def is_animated_gif(f, header='', do_read_entire_file=False):
       if b == 0xff:  # Application extension.
         ext_id_size = ord(read_all(f, 1))
         ext_id = read_all(f, ext_id_size)
-        if ext_id == 'NETSCAPE2.0':  # For the number of repetitions.
-          if not do_read_entire_file:
-            return True
-          has_repeat = True
         ext_data_size = ord(read_all(f, 1))
         ext_data = read_all(f, ext_data_size)
         data_size = ord(read_all(f, 1))
@@ -1505,11 +1512,6 @@ def is_animated_gif(f, header='', do_read_entire_file=False):
             raise ValueError(
                 'Bad ext_data_size for GIF GCE: %d' % ext_data_size)
         ext_data = read_all(f, ext_data_size)
-        # Graphic Control extension, delay for animation.
-        if b == 0xf9 and ext_data[1 : 3] != '\0\0':
-          if not do_read_entire_file:
-            return True
-          has_delay = True
         data_size = ord(read_all(f, 1))
         if b == 0xf9:
           if data_size != 0:
@@ -1534,7 +1536,7 @@ def is_animated_gif(f, header='', do_read_entire_file=False):
       raise ValueError('Unknown GIF block type: 0x%02x' % b)
   if frame_count <= 0:
     raise ValueError('No frames in GIF file.')
-  return bool(frame_count > 1 or has_repeat or has_delay)
+  return frame_count > 1
 
 
 def get_jpeg_dimensions(f, header=''):
