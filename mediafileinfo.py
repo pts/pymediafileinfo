@@ -1801,7 +1801,7 @@ def mediafileinfo_detect():
     if info is None:
       info = {}
     if 'f' not in info and getattr(f, 'name', None):
-      info['f'] = f.name.replace('\n', '{\\n}')
+      info['f'] = f.name
     file_size_for_seek = None
     if is_seek_ok:
       try:
