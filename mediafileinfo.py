@@ -2189,6 +2189,21 @@ def detect(f, info=None, is_seek_ok=False):
             info['width'], info['height'] = struct.unpack(
                 '<LL', header[18 : 26])
 
+    if (info['format'] == '?' and header[4 : 6] in ('\x12\xaf', '\x11\xaf')):
+      if len(header) < 16:
+        header += f.read(16 - len(header))
+      if header[12 : 14] == '\x08\0' and header[14 : 16] in ('\3\0', '\0\0'):
+        # Autodesk Animator FLI or Autodesk Animator Pro flc.
+        # http://www.drdobbs.com/windows/the-flic-file-format/184408954
+        info['format'] = 'flic'
+        if header[4] == '\x12':
+          info['subformat'] = 'flc'
+        else:
+          info['subformat'] = 'fli'
+        width, height = struct.unpack('<HH', header[8 : 12])
+        video_track_info = {'type': 'video', 'codec': 'rle'}
+        info['tracks'] = [video_track_info]
+        set_video_dimens(video_track_info, width, height)
     if (info['format'] == '?' and
         (header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
       # https://en.wikipedia.org/wiki/MPEG_transport_stream
