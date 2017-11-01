@@ -14,6 +14,15 @@ This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
 Typical usage: mediafileinfo.py *.mp4
 """
 
+# Vocabulary:
+#
+# * analyze: use only in function names, with meaning: get media parameters.
+# * extract: don't use, use ``get'' instead.
+# * retrieve: don't use, use ``get'' instead.
+# * parameters: use as ``media parameters''.
+# * size: for width and height, use ``dimensions'' instead.
+# 
+
 import struct
 import sys
 
@@ -32,7 +41,7 @@ def set_video_dimens(video_track_info, width, height):
 # --- flv
 
 
-def detect_flv(f, info, header=''):
+def analyze_flv(f, info, header=''):
   # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
   #
   # Documented here (starting on page 68, Annex E):
@@ -42,7 +51,7 @@ def detect_flv(f, info, header=''):
   def parse_h264_sps(
       data, expected, expected_sps_id,
       _hextable='0123456789abcdef',
-      # TODO(pts): Precompute this, don't run it each time detect_flv runs.
+      # TODO(pts): Precompute this, don't run it each time analyze_flv runs.
       _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
       ):
     # Based on function read_seq_parameter_set_rbsp in
@@ -338,7 +347,7 @@ def detect_flv(f, info, header=''):
         elif video_codec_id == 7:  # 'avc' and 'h264' are the same.
           # 772 of 1531 .flv files have this codec.
           #
-          # We extract the dimensions from the SPS in the AVCC.
+          # We get the dimensions from the SPS in the AVCC.
           # Best explanation of AVCC and NALU:
           # https://stackoverflow.com/a/24890903/97248
           packet_type = ord(data[1])
@@ -479,7 +488,7 @@ MKV_CODEC_IDS = {
 }
 
 
-def detect_mkv(f, info, fskip, header=''):
+def analyze_mkv(f, info, fskip, header=''):
   # https://matroska.org/technical/specs/index.html
 
   # list so that inner functions can modify it.
@@ -828,7 +837,7 @@ MP4_AUDIO_CODECS = {
 }
 
 
-def detect_mp4(f, info, fskip, header=''):
+def analyze_mp4(f, info, fskip, header=''):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
   # Also apple.com has some .mov docs.
 
@@ -995,7 +1004,7 @@ def detect_mp4(f, info, fskip, header=''):
       toplevel_xtypes.discard('skip')
       toplevel_xtypes.discard('wide')
       if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
-        # This happens. The mdat can be any video, we could detect
+        # This happens. The mdat can be any video, we could process
         # recursively. (But it's too late to seek back.)
         # TODO(pts): Convert this to bad_file_mdat_only error.
         raise ValueError('mov file with only an mdat box.')
@@ -1180,7 +1189,7 @@ WINDOWS_GUID_AUDIO_FORMATS = {
 # --- avi
 
 
-def detect_avi(f, info, fskip, header=''):
+def analyze_avi(f, info, fskip, header=''):
   # Documented here: https://msdn.microsoft.com/en-us/library/ms779636.aspx
   #
   # OpenDML (ODML, for >2GB AVI) documented here:
@@ -1347,7 +1356,7 @@ ASF_Audio_Media = guid('f8699e40-5b4d-11cf-a8fd-00805f5c442b')
 ASF_Video_Media = guid('bc19efc0-5b4d-11cf-a8fd-00805f5c442b')
 
 
-def detect_asf(f, info, fskip, header):
+def analyze_asf(f, info, fskip, header):
   if len(header) < 30:
     header += f.read(30 - len(header))
     if len(header) < 30:
@@ -1395,7 +1404,7 @@ def detect_asf(f, info, fskip, header):
           raise ValueError('asf audio properties too short.')
         (wave_format, channel_count, sample_rate, _, _, sample_size,
         ) = struct.unpack('<HHLLHH', data[54 : 70])
-        # TODO(pts): Try to detect GUID if codec == 'unexpected-?'.
+        # TODO(pts): Try to make sense of GUID if codec == 'extensible-?'.
         info['tracks'].append({
             'type': 'audio',
             'codec': WINDOWS_AUDIO_FORMATS.get(
@@ -1475,7 +1484,7 @@ def is_animated_gif(f, header='', do_read_entire_file=False):
     read_all(f, 6 << (pb & 7))  # Skip the Global Color Table.
   frame_count = 0
   # These fields are related to animated GIFs:
-  # 
+  #
   # * The Netscape Looping Extension (b == 0xff, ext_id == 'NETSCAPE2.0',
   #   ext_data[0] == '\1') contains the number of repetitions (can be
   #   infinite).
@@ -1687,21 +1696,22 @@ def is_html(data):
           data.startswith('<!doctype html>'))
 
 
-# --- Generic detection for many formats.
+# --- File format detection for many file formats and getting media
+# parameters for some.
 
 
 def detect(f, info=None, is_seek_ok=False):
-  """Detect file format, codecs and image dimensions in file f.
+  """Detects file format, and gets media parameters in file f.
 
   For videos, info['tracks'] is a list with an item for each video or audio
-  track (info['tracks'][...]['type'] in ('video', 'audio'). Subtitle tracks
-  are not detected.
+  track (info['tracks'][...]['type'] in ('video', 'audio'). Presence and
+  parameters of subtitle tracks are not reported.
 
   Args:
     f: File-like object with a .read(n) method and an optional .seek(n) method,
         should do buffering for speed, and must return exactly n bytes unless
         at EOF. Seeking will be avoided if possible.
-    info: A dict to update with the detected info, or None.
+    info: A dict to update with the info found, or None.
     is_seek_ok: Boolean indicating whether seeking in f is OK. Even if true,
       but the f doesn't support seeking, detect still works fine. Seeking is
       only used for skipping ahead a large number of bytes.
@@ -1741,7 +1751,7 @@ def detect(f, info=None, is_seek_ok=False):
 
   # Set it early, in case of an exception.
   info.setdefault('format', '?')
-  # We can't read more than 4 bytes here, detect_mkv would fail.
+  # We can't read more than 4 bytes here, analyze_mkv would fail.
   header = f.read(4)
   if not header:
     info['format'] = 'empty'
@@ -1753,12 +1763,12 @@ def detect(f, info=None, is_seek_ok=False):
   elif header.startswith('FLV\1'):
     # \1 is the version number, but there is no version later than 1 in 2017.
     info['format'] = 'flv'
-    detect_flv(f, info, header)
+    analyze_flv(f, info, header)
   elif header.startswith('\x1a\x45\xdf\xa3'):
     info['format'] = 'mkv'  # Can also be .webm as a subformat.
-    detect_mkv(f, info, fskip, header)
+    analyze_mkv(f, info, fskip, header)
   elif header.startswith('OggS'):
-    info['format'] = 'ogg'  # TODO(pts): Detect parameters.
+    info['format'] = 'ogg'  # TODO(pts): Get media parameters.
     # https://en.wikipedia.org/wiki/Ogg#File_format
     # https://xiph.org/ogg/doc/oggstream.html
     # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
@@ -1770,13 +1780,13 @@ def detect(f, info=None, is_seek_ok=False):
       header += f.read(16 - len(header))
     if header.startswith('0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel'):
       info['format'] = 'asf'  # Also 'wmv'.
-      detect_asf(f, info, fskip, header)
+      analyze_asf(f, info, fskip, header)
   elif header.startswith('RIFF'):
     if len(header) < 12:
       header += f.read(12 - len(header))
     if header[8 : 12] == 'AVI ':
       info['format'] = 'avi'
-      detect_avi(f, info, fskip, header)
+      analyze_avi(f, info, fskip, header)
     elif header[8 : 12] == 'WAVE':
       info['format'] = 'wav'
       if len(header) < 36:
@@ -1926,7 +1936,7 @@ def detect(f, info=None, is_seek_ok=False):
     if (header.startswith('FUJIFILMCCD-RAW 0200FF383501') or
         header.startswith('FUJIFILMCCD-RAW 0201FF383501')):
       # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
-      # Dimensions are not easy to extract, maybe from the CFA IDs.
+      # Dimensions are not easy to get, maybe from the CFA IDs.
       # Please note that codec=raw also applies to uncompressed RGB 8-bit.
       info['format'], info['codec'] = 'fuji-raf', 'raw'
 
@@ -2056,29 +2066,29 @@ def detect(f, info=None, is_seek_ok=False):
     # TODO(pts): Make it compatible with 'winexe', in any order.
     info['format'] = '?'
     if info['format'] == '?' and len(header) < 8:
-      # Mustn't be more than 8 bytes, for detect_mp4.
+      # Mustn't be more than 8 bytes, for analyze_mp4.
       header += f.read(8 - len(header))
     if (info['format'] == '?' and
         header.startswith('\0\0\0') and len(header) >= 4 and
         ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0 and
         header[4 : 8] == 'ftyp'):
       info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
-      detect_mp4(f, info, fskip, header)
+      analyze_mp4(f, info, fskip, header)
     if (info['format'] == '?' and
         header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
       info['format'] = 'mov'
-      detect_mp4(f, info, fskip, header)
+      analyze_mp4(f, info, fskip, header)
     if (info['format'] == '?' and
           header.startswith('\0\0') and
           header[4 : 8] in ('wide', 'free', 'skip')):
       # Immediately followed by a 4-byte size, then 'mdat'.
       info['format'] = 'mov'
-      detect_mp4(f, info, fskip, header)
+      analyze_mp4(f, info, fskip, header)
     if (info['format'] == '?' and
         header[0] == '\0' and header[1] in '\0\1\2\3\4\5\6\7\x08' and
         header[4 : 8] == 'moov'):
       info['format'] = 'mov'
-      detect_mp4(f, info, fskip, header)
+      analyze_mp4(f, info, fskip, header)
     if (info['format'] == '?' and
           header.startswith('\0\0\0') and
           header[4 : 8] == 'pnot'):
@@ -2123,9 +2133,10 @@ def detect(f, info=None, is_seek_ok=False):
           # packet_id=0 is Program Association Table (PAT)
           # packet_id=0x11 is
           # https://en.wikipedia.org/wiki/Service_Description_Table
-        elif (header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
+        elif (header[0] == '\x47' and
+              header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
               (ord(header[3]) & 0x10) == 0x10):
-          info['format'] = 'mpegts'  # Old detection.
+          info['format'] = 'mpegts'  # Old getting of parameters.
     if (info['format'] == '?' and
         header[0] == '\n' and header[2] == '\1' and ord(header[1]) <= 5 and
         header[3] in '\1\2\4\x08'):  # Move this down.
@@ -2153,7 +2164,7 @@ def detect(f, info=None, is_seek_ok=False):
           header.startswith('MZ') and
           header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
           header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
-          # Only i386 and amd64 detected.
+          # Only i386 and amd64 are recognized.
           header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
         info['format'] = 'winexe'
         # 108 bytes instead of 92 bytes for PE32+.
@@ -2228,7 +2239,7 @@ def main(argv):
           print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
               filename, e.__class__.__module__, e.__class__.__name__, e)
       except Exception, e:
-        raise
+        #raise
         info['error'] = 'error'
         print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
