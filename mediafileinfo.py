@@ -2283,17 +2283,25 @@ def format_info(info):
       if abs(v) < 1e15 and int(v) == v:  # Remove the trailing '.0'.
         return int(v)
       return repr(v)
-    return v
-  output = ['format=%s' % (info.get('format') or '?')]
+    if isinstance(v, (int, long)):
+      return str(v)
+    if isinstance(v, str):
+      # Faster than a regexp if there are no matches.
+      return (v.replace('%', '%25').replace('\0', '%00').replace('\n', '%0A')
+              .replace(' ', '%20'))
+    raise TypeError(type(v))
+  output = ['format=%s' % format_value(info.get('format') or '?')]
   # TODO(pts): Display brands list.
   output.extend(
-      ' %s=%s' % (k, '___'.join(str(format_value(v)).split()))
+      ' %s=%s' % (k, format_value(v))
       for k, v in sorted(info.iteritems())
       if k != 'f' and k != 'format' and
       not isinstance(v, (tuple, list, dict, set)))
-  path = info.get('f')
-  if path is not None:
-    output.append(' f=%s' % path)  # Emit ` f=' last.
+  filename = info.get('f')
+  if filename is not None:
+    if '\n' in filename or '\0' in filename:
+      raise ValueError('Invalid byte in filename: %r' % filename)
+    output.append(' f=%s' % filename)  # Emit ` f=' last.
   output.append('\n')
   return ''.join(output)
 
