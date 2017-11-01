@@ -836,6 +836,18 @@ MP4_AUDIO_CODECS = {
     'dtsx': 'dts',
 }
 
+JP2_CODECS = {
+    0: 'raw',
+    1: 'huffman2',
+    2: 'read2',
+    3: 'read3',
+    4: 'jbig',
+    5: 'jpeg',
+    6: 'jpegls',
+    7: 'jpeg2000',
+    8: 'jbig2',
+}
+
 
 def analyze_mp4(f, info, fskip, header=''):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
@@ -855,7 +867,7 @@ def analyze_mp4(f, info, fskip, header=''):
     xytype = '/'.join(xtype_path[-2:])
     # Only the composites we care about.
     is_composite = xytype in (
-        '/moov', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
+        '/moov', '/jp2h', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
     if xtype == 'mdat':  # 816 of 2962 mp4 files have it.
       # Videos downloaded by youtube-dl (usually) don't have it: in the corpus
       # only 11 of 1418 videos have it, but maybe they were downloaded
@@ -911,14 +923,29 @@ def analyze_mp4(f, info, fskip, header=''):
             info['format'] = 'mov'
           elif major_brand == 'f4v ':
             info['format'] = 'f4v'
+          elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
+            info['format'] = 'jp2'
           else:
             info['format'] = 'mp4'
-          info['subformat'] = major_brand
+          info['subformat'] = major_brand.strip()
           brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
           brands.discard('\0\0\0\0')
           brands.add(major_brand)
           brands = sorted(brands)
           info['brands'] = brands  # Example: ['isom', 'mp42'].
+        elif xytype == 'jp2h/ihdr':
+          if len(data) < 12:
+            raise ValueError('EOF in jp2 ihdr.')
+          # https://sno.phy.queensu.ca/~phil/exiftool/TagNames/Jpeg2000.html#ImageHeader
+          height, width, component_count, bpc, codec = struct.unpack(
+              '>LLHBB', data[:12])
+          info['width'] = width
+          info['height'] = height
+          info['component_count'] = component_count
+          info['bpc'] = bpc  # Bits per component.
+          # TODO(pts): JPX (http://fileformats.archiveteam.org/wiki/JPX),
+          # major_brand == 'jpx ' allows other codecs as well.
+          info['codec'] = JP2_CODECS.get(codec, str(codec))
         #elif xytype == 'trak/tkhd':  # /moov/trak/tkhd
         #  # Don't process tkhd, it's unreliable in some mp4 files.
         #  if track_tkhd_data[0] == '\0':  # 32-bit.
@@ -1025,12 +1052,14 @@ def analyze_mp4(f, info, fskip, header=''):
     else:
       # We don't allow size == 0 (meaning until EOF), because we want to
       # finish the small track parameter boxes first (before EOF).
-      raise ValueError('mp4 box size too small: %d' % size)
+      raise ValueError('mp4 box size too small for xtype %r: %d' % (xtype, size))
     toplevel_xtypes.add(xtype)
     xtype_path.append(xtype)
     process_box(size)
     xtype_path.pop()
     if xtype == 'moov':  # All track parameters already found, stop looking.
+      break
+    if xtype == 'jp2h':  # All JP2 track parameters already found, stop looking.
       break
 
 
@@ -1874,7 +1903,7 @@ def detect(f, info=None, is_seek_ok=False):
     # Also includes 'nikon-nef' raw images.
     info['format'] = 'tiff'
   elif header.startswith('P1 '):
-    # TODO(pts): Get dimens for all ppm.
+    # TODO(pts): Get dimensions for all ppm.
     info['format'], info['codec'] = 'pbm', 'rawascii'
   elif header.startswith('P4'):
     info['format'], info['codec'] = 'pbm', 'raw'
@@ -2074,6 +2103,13 @@ def detect(f, info=None, is_seek_ok=False):
         header[4 : 8] == 'ftyp'):
       info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
       analyze_mp4(f, info, fskip, header)
+    if (info['format'] == '?' and
+        header.startswith('\0\0\0\x0cjP  ')):
+      if len(header) < 12:
+        header += f.read(12 - len(header))
+      if header.startswith('\0\0\0\x0cjP  \r\n\x87\n'):
+        info['format'] = 'jp2'  # JPEG2000 container format.
+        analyze_mp4(f, info, fskip, header[12:])
     if (info['format'] == '?' and
         header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
       info['format'] = 'mov'

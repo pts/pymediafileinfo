@@ -174,7 +174,6 @@ TODO
 * TODO(pts): Add getting media parameters from some popular audio formats
 *            (e.g. MP3, FLAC).
 * TODO(pts): Add type=video, type=audio, type=image etc.
-* TODO(pts): Add JPEG-2000 (JPX).
 * TODO(pts): Extend media_scan.py with code from here.
 * TODO(pts): Add memory limits against large reads everywhere.
 * TODO(pts): Add dimension detection (from img_bbox.pl) for more image formats.
