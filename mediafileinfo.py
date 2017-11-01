@@ -21,7 +21,6 @@ Typical usage: mediafileinfo.py *.mp4
 # * retrieve: don't use, use ``get'' instead.
 # * parameters: use as ``media parameters''.
 # * size: for width and height, use ``dimensions'' instead.
-# 
 
 import struct
 import sys
@@ -1390,6 +1389,8 @@ def analyze_asf(f, info, fskip, header):
     header += f.read(30 - len(header))
     if len(header) < 30:
       raise ValueError('Too short for asf.')
+  if len(header) > 30:
+    raise AssertionError('Header too long for asf: %d' % len(header))
   guid, size, count, reserved12 = struct.unpack('<16sQLH', header)
   if guid != ASF_Header_Object:
     raise ValueError('asf signature not found.')
@@ -1472,6 +1473,43 @@ def analyze_asf(f, info, fskip, header):
     info['format'] = 'wma'
   else:
     info['format'] = 'asf'
+
+
+# --- flac
+
+
+def analyze_flac(f, info, header):
+  if len(header) < 5:
+    header += f.read(5 - len(header))
+    if len(header) < 5:
+      raise ValueError('Too short for flac.')
+  if not header.startswith('fLaC'):
+    raise ValueError('flac signature not found.')
+  info['format'] = 'flac'
+  if len(header) > 5:
+    raise AssertionError('Header too long for flac: %d' % len(header))
+  if header[4] not in '\0\x80':
+    raise AssertionError('STREAMINFO metadata block expected in flac.')
+  size = f.read(3)
+  if len(size) != 3:
+    raise ValueError('EOF in flac STREAMINFO metadata block size.')
+  size, = struct.unpack('>L', '\0' + size)
+  if not 34 <= size <= 255:
+    raise ValueError(
+        'Unreasonable size of flac STREAMINFO metadata block: %d' % size)
+  data = f.read(18)
+  if len(data) != 18:
+    raise ValueError('EOF in flac STREAMINFO metadata block.')
+  # https://xiph.org/flac/format.html#metadata_block_streaminfo
+  i, = struct.unpack('>Q', data[10 : 18])
+  info['tracks'] = []
+  info['tracks'].append({
+      'type': 'audio',
+      'codec': 'flac',
+      'channel_count': int((i >> 41) & 7) + 1,
+      'sample_size': int((i >> 36) & 31) + 1,
+      'sample_rate': int(i >> 44),
+  })
 
 
 # --- Image file formats.
@@ -1787,7 +1825,7 @@ def detect(f, info=None, is_seek_ok=False):
   elif len(header) < 4:
     info['format'] = 'short%d' % len(header)
 
-  # Videos.
+  # Video.
 
   elif header.startswith('FLV\1'):
     # \1 is the version number, but there is no version later than 1 in 2017.
@@ -1969,12 +2007,15 @@ def detect(f, info=None, is_seek_ok=False):
       # Please note that codec=raw also applies to uncompressed RGB 8-bit.
       info['format'], info['codec'] = 'fuji-raf', 'raw'
 
-  # --- Music.
+  # --- Audio.
 
   elif header.startswith('ID3'):
     info['format'] = 'mp3'
   elif header.startswith('ADIF'):
     info['format'] = 'aac'
+  elif header.startswith('fLaC'):
+    info['format'] = 'flac'
+    analyze_flac(f, info, header)
 
   # --- Non-media data.
 

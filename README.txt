@@ -93,7 +93,7 @@ A3. Some alternatives are:
       dependencies (ldd prints more than 80 libraries it depends on), as
       many as ffmpeg has. It supports more than 100 media formats (including
       JPEG and PNG).
-      
+
       Example command:
       `ffprobe -v error -show_format -show_streams -- file.mp4'.
 
@@ -113,7 +113,7 @@ A3. Some alternatives are:
     * h264bitstream (https://github.com/aizvorski/h264bitstream) is a C++
       library for parsing the output of the H.264 codec. It has code to
       parse the SPS, but no code to compute the width and height from it.
-    
+
     * php-flvinfo
       (https://github.com/zeldein/php-flvinfo/blob/master/flvinfo.php)
       is a PHP library for parsing flv files. It's able to get width and
@@ -171,11 +171,12 @@ TODO
 * TODO(pts): Diagnose all width= and height= missing.
 * TODO(pts): Estimate better size limits.
 * TODO(pts): Better format=html detection, longer strings etc.
-* TODO(pts): Add getting media parameters from some popular audio formats
-*            (e.g. MP3, FLAC).
+* TODO(pts): Add getting media parameters from MP3.
+* TODO(pts): Add getting media parameters from Ogg Vorbis.
 * TODO(pts): Add type=video, type=audio, type=image etc.
 * TODO(pts): Extend media_scan.py with code from here.
 * TODO(pts): Add memory limits against large reads everywhere.
-* TODO(pts): Add dimension detection (from img_bbox.pl) for more image formats.
+* TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
+             my @formats) for more image formats.
 
 __END__
