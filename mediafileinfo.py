@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /bin/sh
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
 """:" # mediafileinfo.py: Get codecs and dimension of media files.
