@@ -2977,14 +2977,19 @@ def scanfile(filename, st, do_th, do_fp, tags, symlink):
         bufsize = 65536
         s = fh.hash
         size = fh.ofs
-        while 1:
-          data = f.read(bufsize)
-          if not data:
-            break
-          size += len(data)
-          s.update(data)
-        info['sha256'] = s.hexdigest()
-        info['size'] = size  # TODO(pts): Check int(st.st_size).
+        try:
+          while 1:
+            data = f.read(bufsize)
+            if not data:
+              info['sha256'] = s.hexdigest()
+              info['size'] = size  # TODO(pts): Check int(st.st_size).
+              break
+            size += len(data)
+            s.update(data)
+        except IOError, e:
+          print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
+              filename, e.__class__.__module__, e.__class__.__name__, e)
+          info['error'] = 'sha256_tail'
     finally:
       f.close()
 
