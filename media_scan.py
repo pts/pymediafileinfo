@@ -27,6 +27,8 @@ def module(f):
 
 @module
 def mediafileinfo_detect():
+  # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
+
   import struct
 
   # ---
@@ -2281,9 +2283,6 @@ def mediafileinfo_detect():
     return info
 
   return locals()
-
-
-# ---
 
 
 import cStringIO
