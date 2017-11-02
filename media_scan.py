@@ -3030,7 +3030,7 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
       # TODO(pts): Indicate block device, character device, pipe and socket
       # nodes as well. Currently they are just omitted from the output.
       elif stat.S_ISREG(st.st_mode):
-        tags = ''
+        tags = None  # Don't emit tags= with --tags=false.
         if tags_impl:
           # We could save ctime= to old_files, then compare it to st_ctime,
           # and if it's equal, omit the (slow, disk-seeking) call to tags_impl
@@ -3056,7 +3056,7 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
           st2 = None
         # Don't do anything special with symlinks to directories.
         if st2 and stat.S_ISREG(st2.st_mode):
-          tags = ''
+          tags = None  # Don't emit tags= with --tags=false.
           if tags_impl:
             # We use os.path.realpath to avoid EPERM on lgetattr on symlink.
             try:
@@ -3066,7 +3066,10 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
           file_items.append((path, st2, tags, symlink, False))
         else:
           # No tags for symlinks. This is to avoid EPERM on lgetattr.
-          file_items.append((path, st, '', symlink, True))
+          tags = None
+          if tags_impl:
+            tags = ''
+          file_items.append((path, st, tags, symlink, True))
         # We don't follow symlinks pointing to directories.
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
