@@ -2998,7 +2998,7 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         print >>sys.stderr, (
             'warning file size mismatch for %r: '
             'from_fileobj=%d from_stat=%d' %
-            (filename, info['size'], st.st_size))
+            (filename, info['size'], filesize))
   finally:
     f.close()
 
@@ -3210,6 +3210,7 @@ def main(argv):
   do_tags = False
   do_sha256 = True
   do_mtime = True
+  mode = 'scan'
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -3227,6 +3228,12 @@ def main(argv):
         f.close()
       # TODO(pts): Explicit close.
       outf = open(old_filename, 'a', 0)
+    elif arg in ('--scan', '--mode=scan'):
+      mode = 'scan'
+    elif arg in ('--info', '--mode=info'):
+      mode = 'info'
+    elif arg.startswith('--mode='):
+      sys.exit('Invalid flag value: %s' % arg)
     elif arg.startswith('--th='):
       value = arg[arg.find('=') + 1:].lower()
       do_th = value in ('1', 'yes', 'true', 'on')
@@ -3251,11 +3258,21 @@ def main(argv):
   if do_tags:
     tags_impl = lambda filename, getxattr=xattr_detect()()['getxattr']: (
         getxattr(filename, 'user.mmfs.tags', True) or '')
-  # Files are yielded in deterministic (sorted) order, not in original argv
-  # order. This is for *.jpg.
-  for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
-    outf.write(format_info(info))
-    outf.flush()
+  if mode == 'scan':
+    # Files are yielded in deterministic (sorted) order, not in original argv
+    # order. This is for *.jpg.
+    for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
+      outf.write(format_info(info))  # Files with some errors are skipped.
+      outf.flush()
+  elif mode == 'info':
+    # Same as mediafileinfo.py, except that this one always succeeds
+    # (sys.exit(0)).
+    for filename in argv[i:]:  # Original filenames.
+      info = detect_file(filename, filesize=None, do_fp=False, do_sha256=False)
+      outf.write(format_info(info))  # Emits all errors.
+      outf.flush()
+  else:
+    raise AssertionError('Unknown mode: %s' % mode)
 
 
 if __name__ == '__main__':

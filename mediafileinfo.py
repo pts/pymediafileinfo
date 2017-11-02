@@ -2333,6 +2333,9 @@ def main(argv):
         'There is NO WARRANTY. Use at your risk.\n'
         'Usage: %s <filename> [...]' % argv[0])
     sys.exit(1)
+  if len(argv) > 1 and argv[1] in ('--info', '--mode=info'):
+    # For compatibility with media_scan.py.
+    del argv[1]
   if len(argv) > 1 and argv[1] == '--':
     del argv[1]
   had_error = False
@@ -2348,15 +2351,19 @@ def main(argv):
       try:
         info = mediafileinfo_detect.detect(f, info, is_seek_ok=True)
         had_error_here = False
+      except ValueError, e:
+        info['error'] = 'bad_data'
+        if e.__class__ == ValueError:
+          print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
+        else:
+          print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
+              filename, e.__class__.__module__, e.__class__.__name__, e)
+      except IOError, e:
+        info['error'] = 'bad_read'
+        print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
       except (KeyboardInterrupt, SystemExit):
         raise
-      except (IOError, ValueError), e:
-        info['error'] = 'bad_file'
-        if e.__class__ == ValueError:
-          print >>sys.stderr, 'error: bad file %r: %s' % (filename, e)
-        else:
-          print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
-              filename, e.__class__.__module__, e.__class__.__name__, e)
       except Exception, e:
         #raise
         info['error'] = 'error'

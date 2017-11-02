@@ -1,10 +1,31 @@
-#! /usr/bin/python
+#! /bin/sh
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
+
+""":" # mediafileinfo.py: Get codecs and dimension of media files.
+
+type python2.7 >/dev/null 2>&1 && exec python2.7 -- "$0" ${1+"$@"}
+type python2.6 >/dev/null 2>&1 && exec python2.6 -- "$0" ${1+"$@"}
+type python2.5 >/dev/null 2>&1 && exec python2.5 -- "$0" ${1+"$@"}
+type python2.4 >/dev/null 2>&1 && exec python2.4 -- "$0" ${1+"$@"}
+exec python -- ${1+"$@"}; exit 1
+
+This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
+
+Typical usage: mediafileinfo.py *.mp4
+"""
+
+# Vocabulary:
+#
+# * analyze: use only in function names, with meaning: get media parameters.
+# * extract: don't use, use ``get'' instead.
+# * retrieve: don't use, use ``get'' instead.
+# * parameters: use as ``media parameters''.
+# * size: for width and height, use ``dimensions'' instead.
+
+import mediafileinfo_detect
 
 import struct
 import sys
-
-import mediafileinfo_detect
 
 
 def format_info(info):
@@ -46,6 +67,9 @@ def main(argv):
         'There is NO WARRANTY. Use at your risk.\n'
         'Usage: %s <filename> [...]' % argv[0])
     sys.exit(1)
+  if len(argv) > 1 and argv[1] in ('--info', '--mode=info'):
+    # For compatibility with media_scan.py.
+    del argv[1]
   if len(argv) > 1 and argv[1] == '--':
     del argv[1]
   had_error = False
@@ -61,15 +85,19 @@ def main(argv):
       try:
         info = mediafileinfo_detect.detect(f, info, is_seek_ok=True)
         had_error_here = False
+      except ValueError, e:
+        info['error'] = 'bad_data'
+        if e.__class__ == ValueError:
+          print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
+        else:
+          print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
+              filename, e.__class__.__module__, e.__class__.__name__, e)
+      except IOError, e:
+        info['error'] = 'bad_read'
+        print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
       except (KeyboardInterrupt, SystemExit):
         raise
-      except (IOError, ValueError), e:
-        info['error'] = 'bad_file'
-        if e.__class__ == ValueError:
-          print >>sys.stderr, 'error: bad file %r: %s' % (filename, e)
-        else:
-          print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
-              filename, e.__class__.__module__, e.__class__.__name__, e)
       except Exception, e:
         #raise
         info['error'] = 'error'
