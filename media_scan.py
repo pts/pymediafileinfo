@@ -2928,7 +2928,7 @@ def scanfile_symlink(path, st, symlink):
           'mtime': int(st.st_mtime), 'size': len(symlink)}
 
 
-def scanfile(filename, st, do_th, do_fp, do_sha256, tags, symlink):
+def scanfile(filename, mtime, filesize, do_th, do_fp, do_sha256, tags, symlink):
   if do_th or not (filename.endswith('.th.jpg') or filename.endswith('.th.jpg.tmp')):
     bufsize = 1 << 20
     width = height = None
@@ -2948,7 +2948,8 @@ def scanfile(filename, st, do_th, do_fp, do_sha256, tags, symlink):
         else:
           fh = f
         had_error_here, info = True, {}
-        info['mtime'] = int(st.st_mtime)
+        if mtime is not None:
+          info['mtime'] = int(mtime)
         try:
           info = mediafileinfo_detect.detect(fh, info, is_seek_ok=True)
           had_error_here = False
@@ -3000,7 +3001,7 @@ def scanfile(filename, st, do_th, do_fp, do_sha256, tags, symlink):
           print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
               filename, e.__class__.__module__, e.__class__.__name__, e)
           info['error'] = 'sha256_tail'
-        if info['size'] != st.st_size:  # int(st.st_size).
+        if filesize is not None and info['size'] != filesize:
           print >>sys.stderr, (
               'warning file size mismatch for %r: '
               'from_fileobj=%d from_stat=%d' %
@@ -3028,7 +3029,7 @@ def scanfile(filename, st, do_th, do_fp, do_sha256, tags, symlink):
       yield info
 
 
-def scan(path_iter, old_files, do_th, do_fp, do_sha256, tags_impl):
+def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
   dir_paths = []
   file_items = []  # List of (path, st, tags, symlink, is_symlink).
   symlink = None
@@ -3112,7 +3113,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, tags_impl):
     old_item = old_files.get(path)
     #assert path != 'blah.pl', [old_item, (st.st_size, int(st.st_mtime), tags, symlink, is_symlink)]
     if (not old_item or old_item[0] != st.st_size or
-        old_item[1] != int(st.st_mtime) or
+        (do_mtime and old_item[1] != int(st.st_mtime)) or
         old_item[3] != symlink or
         old_item[4] != is_symlink or
         # If old_item[2] is None (we don't know the tags) and tags == '',
@@ -3123,7 +3124,11 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, tags_impl):
         for info in scanfile_symlink(path, st, symlink):
           yield info
       else:
-        for info in scanfile(path, st, do_th, do_fp, do_sha256, tags, symlink):
+        if do_mtime:
+          mtime = int(st.st_mtime)
+        else:
+          mtime = None
+        for info in scanfile(path, mtime, int(st.st_size), do_th, do_fp, do_sha256, tags, symlink):
           yield info
   while dir_paths:
     path = dir_paths.pop()
@@ -3131,7 +3136,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, tags_impl):
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
-    for info in scan(subpaths, old_files, do_th, do_fp, do_sha256, tags_impl):
+    for info in scan(subpaths, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
       yield info
 
 
@@ -3160,8 +3165,12 @@ def add_old_files(line_source, old_files):
       dtags = ''
     else:
       dtags = None
+    if info.get('mtime'):
+      mtime = int(info['mtime'])
+    else:
+      mtime = None
     try:
-      old_files[info['f']] = (int(info['size']), int(info['mtime']),
+      old_files[info['f']] = (int(info['size']), mtime,
                               info.get('tags', dtags), info.get('symlink'),
                               is_symlink)
     except (KeyError, ValueError):
@@ -3207,6 +3216,7 @@ def main(argv):
   do_fp = False
   do_tags = False
   do_sha256 = True
+  do_mtime = True
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -3233,6 +3243,9 @@ def main(argv):
     elif arg.startswith('--sha256=') or arg.startswith('--hash='):
       value = arg[arg.find('=') + 1:].lower()
       do_sha256 = value in ('1', 'yes', 'true', 'on')
+    elif arg.startswith('--mtime='):
+      value = arg[arg.find('=') + 1:].lower()
+      do_mtime = value in ('1', 'yes', 'true', 'on')
     elif arg.startswith('--fp=') or arg.startswith('--xfidfp='):
       value = arg[arg.find('=') + 1:].lower()
       do_fp = value in ('1', 'yes', 'true', 'on')
@@ -3247,7 +3260,7 @@ def main(argv):
         getxattr(filename, 'user.mmfs.tags', True) or '')
   # Files are yielded in deterministic (sorted) order, not in original argv
   # order. This is for *.jpg.
-  for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, tags_impl):
+  for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
     outf.write(format_info(info))
     outf.flush()
 
