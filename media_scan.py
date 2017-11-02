@@ -2928,7 +2928,7 @@ def scanfile_symlink(path, st, symlink):
           'mtime': int(st.st_mtime), 'size': len(symlink)}
 
 
-def scanfile(filename, st, do_th, do_fp, tags, symlink):
+def scanfile(filename, st, do_th, do_fp, do_sha256, tags, symlink):
   if do_th or not (filename.endswith('.th.jpg') or filename.endswith('.th.jpg.tmp')):
     bufsize = 1 << 20
     width = height = None
@@ -2943,7 +2943,10 @@ def scanfile(filename, st, do_th, do_fp, tags, symlink):
         print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
         info['error'] = 'bad_open'
       if 'error' not in info:
-        fh = FileWithHash(f, sha256())
+        if do_sha256:
+          fh = FileWithHash(f, sha256())
+        else:
+          fh = f
         had_error_here, info = True, {}
         info['mtime'] = int(st.st_mtime)
         try:
@@ -2974,22 +2977,34 @@ def scanfile(filename, st, do_th, do_fp, tags, symlink):
         if not had_error_here and info['format'] == '?':
           print >>sys.stderr, 'warning: unknown file format: %r' % filename
       if 'error' not in info:
-        bufsize = 65536
-        s = fh.hash
-        size = fh.ofs
         try:
-          while 1:
-            data = f.read(bufsize)
-            if not data:
-              info['sha256'] = s.hexdigest()
-              info['size'] = size  # TODO(pts): Check int(st.st_size).
-              break
-            size += len(data)
-            s.update(data)
+          if do_sha256:
+            bufsize = 65536
+            s = fh.hash
+            size = fh.ofs
+            while 1:
+              data = f.read(bufsize)
+              if not data:
+                info['sha256'] = s.hexdigest()
+                info['size'] = size
+                break
+              size += len(data)
+              s.update(data)
+          else:
+            try:
+              f.seek(0, 2)
+              info['size'] = int(f.tell())
+            except (IOError, OSError):
+              info['size'] = 0
         except IOError, e:
           print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
               filename, e.__class__.__module__, e.__class__.__name__, e)
           info['error'] = 'sha256_tail'
+        if info['size'] != st.st_size:  # int(st.st_size).
+          print >>sys.stderr, (
+              'warning file size mismatch for %r: '
+              'from_fileobj=%d from_stat=%d' %
+              (filename, info['size'], st.st_size))
     finally:
       f.close()
 
@@ -3013,7 +3028,7 @@ def scanfile(filename, st, do_th, do_fp, tags, symlink):
       yield info
 
 
-def scan(path_iter, old_files, do_th, do_fp, tags_impl):
+def scan(path_iter, old_files, do_th, do_fp, do_sha256, tags_impl):
   dir_paths = []
   file_items = []  # List of (path, st, tags, symlink, is_symlink).
   symlink = None
@@ -3108,7 +3123,7 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
         for info in scanfile_symlink(path, st, symlink):
           yield info
       else:
-        for info in scanfile(path, st, do_th, do_fp, tags, symlink):
+        for info in scanfile(path, st, do_th, do_fp, do_sha256, tags, symlink):
           yield info
   while dir_paths:
     path = dir_paths.pop()
@@ -3116,7 +3131,7 @@ def scan(path_iter, old_files, do_th, do_fp, tags_impl):
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
-    for info in scan(subpaths, old_files, do_th, do_fp, tags_impl):
+    for info in scan(subpaths, old_files, do_th, do_fp, do_sha256, tags_impl):
       yield info
 
 
@@ -3191,6 +3206,7 @@ def main(argv):
   do_th = True
   do_fp = False
   do_tags = False
+  do_sha256 = True
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -3214,6 +3230,9 @@ def main(argv):
     elif arg.startswith('--tags='):
       value = arg[arg.find('=') + 1:].lower()
       do_tags = value in ('1', 'yes', 'true', 'on')
+    elif arg.startswith('--sha256=') or arg.startswith('--hash='):
+      value = arg[arg.find('=') + 1:].lower()
+      do_sha256 = value in ('1', 'yes', 'true', 'on')
     elif arg.startswith('--fp=') or arg.startswith('--xfidfp='):
       value = arg[arg.find('=') + 1:].lower()
       do_fp = value in ('1', 'yes', 'true', 'on')
@@ -3226,7 +3245,9 @@ def main(argv):
   if do_tags:
     tags_impl = lambda filename, getxattr=xattr_detect()()['getxattr']: (
         getxattr(filename, 'user.mmfs.tags', True) or '')
-  for info in scan(argv[i:], old_files, do_th, do_fp, tags_impl):  # Not in original order.
+  # Files are yielded in deterministic (sorted) order, not in original argv
+  # order. This is for *.jpg.
+  for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, tags_impl):
     outf.write(format_info(info))
     outf.flush()
 
