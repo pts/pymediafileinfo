@@ -1773,7 +1773,7 @@ def detect(f, info=None, is_seek_ok=False):
     try:
       f.seek(0, 2)
       info['size'] = file_size_for_seek = int(f.tell())
-    except (IOError, OSError, AttributeError):
+    except (IOError, OSError, ValueError, AttributeError):
       pass
     if info.get('size'):
       f.seek(0)  # Can raise IOError, which we propagate.

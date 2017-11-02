@@ -1800,7 +1800,7 @@ def mediafileinfo_detect():
       try:
         f.seek(0, 2)
         info['size'] = file_size_for_seek = int(f.tell())
-      except (IOError, OSError, AttributeError):
+      except (IOError, OSError, ValueError, AttributeError):
         pass
       if info.get('size'):
         f.seek(0)  # Can raise IOError, which we propagate.
@@ -2912,9 +2912,9 @@ class FileWithHash(object):
     if whence == 0:
       ofs -= self.ofs
     elif whence != 1:
-      raise IOError('Unsupported whence: %d' % whence)
+      raise ValueError('Unsupported whence: %d' % whence)
     if ofs < 0:
-      raise IOError('Backward seek: %d' % -ofs)
+      raise ValueError('Backward seek: %d' % -ofs)
     ofs += self.ofs
     while ofs - self.ofs > 65536:
       if not self.read(65536):
@@ -2923,110 +2923,99 @@ class FileWithHash(object):
       self.read(ofs - self.ofs)
 
 
-def scanfile_symlink(path, st, symlink):
-  yield  {'format': 'symlink', 'f': path, 'symlink': symlink,
-          'mtime': int(st.st_mtime), 'size': len(symlink)}
-
-
-def scanfile(filename, mtime, filesize, do_th, do_fp, do_sha256, tags, symlink):
-  if do_th or not (filename.endswith('.th.jpg') or filename.endswith('.th.jpg.tmp')):
-    bufsize = 1 << 20
-    width = height = None
-    format = '?'
-
-    f, info = None, {}
+def detect_file(filename, filesize, do_fp, do_sha256):
+  f, info = None, {}
+  try:
     try:
-      try:
-        f = open(filename, 'rb')
-      except IOError, e:
-        had_error = True
-        print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
-        info['error'] = 'bad_open'
-      if 'error' not in info:
-        if do_sha256:
-          fh = FileWithHash(f, sha256())
-        else:
-          fh = f
-        had_error_here, info = True, {}
-        if mtime is not None:
-          info['mtime'] = int(mtime)
-        try:
-          info = mediafileinfo_detect.detect(fh, info, is_seek_ok=True)
-          had_error_here = False
-        except (KeyboardInterrupt, SystemExit):
-          raise
-        except (IOError, ValueError), e:
-          info['error'] = 'bad_file'
-          if e.__class__ == ValueError:
-            print >>sys.stderr, 'error: bad file %r: %s' % (filename, e)
-          else:
-            print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
-                filename, e.__class__.__module__, e.__class__.__name__, e)
-        except Exception, e:
-          #raise
-          info['error'] = 'error'
-          print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
-              filename, e.__class__.__module__, e.__class__.__name__, e)
-        if not info.get('format'):
-          info['format'] = '?'
-        try:
-          # header_end_offset, hdr_done_at: Offset we reached after parsing
-          # headers.
-          info['hdr_done_at'] = int(f.tell())
-        except (IOError, OSError, AttributeError):
-          pass
-        if not had_error_here and info['format'] == '?':
-          print >>sys.stderr, 'warning: unknown file format: %r' % filename
-      if 'error' not in info:
-        try:
-          if do_sha256:
-            bufsize = 65536
-            s = fh.hash
-            size = fh.ofs
-            while 1:
-              data = f.read(bufsize)
-              if not data:
-                info['sha256'] = s.hexdigest()
-                info['size'] = size
-                break
-              size += len(data)
-              s.update(data)
-          else:
-            try:
-              f.seek(0, 2)
-              info['size'] = int(f.tell())
-            except (IOError, OSError):
-              info['size'] = 0
-        except IOError, e:
-          print >>sys.stderr, 'error: bad file %r: %s.%s: %s' % (
-              filename, e.__class__.__module__, e.__class__.__name__, e)
-          info['error'] = 'sha256_tail'
-        if filesize is not None and info['size'] != filesize:
-          print >>sys.stderr, (
-              'warning file size mismatch for %r: '
-              'from_fileobj=%d from_stat=%d' %
-              (filename, info['size'], st.st_size))
-    finally:
-      f.close()
-
+      f = open(filename, 'rb')
+    except IOError, e:
+      had_error = True
+      print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+      info['error'] = 'bad_open'
     if 'error' not in info:
-      if do_fp and info['format'] in FINGERPRINTABLE_FORMATS:
-        # xfidfp: extra findimagedupes fingerprint.
-        try:
-          info['xfidfp'] = fingerprint_image(filename)
-        except IOError, e:
-          e = str(e)
-          for suffix in (': ' + filename, ' (%s)' % filename):
-            if e.endswith(suffix):
-              e = e[:-len(suffix)]
-          print >>sys.stderr, 'warning: fingerprint_image %s: %s' % (filename, e)
-          info['xfidfp'] = 'err'
-      if tags is not None:
-        # If tags is an empty string, we still want to save it.
-        info['tags'] = tags
-      if symlink is not None:
-        info['symlink'] = symlink
-      yield info
+      if do_sha256:
+        fh = FileWithHash(f, sha256())
+      else:
+        fh = f
+      had_error_here, info = True, {}
+      try:
+        info = mediafileinfo_detect.detect(fh, info, is_seek_ok=True)
+        had_error_here = False
+      except ValueError, e:
+        info['error'] = 'bad_data'
+        if e.__class__ == ValueError:
+          print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
+        else:
+          print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
+              filename, e.__class__.__module__, e.__class__.__name__, e)
+      except IOError, e:
+        info['error'] = 'bad_read'
+        print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
+      except (KeyboardInterrupt, SystemExit):
+        raise
+      except Exception, e:
+        #raise
+        info['error'] = 'error'
+        print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
+      if not info.get('format'):
+        info['format'] = '?'
+      try:
+        # header_end_offset, hdr_done_at: Offset we reached after parsing
+        # headers.
+        info['hdr_done_at'] = int(f.tell())
+      except (IOError, OSError, AttributeError):
+        pass
+      if not had_error_here and info['format'] == '?':
+        print >>sys.stderr, 'warning: unknown file format: %r' % filename
+
+    if info.get('error') in (None, 'bad_data'):
+      try:
+        if do_sha256:
+          bufsize = 65536
+          s = fh.hash
+          size = fh.ofs
+          while 1:
+            data = f.read(bufsize)
+            if not data:
+              info['sha256'] = s.hexdigest()
+              info['size'] = size
+              break
+            size += len(data)
+            s.update(data)
+        else:
+          try:
+            f.seek(0, 2)
+            info['size'] = int(f.tell())
+          except (IOError, OSError):
+            info['size'] = 0
+      except IOError, e:
+        print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
+        info.setdefault('error', 'bad_read_sha256')
+      if filesize is not None and info['size'] != filesize:
+        print >>sys.stderr, (
+            'warning file size mismatch for %r: '
+            'from_fileobj=%d from_stat=%d' %
+            (filename, info['size'], st.st_size))
+  finally:
+    f.close()
+
+  if (info.get('error') in (None, 'bad_data') and do_fp and
+      info['format'] in FINGERPRINTABLE_FORMATS):
+      # xfidfp: extra findimagedupes fingerprint.
+      try:
+        info['xfidfp'] = fingerprint_image(filename)
+      except IOError, e:
+        e = str(e)
+        for suffix in (': ' + filename, ' (%s)' % filename):
+          if e.endswith(suffix):
+            e = e[:-len(suffix)]
+        print >>sys.stderr, 'warning: fingerprint_image %s: %s' % (filename, e)
+        info['xfidfp'] = 'err'
+
+  return info
 
 
 def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
@@ -3120,15 +3109,19 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
         # this doesn't match. Good.
         (tags_impl and tags != old_item[2])):
       #print >>sys.stderr, 'info: Scanning: %s' % path
-      if is_symlink:
-        for info in scanfile_symlink(path, st, symlink):
-          yield info
-      else:
-        if do_mtime:
-          mtime = int(st.st_mtime)
+      if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
+        if is_symlink:
+          info = {'format': 'symlink', 'f': path, 'symlink': symlink,
+                  'size': len(symlink)}
         else:
-          mtime = None
-        for info in scanfile(path, mtime, int(st.st_size), do_th, do_fp, do_sha256, tags, symlink):
+          info = detect_file(path, int(st.st_size), do_fp, do_sha256)
+          if tags is not None:
+            info['tags'] = tags  # Save '', don't save None.
+          if symlink is not None:
+            info['symlink'] = symlink
+        if do_mtime:
+          info['mtime'] = int(st.st_mtime)
+        if info.get('error') in (None, 'bad_data', 'bad_read_sha256'):
           yield info
   while dir_paths:
     path = dir_paths.pop()
