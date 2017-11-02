@@ -2994,7 +2994,8 @@ def detect_file(filename, filesize, do_fp, do_sha256):
             filename, e.__class__.__module__, e.__class__.__name__, e)
         info.setdefault('error', 'bad_read_sha256')
   finally:
-    f.close()
+    if f is not None:
+      f.close()
 
   if filesize is not None:
     if info.get('size') is None:
