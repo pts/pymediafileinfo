@@ -2994,13 +2994,17 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
         info.setdefault('error', 'bad_read_sha256')
-      if filesize is not None and info['size'] != filesize:
-        print >>sys.stderr, (
-            'warning file size mismatch for %r: '
-            'from_fileobj=%d from_stat=%d' %
-            (filename, info['size'], filesize))
   finally:
     f.close()
+
+  if filesize is not None:
+    if info.get('size') is None:
+      info['size'] = filesize
+    elif info['size'] != filesize:
+      print >>sys.stderr, (
+          'warning file size mismatch for %r: '
+          'from_fileobj=%d from_stat=%d' %
+          (filename, info['size'], filesize))
 
   if (info.get('error') in (None, 'bad_data') and do_fp and
       info['format'] in FINGERPRINTABLE_FORMATS):
