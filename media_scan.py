@@ -2660,7 +2660,7 @@ def xattr_impl_xattr():
 
   def getxattr(filename, attr_name, do_not_follow_symlinks=False):
     try:
-      # This does 2 lgetattxattr(2) syscalls,the first to determine size.
+      # This does 2 lgetattxattr(2) syscalls, the first to determine size.
       return xattr._xattr.getxattr(
           filename, attr_name, 0, 0, do_not_follow_symlinks)
     except IOError, e:
