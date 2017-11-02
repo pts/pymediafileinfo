@@ -2974,7 +2974,6 @@ def scanfile(filename, st, do_th, do_fp, tags, symlink):
         if not had_error_here and info['format'] == '?':
           print >>sys.stderr, 'warning: unknown file format: %r' % filename
       if 'error' not in info:
-        fh.seek(10000000)
         bufsize = 65536
         s = fh.hash
         size = fh.ofs
