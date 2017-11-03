@@ -48,7 +48,7 @@ def mediafileinfo_detect():
   # --- flv
 
 
-  def analyze_flv(f, info, header=''):
+  def analyze_flv(f, info, fskip, header=''):
     # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
     #
     # Documented here (starting on page 68, Annex E):
@@ -389,7 +389,7 @@ def mediafileinfo_detect():
         # in many .flv files, so instead of using this data, we do codec-specific
         # video frame parsing above.
         # TODO(pts): Get more metadata from script.
-        if size > 65535:  # TODO(pts): Estimate better.
+        if size > 400000:  # 250k was found in the wild.
           raise ValueError('Script tag unreasonably large: %d' % size)
         # The ScriptTagBody contains SCRIPTDATA encoded in the Action Message
         # Format (AMF), which is a compact binary format used to serialize
@@ -397,8 +397,7 @@ def mediafileinfo_detect():
         # at:
         # http://opensource.adobe.com/wiki/display/blazeds/Developer+Documentation
         script_format = ('amf0', 'amf3')[xtype == 15]
-        data = f.read(size)
-        if len(data) != size:
+        if not fskip(size):
           raise ValueError('EOF in tag data.')
       data = f.read(4)
       if len(data) != 4:
@@ -1838,7 +1837,7 @@ def mediafileinfo_detect():
     elif header.startswith('FLV\1'):
       # \1 is the version number, but there is no version later than 1 in 2017.
       info['format'] = 'flv'
-      analyze_flv(f, info, header)
+      analyze_flv(f, info, fskip, header)
     elif header.startswith('\x1a\x45\xdf\xa3'):
       info['format'] = 'mkv'  # Can also be .webm as a subformat.
       analyze_mkv(f, info, fskip, header)
