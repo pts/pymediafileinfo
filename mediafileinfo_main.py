@@ -92,7 +92,7 @@ def main(argv):
       if filesize is not None:
         info['size'] = filesize
       try:
-        info = mediafileinfo_detect.detect(f, info, file_size_for_seek=filesize)
+        info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
         had_error_here = False
       except ValueError, e:
         info['error'] = 'bad_data'

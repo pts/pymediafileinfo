@@ -670,7 +670,7 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         fh = f
       had_error_here, info = True, {'f': filename}
       try:
-        info = mediafileinfo_detect.detect(
+        info = mediafileinfo_detect.analyze(
             fh, info, file_size_for_seek=filesize or None)
         had_error_here = False
       except ValueError, e:
