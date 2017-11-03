@@ -668,9 +668,10 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         fh = FileWithHash(f, sha256())
       else:
         fh = f
-      had_error_here, info = True, {}
+      had_error_here, info = True, {'f': filename}
       try:
-        info = mediafileinfo_detect.detect(fh, info, is_seek_ok=True)
+        info = mediafileinfo_detect.detect(
+            fh, info, file_size_for_seek=filesize or None)
         had_error_here = False
       except ValueError, e:
         info['error'] = 'bad_data'

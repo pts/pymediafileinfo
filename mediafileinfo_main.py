@@ -80,10 +80,19 @@ def main(argv):
       had_error = True
       print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
       continue
+    filesize = None
     try:
-      had_error_here, info = True, {}
+      f.seek(0, 2)
+      filesize = int(f.tell())
+      f.seek(0)
+    except (IOError, OSError, ValueError, AttributeError):
+      pass
+    try:
+      had_error_here, info = True, {'f': filename}
+      if filesize is not None:
+        info['size'] = filesize
       try:
-        info = mediafileinfo_detect.detect(f, info, is_seek_ok=True)
+        info = mediafileinfo_detect.detect(f, info, file_size_for_seek=filesize)
         had_error_here = False
       except ValueError, e:
         info['error'] = 'bad_data'
@@ -111,7 +120,7 @@ def main(argv):
         # header_end_offset, hdr_done_at: Offset we reached after parsing
         # headers.
         info['hdr_done_at'] = int(f.tell())
-      except (IOError, OSError, AttributeError):
+      except (IOError, OSError, ValueError, AttributeError):
         pass
       sys.stdout.write(format_info(info))
       sys.stdout.flush()
