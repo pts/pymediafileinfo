@@ -2027,7 +2027,10 @@ def detect(f, info=None, is_seek_ok=False):
       info['format'], inf['codec'] = 'brn', 'brn'
       info['width'], info['height'] = get_brn_dimensions(f, header)
   elif header.startswith('JASC'):
-    info['format'] = 'jbf'
+    if len(header) < 16:
+      header += f.read(16 - len(header))
+    if header.startswith('JASC BROWS FILE\0'):
+      info['format'] = 'jbf'
   elif header.startswith('\xca\xfe\xba\xbe'):
     info['format'] = 'java-class'
   elif (header.startswith('\xd0\xcf\x11\xe0') or
