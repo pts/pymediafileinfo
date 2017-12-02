@@ -55,7 +55,7 @@ def mediafileinfo_detect():
   # --- flv
 
 
-  def analyze_flv(f, info, fskip, header=''):
+  def analyze_flv(fread, info, fskip):
     # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
     #
     # Documented here (starting on page 68, Annex E):
@@ -194,13 +194,9 @@ def mediafileinfo_detect():
       except StopIteration:
         raise ValueError('EOF in flv h264 avcc sps.')
 
-    data = header
+    data = fread(13)
     if len(data) < 13:
-      data += f.read(13 - len(data))
-      if len(data) < 13:
-        raise ValueError('Too short for flv.')
-    elif len(data) != 13:
-      raise AssertionError('Header too long for flv: %d' % len(data))
+      raise ValueError('Too short for flv.')
 
     if not data.startswith('FLV'):
       raise ValueError('flv signature not found.')
@@ -234,7 +230,7 @@ def mediafileinfo_detect():
     max_nonaudio_frame_count = 4
 
     while audio_remaining or video_remaining:
-      data = f.read(11)
+      data = fread(11)
       if len(data) != 11:
         if not data:
           raise ValueError('EOF in flv, waiting for audio=%d video=%d' %
@@ -259,7 +255,7 @@ def mediafileinfo_detect():
           raise ValueError('Audio tag too small.')
         if size > 8191:  # TODO(pts): Estimate better.
           raise ValueError('Audio tag unreasonably large: %d' % size)
-        data = f.read(size)
+        data = fread(size)
         if len(data) != size:
           raise ValueError('EOF in tag data.')
         if audio_remaining:
@@ -280,7 +276,7 @@ def mediafileinfo_detect():
           raise ValueError('Video tag too small.')
         if size >= (1 << 22):  # TODO(pts): Estimate better.
           raise ValueError('Video tag unreasonably large: %d' % size)
-        data = f.read(size)  # TODO(pts): Skip over most of the tag, save memory.
+        data = fread(size)  # TODO(pts): Skip over most of the tag, save memory.
         if len(data) != size:
           raise ValueError('EOF in tag data.')
         b = ord(data[0])
@@ -406,7 +402,7 @@ def mediafileinfo_detect():
         script_format = ('amf0', 'amf3')[xtype == 15]
         if not fskip(size):
           raise ValueError('EOF in tag data.')
-      data = f.read(4)
+      data = fread(4)
       if len(data) != 4:
         raise ValueError('EOF in PreviousTagSize.')
       prev_size, = struct.unpack('>L', data)
@@ -501,7 +497,7 @@ def mediafileinfo_detect():
   }
 
 
-  def analyze_mkv(f, info, fskip, header=''):
+  def analyze_mkv(fread, info, fskip):
     # https://matroska.org/technical/specs/index.html
 
     # list so that inner functions can modify it.
@@ -510,14 +506,14 @@ def mediafileinfo_detect():
     #
     # We use ofs_list so that we don't have to call f.tell(). This is useful
     # for unseekable files.
-    ofs_list = [len(header)]
+    ofs_list = [0]
 
     def read_n(n):
-      data = f.read(n)
+      data = fread(n)
       ofs_list[0] += len(data)
       return data
 
-    def read_id(f):
+    def read_id():
       c = read_n(1)
       if not c:
         raise ValueError('EOF in mkv ID 1')
@@ -541,7 +537,7 @@ def mediafileinfo_detect():
         return c + data
       raise ValueError('Invalid ID prefix: %d' % b)
 
-    def read_size(f):
+    def read_size():
       c = read_n(1)
       if not c:
         raise ValueError('EOF in mkv element size 5')
@@ -587,34 +583,30 @@ def mediafileinfo_detect():
         return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
       raise ValueError('Invalid ID prefix: %d' % b)
 
-    def read_id_skip_void(f):
+    def read_id_skip_void():
       while 1:
-        xid = read_id(f)
+        xid = read_id()
         if xid != '\xec':  # Void.
           return xid
-        size = read_size(f)
+        size = read_size()
         if not fskip(size):
           raise ValueError('EOF in Void element.')
         ofs_list[0] += size
 
-    if len(header) > 4:
-      # We can increase it by input buffering.
-      raise AssertionError('Header too long for mkv: %d' % len(header))
-    header += read_n(4 - len(header))
-    if len(header) != 4:
+    xid = read_n(4)  # xid = read_id()
+    if len(xid) != 4:
       raise ValueError('Too short for mkv.')
 
-    xid = header[:4]  # xid = read_id(f)
     if xid != '\x1a\x45\xdf\xa3':
       raise ValueError('mkv signature not found.')
-    size = read_size(f)
+    size = read_size()
     if size >= 256:
       raise ValueError('mkv header unreasonably large: %d' % size)
     header_end = ofs_list[0] + size
     info['format'] = 'mkv'
     while ofs_list[0] < header_end:
-      xid = read_id_skip_void(f)
-      size = read_size(f)
+      xid = read_id_skip_void()
+      size = read_size()
       if ofs_list[0] + size > header_end:
         raise ValueError('Size of in-header element too large.')
       data = read_n(size)
@@ -632,15 +624,15 @@ def mediafileinfo_detect():
           info['brands'] = ['mkv']
     if 'subformat' not in info:
       raise('mkv DocType not found.')
-    xid = read_id_skip_void(f)
+    xid = read_id_skip_void()
     if xid != '\x18\x53\x80\x67':  # Segment.
       raise ValueError('Expected Segment element, got: %s' % xid.encode('hex'))
-    size = read_size(f)
+    size = read_size()
     segment_end = ofs_list[0] + size
     info['tracks'] = []
     while ofs_list[0] < segment_end:
-      xid = read_id_skip_void(f)
-      size = read_size(f)
+      xid = read_id_skip_void()
+      size = read_size()
       if ofs_list[0] + size > segment_end:
         raise ValueError('Size of in-Segment element too large.')
       if (xid == '\x11\x4d\x9b\x74' or  # SeekHead.
@@ -651,8 +643,8 @@ def mediafileinfo_detect():
       elif xid == '\x16\x54\xae\x6b':  # Tracks.
         tracks_end = ofs_list[0] + size
         while ofs_list[0] < tracks_end:
-          xid = read_id_skip_void(f)
-          size = read_size(f)
+          xid = read_id_skip_void()
+          size = read_size()
           if ofs_list[0] + size > tracks_end:
             raise ValueError('Size of in-Tracks element too large.')
           if xid != '\xae':  # Track.
@@ -660,8 +652,8 @@ def mediafileinfo_detect():
           track_end = ofs_list[0] + size
           track_info = {}
           while ofs_list[0] < track_end:
-            xid = read_id_skip_void(f)
-            size = read_size(f)
+            xid = read_id_skip_void()
+            size = read_size()
             if ofs_list[0] + size > track_end:
               raise ValueError('Size of in-Track element too large.')
             if xid == '\xe0':  # Video.
@@ -669,8 +661,8 @@ def mediafileinfo_detect():
               video_end = ofs_list[0] + size
               width = height = None
               while ofs_list[0] < video_end:
-                xid = read_id_skip_void(f)
-                size = read_size(f)
+                xid = read_id_skip_void()
+                size = read_size()
                 if ofs_list[0] + size > video_end:
                   raise ValueError('Size of in-Video element too large.')
                 data = read_n(size)
@@ -687,8 +679,8 @@ def mediafileinfo_detect():
               audio_end = ofs_list[0] + size
               width = height = None
               while ofs_list[0] < audio_end:
-                xid = read_id_skip_void(f)
-                size = read_size(f)
+                xid = read_id_skip_void()
+                size = read_size()
                 if ofs_list[0] + size > audio_end:
                   raise ValueError('Size of in-Audio element too large.')
                 data = read_n(size)
@@ -808,7 +800,7 @@ def mediafileinfo_detect():
   }
 
 
-  def analyze_mp4(f, info, fskip, header=''):
+  def analyze_mp4(fread, info, fskip):
     # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
     # Also apple.com has some .mov docs.
 
@@ -851,7 +843,7 @@ def mediafileinfo_detect():
         while ofs_limit > 0:  # Dump sequences of boxes inside.
           if ofs_limit < 8:
             raise ValueError('MP4E2')
-          size2, xtype2 = struct.unpack('>L4s', f.read(8))
+          size2, xtype2 = struct.unpack('>L4s', fread(8))
           if not (8 <= size2 <= ofs_limit):
             raise ValueError('MP4E3 size=%d ofs_limit=%d' % (size2, ofs_limit))
           ofs_limit -= size2
@@ -863,7 +855,7 @@ def mediafileinfo_detect():
           if not fskip(size):
             raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
         else:
-          data = f.read(size)
+          data = fread(size)
           if len(data) != size:
             raise ValueError('EOF in mp4 box, xtype=%r' % xtype)
           if xytype == '/ftyp':
@@ -975,14 +967,7 @@ def mediafileinfo_detect():
     xtype_path = ['']
     toplevel_xtypes = set()
     while 1:
-      if header:
-        if len(header) > 8:
-          raise AssertionError('Header too long for mp4: %d' % len(header))
-        data = str(header)
-        data += f.read(8 - len(data))
-        header = ''
-      else:
-        data = f.read(8)
+      data = fread(8)
       if len(data) != 8:
         # Sometimes this happens, there is a few bytes of garbage, but we
         # don't reach it, because we break after 'moov' earlier below.
@@ -999,7 +984,7 @@ def mediafileinfo_detect():
         raise ValueError('mp4 moov box not found.')
       size, xtype = struct.unpack('>L4s', data)
       if size == 1:  # Read 64-bit size.
-        data = f.read(8)
+        data = fread(8)
         if len(data) < 8:
           raise ValueError('EOF in top-level 64-bit mp4 box size.')
         size, = struct.unpack('>Q', data)
@@ -1177,7 +1162,7 @@ def mediafileinfo_detect():
   # --- avi
 
 
-  def analyze_avi(f, info, fskip, header=''):
+  def analyze_avi(fread, info, fskip):
     # Documented here: https://msdn.microsoft.com/en-us/library/ms779636.aspx
     #
     # OpenDML (ODML, for >2GB AVI) documented here:
@@ -1205,7 +1190,7 @@ def mediafileinfo_detect():
       while ofs_limit is None or ofs_limit > 0 and not do_stop_ary:
         if ofs_limit is not None and ofs_limit < 8:
           raise ValueError('No room for avi %s chunk.' % what)
-        data = f.read(8)
+        data = fread(8)
         if len(data) < 8:
           raise ValueError('EOF in avi %s chunk header.' % what)
         chunk_id, size = struct.unpack('<4sL', data)
@@ -1214,7 +1199,7 @@ def mediafileinfo_detect():
           ofs_limit -= 8 + size
         if (size >= 4 and (ofs_limit is None or ofs_limit + size >= 4) and
             chunk_id == 'LIST'):
-          chunk_id = f.read(4) + '+'
+          chunk_id = fread(4) + '+'
           if len(chunk_id) < 5:
             raise ValueError('EOF in avi %s LIST chunk ID.' % what)
           size -= 4
@@ -1298,7 +1283,7 @@ def mediafileinfo_detect():
             raise ValueError(
                 'Unreasonable size of avi %s chunk: id=%r size=%r' %
                 (what, chunk_id, size))
-          data = f.read(size)
+          data = fread(size)
           if len(data) < size:
             raise ValueError('EOF in avi %s chunk: id=%r' % (what, chunk_id))
           in_strl_chunks[chunk_id] = data
@@ -1318,14 +1303,10 @@ def mediafileinfo_detect():
         if parent_id == 'RIFF':
           raise ValueError('Missing avi hdrl chunk.')
 
-    data = header
+    data = fread(12)
     if len(data) < 12:
-      data += f.read(12 - len(data))
-      if len(data) < 12:
-        raise ValueError('Too short for avi.')
-    elif len(data) != 12:
-      raise AssertionError('Header too long for avi: %d' % len(data))
-    riff_id, ofs_limit, avi_id = struct.unpack('<4sL4s', header)
+      raise ValueError('Too short for avi.')
+    riff_id, ofs_limit, avi_id = struct.unpack('<4sL4s', data)
     if riff_id != 'RIFF' or avi_id != 'AVI ':
       raise ValueError('avi signature not found.')
     info['type'] = 'avi'
@@ -1344,13 +1325,10 @@ def mediafileinfo_detect():
   ASF_Video_Media = guid('bc19efc0-5b4d-11cf-a8fd-00805f5c442b')
 
 
-  def analyze_asf(f, info, fskip, header):
+  def analyze_asf(fread, info, fskip):
+    header = fread(30)
     if len(header) < 30:
-      header += f.read(30 - len(header))
-      if len(header) < 30:
-        raise ValueError('Too short for asf.')
-    if len(header) > 30:
-      raise AssertionError('Header too long for asf: %d' % len(header))
+      raise ValueError('Too short for asf.')
     guid, size, count, reserved12 = struct.unpack('<16sQLH', header)
     if guid != ASF_Header_Object:
       raise ValueError('asf signature not found.')
@@ -1368,7 +1346,7 @@ def mediafileinfo_detect():
         raise ValueError('Expected no more objects in asf header.')
       if ofs_limit < 24:
         raise ValueError('No room for asf in-header object header.')
-      data = f.read(24)
+      data = fread(24)
       if len(data) < 24:
         raise ValueError('EOF in asf in-header object header.')
       guid, size = struct.unpack('<16sQ', data)
@@ -1382,7 +1360,7 @@ def mediafileinfo_detect():
       if size > 350000:  # Typical maximum size is 4500 bytes.
         raise ValueError('Unreasonable size of asf in-header object: %d' % size)
       if guid == ASF_Stream_Properties_Object:
-        data = f.read(size)
+        data = fread(size)
         if len(data) < size:
           raise ValueError('EOF in asf stream properties.')
         (stream_type_guid, error_correction_type_guid, time_offset, ts_size,
@@ -1438,26 +1416,23 @@ def mediafileinfo_detect():
   # --- flac
 
 
-  def analyze_flac(f, info, header):
+  def analyze_flac(fread, info, fskip):
+    header = fread(5)
     if len(header) < 5:
-      header += f.read(5 - len(header))
-      if len(header) < 5:
-        raise ValueError('Too short for flac.')
+      raise ValueError('Too short for flac.')
     if not header.startswith('fLaC'):
       raise ValueError('flac signature not found.')
     info['format'] = 'flac'
-    if len(header) > 5:
-      raise AssertionError('Header too long for flac: %d' % len(header))
     if header[4] not in '\0\x80':
       raise AssertionError('STREAMINFO metadata block expected in flac.')
-    size = f.read(3)
+    size = fread(3)
     if len(size) != 3:
       raise ValueError('EOF in flac STREAMINFO metadata block size.')
     size, = struct.unpack('>L', '\0' + size)
     if not 34 <= size <= 255:
       raise ValueError(
           'Unreasonable size of flac STREAMINFO metadata block: %d' % size)
-    data = f.read(18)
+    data = fread(18)
     if len(data) != 18:
       raise ValueError('EOF in flac STREAMINFO metadata block.')
     # https://xiph.org/flac/format.html#metadata_block_streaminfo
@@ -1475,7 +1450,7 @@ def mediafileinfo_detect():
   # --- Image file formats.
 
 
-  def is_animated_gif(f, header='', do_read_entire_file=False):
+  def is_animated_gif(fread, header='', do_read_entire_file=False):
     """Returns bool indicating whether f contains an animaged GIF.
 
     If it's a GIF, sometimes reads the entire file (or at least the 1st frame).
@@ -1489,26 +1464,24 @@ def mediafileinfo_detect():
       bool indicating whether the GIF file f contains an animaged GIF.
     Raises:
       ValueError: If not a GIF file or there is a syntax error in the GIF file.
-      IOError: If raised by f.read(size).
+      IOError: If raised by fread(size).
     """
 
-    def read_all(f, size):
-      data = f.read(size)
+    def read_all(size):
+      data = fread(size)
       if len(data) != size:
         raise ValueError(
             'Short read in GIF: wanted=%d got=%d' % (size, len(data)))
       return data
 
     if len(header) < 13:
-      header += f.read(13 - len(header))
-    elif len(header) > 13:
-      raise AssertionError('Header too long for GIF: %d' % len(header))
+      header += fread(13 - len(header))
     if len(header) < 13 or not (
         header.startswith('GIF87a') or header.startswith('GIF89a')):
       raise ValueError('Not a GIF file.')
     pb = ord(header[10])
     if pb & 128:  # Global Color Table present.
-      read_all(f, 6 << (pb & 7))  # Skip the Global Color Table.
+      read_all(6 << (pb & 7))  # Skip the Global Color Table.
     frame_count = 0
     # These fields are related to animated GIFs:
     #
@@ -1524,50 +1497,50 @@ def mediafileinfo_detect():
     # However, we ignore these fields, because even if they specify values, the
     # GIF is still not animated unless it has more than 1 frame.
     while 1:
-      b = ord(read_all(f, 1))
+      b = ord(read_all(1))
       if b == 0x3B:  # End of file.
         break
       elif b == 0x21:  # Extension introducer.
-        b = ord(read_all(f, 1))
+        b = ord(read_all(1))
         if b == 0xff:  # Application extension.
-          ext_id_size = ord(read_all(f, 1))
-          ext_id = read_all(f, ext_id_size)
-          ext_data_size = ord(read_all(f, 1))
-          ext_data = read_all(f, ext_data_size)
-          data_size = ord(read_all(f, 1))
+          ext_id_size = ord(read_all(1))
+          ext_id = read_all(ext_id_size)
+          ext_data_size = ord(read_all(1))
+          ext_data = read_all(ext_data_size)
+          data_size = ord(read_all(1))
           while data_size:
-            read_all(f, data_size)
-            data_size = ord(read_all(f, 1))
+            read_all(data_size)
+            data_size = ord(read_all(1))
         else:
           # TODO(pts): AssertionError: Unknown extension: 0x01; in badgif1.gif
           if b not in (0xf9, 0xfe):
             raise ValueError('Unknown GIF extension type: 0x%02x' % b)
-          ext_data_size = ord(read_all(f, 1))
+          ext_data_size = ord(read_all(1))
           if b == 0xf9:  # Graphic Control extension.
             if ext_data_size != 4:
               raise ValueError(
                   'Bad ext_data_size for GIF GCE: %d' % ext_data_size)
-          ext_data = read_all(f, ext_data_size)
-          data_size = ord(read_all(f, 1))
+          ext_data = read_all(ext_data_size)
+          data_size = ord(read_all(1))
           if b == 0xf9:
             if data_size != 0:
               raise ValueError('Bad data_size for GIF GCE: %d' % data_size)
           while data_size:
-            read_all(f, data_size)
-            data_size = ord(read_all(f, 1))
+            read_all(data_size)
+            data_size = ord(read_all(1))
       elif b == 0x2C:  # Image Descriptor.
         frame_count += 1
         if frame_count > 1 and not do_read_entire_file:
           return True
-        read_all(f, 8)
-        pb = ord(read_all(f, 1))
+        read_all(8)
+        pb = ord(read_all(1))
         if pb & 128:  # Local Color Table present.
-          read_all(f, 6 << (pb & 7))  # Skip the Local Color Table.
-        read_all(f, 1)  # Skip LZW minimum code size.
-        data_size = ord(read_all(f, 1))
+          read_all(6 << (pb & 7))  # Skip the Local Color Table.
+        read_all(1)  # Skip LZW minimum code size.
+        data_size = ord(read_all(1))
         while data_size:
-          read_all(f, data_size)
-          data_size = ord(read_all(f, 1))
+          read_all(data_size)
+          data_size = ord(read_all(1))
       else:
         raise ValueError('Unknown GIF block type: 0x%02x' % b)
     if frame_count <= 0:
@@ -1575,18 +1548,18 @@ def mediafileinfo_detect():
     return frame_count > 1
 
 
-  def get_jpeg_dimensions(f, header=''):
+  def get_jpeg_dimensions(fread):
     """Returns (width, height) of a JPEG file.
 
     Args:
       f: An object supporting the .read(size) method. Should be seeked to the
           beginning of the file.
-      header: The first few bytes already read from f.
+      header: The first few bytes already read from fread.
     Returns:
       (width, height) pair of integers.
     Raises:
       ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
-      IOError: If raised by f.read(size).
+      IOError: If raised by fread(size).
     """
     # Implementation based on pts-qiv
     #
@@ -1597,72 +1570,68 @@ def mediafileinfo_detect():
     #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
     #   The first fe marker (COM, comment) was at offset 20.
 
-    def read_all(f, size):
-      data = f.read(size)
+    def read_all(size):
+      data = fread(size)
       if len(data) != size:
         raise ValueError(
             'Short read in JPEG: wanted=%d got=%d' % (size, len(data)))
       return data
 
-    data = header
-    if len(data) < 4:
-      data += f.read(4 - len(data))
-    elif len(data) > 4:
-      raise AssertionError('Header too long for JPEG: %d' % len(data))
+    data = fread(4)
     if len(data) < 4 or not data.startswith('\xff\xd8\xff'):
       raise ValueError('Not a JPEG file.')
     m = ord(data[3])
     while 1:
       while m == 0xff:  # Padding.
-        m = ord(read_all(f, 1))
+        m = ord(read_all(1))
       if m in (0xd8, 0xd9, 0xda):
         # 0xd8: SOI unexpected.
         # 0xd9: EOI unexpected before SOF.
         # 0xda: SOS unexpected before SOF.
         raise ValueError('Unexpected marker: 0x%02x' % m)
-      ss, = struct.unpack('>H', read_all(f, 2))
+      ss, = struct.unpack('>H', read_all(2))
       if ss < 2:
         raise ValueError('Segment too short.')
       ss -= 2
       if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
         if ss < 5:
           raise ValueError('SOF segment too short.')
-        height, width = struct.unpack('>xHH', read_all(f, 5))
+        height, width = struct.unpack('>xHH', read_all(5))
         return width, height
-      read_all(f, ss)
+      read_all(ss)
 
       # Read next marker to m.
-      m = read_all(f, 2)
+      m = read_all(2)
       if m[0] != '\xff':
         raise ValueError('Marker expected.')
       m = ord(m[1])
     raise AssertionError('Internal JPEG parser error.')
 
 
-  def get_brn_dimensions(f, header=''):
+  def get_brn_dimensions(fread):
     """Returns (width, height) of a BRN file.
 
     Args:
       f: An object supporting the .read(size) method. Should be seeked to the
           beginning of the file.
-      header: The first few bytes already read from f.
+      header: The first few bytes already read from fread.
     Returns:
       (width, height) pair of integers.
     Raises:
       ValueError: If not a BRN file or there is a syntax error in the BRN file.
-      IOError: If raised by f.read(size).
+      IOError: If raised by fread(size).
     """
-    def read_all(f, size):
-      data = f.read(size)
+    def read_all(size):
+      data = fread(size)
       if len(data) != size:
         raise ValueError(
             'Short read in BRN: wanted=%d got=%d' % (size, len(data)))
       return data
 
-    def read_base128(f):
+    def read_base128():
       shift, result, c = 0, 0, 0
       while 1:
-        b = f.read(1)
+        b = fread(1)
         if not b:
           raise ValueError('Short read in base128.')
         c += 1
@@ -1674,38 +1643,34 @@ def mediafileinfo_detect():
           return result, c
         shift += 7
 
-    data = header
-    if len(data) < 7:
-      data += f.read(7 - len(data))
-    elif len(data) > 7:
-      raise AssertionError('Header too long for BRN: %d' % len(data))
+    data = fread(7)
     if len(data) < 7 or not data.startswith('\x0a\x04B\xd2\xd5N\x12'):
       raise ValueError('Not a BRN file.')
 
-    header_remaining, _ = read_base128(f)
+    header_remaining, _ = read_base128()
     width = height = None
     while header_remaining:
       if header_remaining < 0:
         raise ValueError('BRN header spilled over.')
-      marker = ord(read_all(f, 1))
+      marker = ord(read_all(1))
       header_remaining -= 1
       if marker & 0x80 or marker & 0x5 or marker <= 2:
         raise ValueError('Invalid marker.')
       if marker == 0x8:
         if width is not None:
           raise ValueError('Multiple width.')
-        width, c = read_base128(f)
+        width, c = read_base128()
         header_remaining -= c
       elif marker == 0x10:
         if height is not None:
           raise ValueError('Multiple height.')
-        height, c = read_base128(f)
+        height, c = read_base128()
         header_remaining -= c
       else:
-        val, c = read_base128(f)
+        val, c = read_base128()
         header_remaining -= c
         if (marker & 7) == 2:
-          read_all(f, val)
+          read_all(val)
           header_remaining -= val
     if width is not None and height is not None:
       return width, height
@@ -1713,17 +1678,410 @@ def mediafileinfo_detect():
       raise ValueError('Dimensions not found in BRN.')
 
 
-  def is_html(data):
-    data = data[:256].lstrip().lower()
-    return (data.startswith('<!--') or
-            data.startswith('<html>') or
-            data.startswith('<head>') or
-            data.startswith('<body>') or
-            data.startswith('<!doctype html ') or
-            data.startswith('<!doctype html>'))
+  def is_mpegts(header):
+    if ((header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
+      # https://en.wikipedia.org/wiki/MPEG_transport_stream
+      i = header.find('\x47')
+      if len(header) >= i + 4:
+        b, = struct.unpack('>L', header[i : i + 4])
+        tei = (b >> 23) & 1
+        pusi = (b >> 22) & 1
+        tp = (b >> 21) & 1
+        packet_id = (b >> 8) & 0x1fff  # 13-bit.
+        tsc = (b >> 6) & 3
+        afc = (b >> 4) & 3
+        cc = b & 15
+        # TODO(pts): If packet_id == 8191, then it's the null packet, and find
+        # the next packet.
+        if tei == 0 and cc == 0 and tsc == 0 and packet_id in (0, 0x11, 8191):
+          # Also applies to .m2ts.
+          True
+          # packet_id=0 is Program Association Table (PAT)
+          # packet_id=0x11 is
+          # https://en.wikipedia.org/wiki/Service_Description_Table
+        if (header[i + 2] == '\0' and (ord(header[i + 1]) & 0x5f) == 0x40 and
+            (ord(header[i + 3]) & 0x10) == 0x10):
+          # TODO(pts): Integrate this the the previous condition.
+          return True  # Old way of getting of parameters.
+    return False
 
 
-  # ---
+  def analyze_wav(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    header = fread(36)
+    if len(header) < 36:
+      raise ValueError('Too short for wav.')
+    info['format'] = 'wav'
+    if header[12 : 16] != 'fmt ':
+      raise ValueError('wav fmt chunk missing.')
+    wave_format, channel_count, sample_rate, _, _, sample_size = (
+        struct.unpack('<HHLLHH', header[20 : 36]))
+    info['tracks'] = []
+    info['tracks'].append({
+        'type': 'audio',
+        'codec': WINDOWS_AUDIO_FORMATS.get(
+            wave_format, '0x%x' % wave_format),
+        'channel_count': channel_count,
+        'sample_rate': sample_rate,
+        # With 'codec': 'mp3', sample_size is usually 0.
+        'sample_size': sample_size or 16,
+    })
+
+
+  def analyze_exe(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    header = fread(64)
+    if len(header) < 64:
+      raise ValueError('Too short for exe.')
+    if not header.startswith('MZ'):
+      raise ValueError('exe signature not found.')
+    info['format'] = 'exe'
+    pe_ofs, = struct.unpack('<L', header[60 : 64])
+    if pe_ofs < 8180 and len(header) < pe_ofs + 300:
+      header += fread(pe_ofs + 300 - len(header))
+    if (len(header) >= pe_ofs + 6 and
+        header.startswith('MZ') and
+        header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
+        header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
+        # Only i386 and amd64 are recognized.
+        header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
+      # Windows .exe file (PE, Portable Executable).
+      info['format'] = 'winexe'
+      # 108 bytes instead of 92 bytes for PE32+.
+      rva_ofs = pe_ofs + 24 + 92 + 16 * (
+          header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
+      rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
+      if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
+        vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
+        if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
+          info['format'] = 'dotnetexe'  # .NET executable assembly.
+
+
+  def analyze_bmp(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    header = fread(26)
+    if len(header) < 26:
+      raise ValueError('Too short for bmp.')
+    if not header.startswith('BM'):
+      raise ValueError('bmp signature not found.')
+    info['format'] = 'bmp'
+    b = ord(header[14])
+    if b in (12, 26) and len(header) >= 22:
+      info['width'], info['height'] = struct.unpack(
+          '<HH', header[18 : 22])
+    elif b in (40, 124) and len(header) >= 26:
+      info['width'], info['height'] = struct.unpack(
+          '<LL', header[18 : 26])
+
+
+  def analyze_flic(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    header = fread(16)
+    if len(header) < 16:
+      raise ValueError('Too short for flic.')
+    info['format'] = 'flic'
+    if header[4] == '\x12':
+      info['subformat'] = 'flc'
+    else:
+      info['subformat'] = 'fli'
+    width, height = struct.unpack('<HH', header[8 : 12])
+    video_track_info = {'type': 'video', 'codec': 'rle'}
+    info['tracks'] = [video_track_info]
+    set_video_dimens(video_track_info, width, height)
+
+
+  def analyze_png(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    header = fread(24)
+    if len(header) < 24:
+      raise ValueError('Too short for png.')
+    info['format'] = 'png'
+    info['codec'] = 'flate'
+    if header[12 : 16] == 'IHDR':
+      info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
+
+
+  def analyze_gif(fread, info, fskip):
+    # This function doesn't do any file format detection.
+    # Still short enough for is_animated_gif.
+    header = fread(10)
+    if len(header) < 10:
+      raise ValueError('Too short for gif.')
+    info['format'] = 'gif'
+    info['codec'] = 'lzw'
+    info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
+    if is_animated_gif(fread, header):  # This may read the entire input.
+      info['format'] = 'agif'
+
+
+  # --- File format detection for many file formats and getting media
+  # parameters for some.
+
+  MAX_CONFIDENCE = 100000
+
+  # TODO(pts): Static analysis: fail on duplicate format name.
+  # TODO(pts): Static analysis: autodetect collisions in string-only matchers.
+  # TODO(pts): Optimization: create prefix dicts (for 4 bytes and 8 bytes).
+  # TODO(pts): On multiple matches, use the one with largest confidence.
+  FORMAT_ITEMS = (
+      # (n, f, ...) means: read at most n bytes from the beginning of the file
+      # to header, call f(header).
+      ('empty', (1, lambda header: (len(header) == 0, MAX_CONFIDENCE))),
+      ('short1', (2, lambda header: (len(header) == 1, MAX_CONFIDENCE))),
+      ('short2', (3, lambda header: (len(header) == 2, MAX_CONFIDENCE))),
+      ('short3', (4, lambda header: (len(header) == 3, MAX_CONFIDENCE))),
+
+      # Video.
+
+      # \1 is the version number, but there is no version later than 1 in 2017.
+      ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
+      # Can also be .webm as a subformat.
+      ('mkv', (0, '\x1a\x45\xdf\xa3')),
+      # Can also be (new) .mov, .f4v etc. as a subformat.
+      ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (len(header) >= 4 and ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0, 26))),
+      # TODO(pts): Get media parameters.
+      # https://en.wikipedia.org/wiki/Ogg#File_format
+      # https://xiph.org/ogg/doc/oggstream.html
+      # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
+      # Theora: identification header in https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
+      # Can contain other codecs as well, each with codec-specific identification header.
+      # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
+      ('ogg', (0, 'OggS')),
+      # Also 'wma' and 'wmv'.
+      ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
+      ('avi', (0, 'RIFF', 8, 'AVI ')),
+      # Video CD (VCD).
+      ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
+      # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
+      # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
+      ('mpeg', (0, '\0\0\1', 3, ('\xba', '\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5', '\xb3'))),
+      ('mng', (0, '\212MNG\r\n\032\n')),
+      ('swf', (0, ('FWS', 'CWS'))),
+      ('rm', (0, '.RMF\0\0\0')),
+      # .bup and .ifo files on a video DVD.
+      ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
+      # DIF DV (digital video).
+      ('dv', (0, '\x1f\x07\x00')),
+      ('mov-mdat', (4, 'mdat')),
+      # Immediately followed by a 4-byte size, then 'mdat'.
+      ('mov-small', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
+      ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'))),
+      # Autodesk Animator FLI or Autodesk Animator Pro flc.
+      # http://www.drdobbs.com/windows/the-flic-file-format/184408954
+      ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
+      ('mpegts', (0, ('\0', '\x47'), 7, lambda header: (is_mpegts(header), 301))),
+
+      # Image.
+
+      ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
+      # TODO(pts): Which JPEG marker can be header[3]?
+      ('jpeg', (0, '\xff\xd8\xff')),
+      ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
+      # JPEG reencoded by Dropbox lepton.
+      ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
+      # Also includes 'nikon-nef' raw images.
+      # This is tricky to prefix-optimize.
+      ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
+      # TODO(pts): Get dimensions for all ppm.
+      # This is tricky to prefix-optimize.
+      ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+      ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+      ('ppm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+      # sam2p can read it.
+      ('xpm', (0, '/* XPM */')),
+      # sam2p can read it.
+      ('lbm', (0, 'FORM', 8, 'ILBMBMHD')),
+      ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'I', 'M'))),
+      # http://fileformats.archiveteam.org/wiki/JBIG2
+      ('jbig2', (0, '\x97\x4A\x42\x32\x0D\x0A\x1A\x0A')),
+      # By ImageMagick.
+      ('miff', (0, 'id=ImageMagick')),
+      # By GIMP.
+      ('xcf', (0, 'gimp xcf ')),
+      # By Photoshop.
+      ('psd', (0, '8BPS')),
+      ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
+      # By AOL browser.
+      ('art', (0, 'JG\4\016\0\0\0\0')),
+      # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
+      ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
+      ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
+      # JPEG2000 container format.
+      ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n')),
+      # Seems to contain an image.
+      ('pnot', (0, '\0\0\0', 4, 'pnot')),
+      ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
+      ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
+      # Unfortunately not all tga (targa) files have 'TRUEVISION-XFILE.\0'.
+      ('tga', (0, tuple(chr(c) for c in xrange(30, 64)), 1, tuple(chr(c) for c in xrange(12)), 16, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08', '\x30'))),
+
+      # Audio.
+
+      ('wav', (0, 'RIFF', 8, 'WAVE')),
+      ('mp3-id3', (0, 'ID3')),
+      # The technically more correct term is MPEG ADTS.
+      ('mp3-adts', (0, '\xff', 1, ('\xfa', '\xfb'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
+      ('aac', (0, 'ADIF')),
+      ('flac', (0, 'fLaC')),
+
+      # Document media.
+
+      ('pdf', (0, '%PDF')),
+      # TODO(pts): Get papar size (image dimensions) from %%BoundingBox.
+      ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
+      # TODO(pts): 10 byte prefix? '\367\002\001\203\222\300\34;\0\0'.
+      ('dvi', (0, '\367\002')),
+
+      # Compressed file or archive.
+
+      # '\6\6' is ZIP64.
+      ('zip', (0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
+      ('rar', (0, 'Rar!')),
+      ('zpaq', (0, ('7kS', 'zPQ'), 4, lambda header: (header.startswith('7kSt') or (header.startswith('zPQ') and 1 <= ord(header[3]) <= 127), 52))),
+      ('gz', (0, '\037\213\010')),
+      ('bz2', (0, 'BZh')),
+      ('lzip', (0, 'LZIP')),
+      ('lzop', (0, '\x89LZO\0\r\n')),
+      ('7z', (0, '7z\xbc\xaf\x27\x1c')),
+      ('xz', (0, '\xfd7zXZ\0')),
+      ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
+      ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
+
+      # Non-compressed, non-media.
+
+      # Or DOS .bat file.
+      ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
+      ('xml', (0, '<?xml', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+      ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
+      # We could be more strict here, e.g. rejecting non-HTML docypes.
+      # TODO(pts): Ignore whitespace in the beginning above.
+      ('html', (0, '<', 15, lambda header: (header.startswith('<!--') or header[:15].lower() in ('<!doctype html>', '<!doctype html ') or header[:6].lower() in ('<html>', '<head>', '<body>'), 500))),
+      ('jbf', (0, 'JASC BROWS FILE\0')),
+      ('java-class', (0, '\xca\xfe\xba\xbe')),
+      # OLE compound file, including Thumbs.db
+      # http://forensicswiki.org/wiki/OLE_Compound_File
+      ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
+      ('avidemux-mpeg-index', (0, 'ADMY')),
+      ('avidemux-project', (0, '//AD')),
+      # *** These modified files were found in JOE when it aborted on ...
+      # *** JOE was aborted by UNIX signal ...
+      ('deadjoe', (0, '\n*** ', 5, ('Thes', 'JOE '))),
+      ('elf', (0, '\x7fELF', 4, ('\1', '\2'), 5, ('\1', '\2'), 6, '\1')),
+      # Filename extension: .mfo
+      # Example: output of pymediafileinfo and media_scan.py.
+      ('fileinfo', (0, 'format=')),
+      ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
+      ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+  )
+
+
+
+  class FormatDb(object):
+    __slots__ = ('formats_by_prefix', 'header_preread_size')
+
+    def __init__(self, format_items):
+      if len(dict(format_items)) != len(format_items):
+        raise ValueError('Duplicate key in format_items.')
+      hps = 0
+      fbp = [{} for i in xrange(5)]
+      for format_spec in format_items:
+        format, spec = format_spec
+        size, pattern = spec[0], spec[1]
+        prefixes = ('',)
+        # TODO(pts): Check that size==0 is first.
+        # TODO(pts): Do smarter prefix selection.
+        if isinstance(pattern, str):
+          if size == 0:
+            prefixes = (pattern,)
+        elif isinstance(pattern, tuple):
+          if size == 0:
+            prefixes = pattern
+        for prefix in prefixes:
+          i = min(4, len(prefix))
+          prefix2 = prefix[:i]
+          fbp2 = fbp[i]
+          if prefix2 in fbp2:
+            fbp2[prefix2].append(format_spec)
+          else:
+            fbp2[prefix2] = [format_spec]
+        for i in xrange(0, len(spec), 2):
+          size, pattern = spec[i], spec[i + 1]
+          if isinstance(pattern, str):
+            hps = max(hps, size + len(pattern))
+          elif isinstance(pattern, tuple):
+            assert pattern
+            assert len(set(len(s) for s in pattern)) == 1, (
+                'Non-uniform pattern choice sizes for %s: %r' %
+                (format, pattern))
+            hps = max(hps, size + len(pattern[0]))
+          else:
+            hps = max(hps, size)
+      self.header_preread_size = hps
+      self.formats_by_prefix = fbp
+
+
+  FORMAT_DB = FormatDb(FORMAT_ITEMS)
+
+  # import math; print ["\0"+"".join(chr(int(100. / 8 * math.log(i) / math.log(2))) for i in xrange(1, 1084))]'
+  LOG2_SUB = '\0\0\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccdddddddddddddddeeeeeeeeeeeeeeeeffffffffffffffffggggggggggggggggghhhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiijjjjjjjjjjjjjjjjjjjjkkkkkkkkkkkkkkkkkkkkklllllllllllllllllllllllmmmmmmmmmmmmmmmmmmmmmmmmnnnnnnnnnnnnnnnnnnnnnnnnnnoooooooooooooooooooooooooopppppppppppppppppppppppppppppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsssssssssssssssssssssssssssssssssttttttttttttttttttttttttttttttttttttuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{|||||||||||||||||||||||||||||||||||||||||||||||||||||||}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}~'
+  assert len(LOG2_SUB) == 1084
+
+
+  def detect_format(f):
+    """Detects the file format.
+
+    Returns:
+      (format, header), where format is a non-empty string (can be '?'),
+      header is a string containing the prefix of f, and exactly this many
+      bytes were read from f.
+    """
+    format_db, log2_sub, lmi = FORMAT_DB, LOG2_SUB, len(LOG2_SUB) - 1
+    header = f.read(format_db.header_preread_size)
+    matches = []
+    fbp = format_db.formats_by_prefix
+    for j in xrange(min(len(header), 4), -1, -1):
+      for format, spec in fbp[j].get(header[:j], ()):
+        assert isinstance(spec, tuple)
+        confidence = 0
+        i = 0
+        while i < len(spec):
+          size = spec[i]
+          assert isinstance(size, int)
+          pattern = spec[i + 1]
+          if isinstance(pattern, str):
+            assert size + len(pattern) <= 128
+            if header[size : size + len(pattern)] != pattern:
+              break
+            confidence += 100 * len(pattern) + 10 * max(10 - size, 0)
+          elif isinstance(pattern, tuple):
+            # TODO(pts): Check that each str in pattern has the same len.
+            header_sub = header[size : size + len(pattern[0])]
+            if not [1 for pattern2 in pattern if header_sub == pattern2]:
+              break
+            # We use log2_sub here to decrease the confidence when there are
+            # many patterns. We us `10 - size' to increase the confidence when
+            # matching near the start of the string.
+            confidence += (
+                100 * len(header_sub) - ord(log2_sub[min(len(pattern), lmi)]) +
+                10 * max(10 - size, 0))
+          elif callable(pattern):
+            assert size <= 128
+            is_matching, cadd = pattern(header)
+            if not is_matching:
+              break
+            confidence += cadd
+          else:
+            raise AssertionError(type(pattern))
+          i += 2
+        if i == len(spec):  # The spec has matched.
+          matches.append((confidence, format))
+    if matches:
+      matches.sort()  # By confidence ascending.
+      format = matches[-1][1]
+    else:
+      format = '?'
+    return format, header
+
 
   def copy_info_from_tracks(info):
     """Copies fields from info['tracks'] to top-level in info."""
@@ -1777,11 +2135,7 @@ def mediafileinfo_detect():
       info.setdefault('vcodec', '?')
 
 
-  # --- File format detection for many file formats and getting media
-  # parameters for some.
-
-
-  def detect(f, info=None, is_seek_ok=False):
+  def analyze(f, info=None, file_size_for_seek=None):
     """Detects file format, and gets media parameters in file f.
 
     For videos, info['tracks'] is a list with an item for each video or audio
@@ -1792,498 +2146,122 @@ def mediafileinfo_detect():
       f: File-like object with a .read(n) method and an optional .seek(n) method,
           should do buffering for speed, and must return exactly n bytes unless
           at EOF. Seeking will be avoided if possible.
-      info: A dict to update with the info found, or None.
-      is_seek_ok: Boolean indicating whether seeking in f is OK. Even if true,
-        but the f doesn't support seeking, detect still works fine. Seeking is
-        only used for skipping ahead a large number of bytes.
+      info: A dict to update with the info found, or None to create a new one.
+      file_size_for_seek: None or an integer specifying the file size up to which
+          it is OK to seek forward (fskip).
     Returns:
       The info dict.
     """
     if info is None:
       info = {}
-    if 'f' not in info and getattr(f, 'name', None):
-      info['f'] = f.name
-    file_size_for_seek = None
-    if is_seek_ok:
-      try:
-        f.seek(0, 2)
-        info['size'] = file_size_for_seek = int(f.tell())
-      except (IOError, OSError, ValueError, AttributeError):
-        pass
-      if info.get('size'):
-        f.seek(0)  # Can raise IOError, which we propagate.
+    # Set it early, in case of an exception.
+    info.setdefault('format', '?')
+    format, header = detect_format(f)
+    info['format'] = format
+
+    prebuf = [0, header]
+    header = ''
+
+    def fread(n):
+      """Reads from prebuf (header) first, then from f."""
+      i, buf = prebuf
+      if buf:
+        j = n - len(buf) + i
+        if j <= 0:
+          prebuf[0] += n
+          return buf[i : i + n]
+        prebuf[1] = ''
+        return buf[i:] + f.read(j)
+      else:
+        return f.read(n)
+
     if file_size_for_seek is None:
       def fskip(size):
         """Returns bool indicating whther f was long enough."""
+        i, buf = prebuf
+        if buf:
+          j = size - len(buf) + i
+          if j <= 0:
+            prebuf[0] += size
+            return True
+          else:
+            prebuf[1] = ''
+            size = j
         while size >= 32768:
           if len(f.read(32768)) != 32768:
             return False
           size -= 32768
         return size == 0 or len(f.read(size)) == size
     else:
-      def fskip(size, file_size=file_size_for_seek):
+      def fskip(size):
         """Returns bool indicating whther f was long enough."""
+        i, buf = prebuf
+        if buf:
+          j = size - len(buf) + i
+          if j <= 0:
+            prebuf[0] += size
+            return True
+          else:
+            prebuf[1] = ''
+            size = j
         if size < 32768:
           data = f.read(size)
           return len(data) == size
         else:
           f.seek(size, 1)
-          return f.tell() <= file_size
+          return f.tell() <= file_size_for_seek
 
-    # Set it early, in case of an exception.
-    info.setdefault('format', '?')
-    # We can't read more than 4 bytes here, analyze_mkv would fail.
-    header = f.read(4)
-    if not header:
-      info['format'] = 'empty'
-    elif len(header) < 4:
-      info['format'] = 'short%d' % len(header)
-
-    # Video.
-
-    elif header.startswith('FLV\1'):
-      # \1 is the version number, but there is no version later than 1 in 2017.
-      info['format'] = 'flv'
-      analyze_flv(f, info, fskip, header)
-    elif header.startswith('\x1a\x45\xdf\xa3'):
-      info['format'] = 'mkv'  # Can also be .webm as a subformat.
-      analyze_mkv(f, info, fskip, header)
-    elif header.startswith('OggS'):
-      info['format'] = 'ogg'  # TODO(pts): Get media parameters.
-      # https://en.wikipedia.org/wiki/Ogg#File_format
-      # https://xiph.org/ogg/doc/oggstream.html
-      # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
-      # Theora: identification header in https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
-      # Can contain other codecs as well, each with codec-specific identification header.
-      # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
-    elif header.startswith('\x30\x26\xb2\x75'):
-      if len(header) < 16:
-        header += f.read(16 - len(header))
-      if header.startswith('0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel'):
-        info['format'] = 'asf'  # Also 'wmv'.
-        analyze_asf(f, info, fskip, header)
-    elif header.startswith('RIFF'):
-      if len(header) < 12:
-        header += f.read(12 - len(header))
-      if header[8 : 12] == 'AVI ':
-        info['format'] = 'avi'
-        analyze_avi(f, info, fskip, header)
-      elif header[8 : 12] == 'WAVE':
-        info['format'] = 'wav'
-        if len(header) < 36:
-          header += f.read(36 - len(header))
-          if len(header) < 36:
-            raise ValueError('wav too short.')
-          if header[12 : 16] != 'fmt ':
-            raise ValueError('wav fmt chunk missing.')
-          wave_format, channel_count, sample_rate, _, _, sample_size = (
-              struct.unpack('<HHLLHH', header[20 : 36]))
-          info['tracks'] = []
-          info['tracks'].append({
-              'type': 'audio',
-              'codec': WINDOWS_AUDIO_FORMATS.get(
-                  wave_format, '0x%x' % wave_format),
-              'channel_count': channel_count,
-              'sample_rate': sample_rate,
-              # With 'codec': 'mp3', sample_size is usually 0.
-              'sample_size': sample_size or 16,
-          })
-      elif header[8 : 12] == 'CDXA':
-        info['format'] = 'mpeg-cdxa'  # Video CD (VCD).
-    elif header.startswith('\0\0\1') and header[3] in (
-        '\xba\xbb\x07\x27\x47\x67\x87\xa7\xc7\xe7\xb0\xb5\xb3'):
-      info['format'] = 'mpeg'  # Video.
-      # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
-      # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
-    elif header.startswith('\212MNG'):
-      if len(header) < 8:
-        header += f.read(8 - len(header))
-      if header.startswith('\212MNG\r\n\032\n'):
-        info['format'] = 'mng'
-    elif header.startswith('FWS') or header.startswith('CWS'):
-      info['format'] = 'swf'
-    elif header.startswith('.RMF'):
-      if len(header) < 7:
-        header += f.read(7 - len(header))
-      if header.startswith('.RMF\0\0\0'):
-        info['format'] = 'rm'
-    elif header.startswith('DVDV'):
-      if len(header) < 12:
-        header += f.read(12 - len(header))
-      if (header.startswith('DVDVIDEO-VTS') or
-          header.startswith('DVDVIDEO-VMG')):
-        info['format'] = 'dvd-bup'  # .bup and .ifo files on DVD.
-    elif header.startswith('\x1f\x07\x00'):
-      info['format'] = 'dv'  # DIF DV (digital video).
-
-    # --- Images.
-
-    elif header.startswith('GIF8'):
-      if len(header) < 6:
-        header += f.read(6 - len(header))
-      if header.startswith('GIF87a') or header.startswith('GIF89a'):
-        info['format'], info['codec'] = 'gif', 'lzw'
-        if len(header) < 10:
-          # Still short enough for is_animated_gif.
-          header += f.read(10 - len(header))
-          if len(header) < 10:
-            raise ValueError('EOF in GIF header.')
-        info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
-        if is_animated_gif(f, header):  # This may read the entire input.
-          info['format'] = 'agif'
-    elif header.startswith('\xff\xd8\xff'):
-      # TODO(pts): Which JPEG marker can be header[3]?
-      info['format'], info['codec'] = 'jpeg', 'jpeg'
-      info['width'], info['height'] = get_jpeg_dimensions(f, header)
-    elif header.startswith('\211PNG'):
-      if len(header) < 11:
-        header += f.read(11 - len(header))
-      if header.startswith('\211PNG\r\n\032\n\0\0\0'):
-        info['format'], info['codec'] = 'png', 'flate'
-        if len(header) < 24:
-          header += f.read(24 - len(header))
-          if len(header) < 24:
-            raise ValueError('EOF in PNG header.')
-        if header[12 : 16] == 'IHDR':
-          info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
-    elif (header.startswith('\xcf\x84') and
-          header[2] in '\1\2' and header[3] in 'XYZ'):
-      # JPEG reencoded by Dropbox lepton.
-      info['format'], info['codec'] = 'lepton', 'lepton'
-    elif (header.startswith('MM\x00\x2a') or
-          header.startswith('II\x2a\x00')):
-      # Also includes 'nikon-nef' raw images.
-      info['format'] = 'tiff'
-    elif header.startswith('P1 '):
-      # TODO(pts): Get dimensions for all ppm.
-      info['format'], info['codec'] = 'pbm', 'rawascii'
-    elif header.startswith('P4'):
-      info['format'], info['codec'] = 'pbm', 'raw'
-    elif header.startswith('P2 '):
-      info['format'], info['codec'] = 'pgm', 'rawascii'
-    elif header.startswith('P5'):
-      info['format'], info['codec'] = 'pgm', 'raw'
-    elif header.startswith('P3 '):
-      info['format'], info['codec'] = 'ppm', 'rawascii'
-    elif header.startswith('P6'):
-      info['format'], info['codec'] = 'ppm', 'raw'
-    elif header.startswith('/* X'):
-      if len(header) < 9:
-        header += f.read(9 - len(header))
-      if header.startswith('/* XPM */'):
-        info['format'] = 'xpm'  # sam2p can read it.
-    elif header.startswith('FORM'):
-      if len(header) < 16:
-        header += f.read(16 - len(header))
-      if header.startswith('FORM') and header[8 : 16] == 'ILBMBMHD':
-        info['format'] = 'lbm'  # sam2p can read it.
-    elif header.startswith('AT&T'):
-      if len(header) < 12:
-        header += f.read(12 - len(header))
-      if (header.startswith('AT&TFORM') and header[12 : 15] == 'DJV' and
-          header[15 : 16] in 'UIM'):
-        info['format'] = 'djvu'
-    elif header.startswith('\x97\x4A\x42\x32'):
-      # http://fileformats.archiveteam.org/wiki/JBIG2
-      if len(header) < 12:
-        header += f.read(12 - len(header))
-      if header.startswith('\x97\x4A\x42\x32\x0D\x0A\x1A\x0A'):
-        info['format'] = 'jbig2'
-    elif header.startswith('id=I'):
-      if len(header) < 14:
-        header += f.read(14 - len(header))
-      if header.startswith('id=ImageMagick'):
-        info['format'] = 'miff'  # By ImageMagick.
-    elif header.startswith('gimp'):
-      if len(header) < 9:
-        header += f.read(9 - len(header))
-      if header.startswith('gimp xcf '):
-        info['format'] = 'xcf'  # By GIMP.
-    elif header.startswith('8BPS'):
-      info['format'] = 'psd'  # By Photoshop.
-    elif header.startswith('\0\0\1\0'):
-      if len(header) < 6:
-        header += f.read(6 - len(header))
-      if len(header) >= 6 and 1 <= ord(header[4]) <= 40 and header[5] == '\0':
-        info['format'] = 'ico'
-    elif header.startswith('JG\4\016'):
-      if len(header) < 8:
-        header += f.read(8 - len(header))
-      if header.startswith('JG\4\016\0\0\0\0'):
-        info['format'] = 'art'  # By AOL browser.
-    elif header.startswith('FUJI'):
-      if len(header) < 28:
-        header += f.read(28 - len(header))
-      if (header.startswith('FUJIFILMCCD-RAW 0200FF383501') or
-          header.startswith('FUJIFILMCCD-RAW 0201FF383501')):
-        # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
-        # Dimensions are not easy to get, maybe from the CFA IDs.
-        # Please note that codec=raw also applies to uncompressed RGB 8-bit.
-        info['format'], info['codec'] = 'fuji-raf', 'raw'
-
-    # --- Audio.
-
-    elif header.startswith('ID3'):
+    if format == 'flv':
+      analyze_flv(fread, info, fskip)
+    elif format == 'mkv':
+      analyze_mkv(fread, info, fskip)
+    elif format == 'asf':
+      analyze_asf(fread, info, fskip)
+    elif format == 'avi':
+      analyze_avi(fread, info, fskip)
+    elif format == 'wav':
+      analyze_wav(fread, info, fskip)
+    elif format == 'gif':
+      analyze_gif(fread, info, fskip)
+    elif format == 'jpeg':
+      info['codec'] = 'jpeg'
+      info['width'], info['height'] = get_jpeg_dimensions(fread)
+    elif format == 'png':
+      analyze_png(fread, info, fskip)
+    elif format in ('pbm', 'pgm', 'ppm'):
+      if fread(2)[1] in '123':
+        info['codec'] = 'rawascii'
+      else:
+        info['codec'] = 'raw'
+      # TODO(pts): Detect image dimensions.
+    elif format == 'flac':
+      analyze_flac(fread, info, fskip)
+    elif format == 'brn':
+      info['codec'] = 'brn'
+      info['width'], info['height'] = get_brn_dimensions(fread)
+    elif format == 'lepton':
+      info['codec'] = 'lepton'
+    elif format == 'fuji-raf':
+      info['codec'] = 'raw'
+    elif format in ('flate', 'gz', 'zip'):
+      info['codec'] = 'flate'
+    elif format in ('xz', 'lzma'):
+      info['codec'] = 'lzma'
+    elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
+      analyze_mp4(fread, info, fskip)
+    elif format.startswith('mp3-'):
       info['format'] = 'mp3'
-    elif header.startswith('ADIF'):
-      info['format'] = 'aac'
-    elif header.startswith('fLaC'):
-      info['format'] = 'flac'
-      analyze_flac(f, info, header)
+    elif format == 'jp2':
+      if len(fread(12)) != 12:
+        raise ValueError('Too short for jp2 header.')
+      analyze_mp4(fread, info, fskip)
+    elif format == 'bmp':
+      analyze_bmp(fread, info, fskip)
+    elif format == 'flic':
+      analyze_flic(fread, info, fskip)
+    elif format == 'exe':
+      analyze_exe(fread, info, fskip)
 
-    # --- Non-media data.
-
-    elif header[:4].lower().startswith('@ech'):
-      if len(header) < 9:
-        header += f.read(9 - len(header))
-      if header[:9].lower().startswith('@echo off'):
-        info['format'] = 'windows-cmd'  # Or DOS .bat file.
-    elif header.startswith('<?xm'):
-      if len(header) < 5:
-        header += f.read(5 - len(header))
-      if header.startswith('<?xml'):
-        info['format'] = 'xml'
-    elif header[:4].lower().startswith('<?ph'):
-      if len(header) < 5:
-        header += f.read(5 - len(header))
-      if header[:5].lower().startswith('<?php'):
-        info['format'] = 'php'
-    elif (header.startswith('<!--') or
-          header[:4].lower() in ('<htm', '<hea', '<bod', '<!do')):
-      # We could be more strict here, e.g. rejecting non-HTML docypes.
-      # TODO(pts): Ignore whitespace in the beginning above.
-      if len(header) < 256:
-        header += f.read(256 - len(header))
-      if is_html(header):
-        info['format'] = 'html'
-    elif header.startswith('\x0a\x04B\xd2'):
-      if len(header) < 7:
-        header += f.read(7 - len(header))
-      if header.startswith('\x0a\x04B\xd2\xd5N\x12'):
-        info['format'], inf['codec'] = 'brn', 'brn'
-        info['width'], info['height'] = get_brn_dimensions(f, header)
-    elif header.startswith('JASC'):
-      info['format'] = 'jbf'
-    elif header.startswith('\xca\xfe\xba\xbe'):
-      info['format'] = 'java-class'
-    elif (header.startswith('\xd0\xcf\x11\xe0') or
-          header.startswith('\x0e\x11\xfc\x0d')):
-      if len(header) < 8:
-        header += f.read(8 - len(header))
-      if (header.startswith('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') or
-          header.startswith('\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e')):
-        # OLE compound file, including Thumbs.db
-        # http://forensicswiki.org/wiki/OLE_Compound_File
-        info['format'] = 'olecf'
-    elif header.startswith('ADMY'):
-      info['format'] = 'avidemux-mpeg-index'
-    elif header.startswith('//AD'):
-      info['format'] = 'avidemux-project'
-
-    # --- Compressed.
-
-    elif (header.startswith('PK\1\2') or header.startswith('PK\3\4') or
-          header.startswith('PK\5\6') or header.startswith('PK\7\x08') or
-          header.startswith('PK\6\6')):  # ZIP64.
-      info['format'], info['codec'] = 'zip', 'flate'
-    elif header.startswith('Rar!'):
-      info['format'] = 'rar'
-    elif (header.startswith('7kSt') or
-          header.startswith('zPQ') and 1 <= ord(header[3]) <= 127):
-      info['format'] = 'zpaq'
-    elif header.startswith('\037\213\010'):
-      info['format'], info['codec'] = 'gz', 'flate'
-    elif header.startswith('BZh'):
-      info['format'] = 'bz2'
-    elif header.startswith('LZIP'):
-      info['format'] = 'lzip'
-    elif header.startswith('\x89LZO'):
-      if len(header) < 7:
-        header += f.read(7 - len(header))
-      if header.startswith('\x89LZO\0\r\n'):
-        info['format'] = 'lzop'
-    elif header.startswith('7z\xbc\xaf'):
-      if len(header) < 6:
-        header += f.read(6 - len(header))
-      if header.startswith('7z\xbc\xaf\x27\x1c'):
-        info['format'] = '7z'
-    elif header.startswith('\xfd7zX'):
-      if len(header) < 6:
-        header += f.read(6 - len(header))
-      if header.startswith('\xfd7zXZ\0'):
-        info['format'] = 'xz'
-    elif header.startswith('\x5d\0\0'):
-      if len(header) < 13:
-        header += f.read(3 - len(header))
-      if header[12] in '\0\xff':
-        info['format'] = 'lzma'
-    elif header.startswith('%PDF'):
-      info['format'] = 'pdf'
-    elif header.startswith('%!PS'):
-      info['format'] = 'ps'
-    elif header.startswith('\x7fELF'):
-      if len(header) < 7:
-        header += f.read(7 - len(header))
-      if (len(header) >= 7 and header[4] in '\1\2' and header[5] in '\1\2' and
-          header[6] == '\1'):
-        info['format'] = 'elf'
-    elif header.startswith('form'):
-      if len(header) < 7:
-        header += f.read(7 - len(header))
-      if header.startswith('format='):
-        # Filename extension: .mfo
-        # Example: output of pymediafileinfo.
-        info['format'] = 'fileinfo'
-    elif header.startswith('#!/') or header.startswith('#! /'):
-      info['format'] = 'unixscript'  # Unix script with shebang.
-    elif header.startswith('\367\002'):  # Move this down (short prefix).
-      info['format'] = 'dvi'
-      # TODO(pts): 10 byte prefix? "\367\002\001\203\222\300\34;\0\0"
-    elif (header.startswith('\x78\x01') or header.startswith('\x78\x5e') or
-          header.startswith('\x78\x9c') or header.startswith('\x78\xda')):
-      # Compressed in ZLIB format (/FlateEncode).
-      info['format'], info['codec'] = 'flate', 'flate'
-
-    # --- Anything with very short header. Has to come last.
-
-    else:  # Last few matchers, with very short header.
-      # TODO(pts): Make it compatible with 'winexe', in any order.
-      info['format'] = '?'
-      if info['format'] == '?' and len(header) < 8:
-        # Mustn't be more than 8 bytes, for analyze_mp4.
-        header += f.read(8 - len(header))
-      if (info['format'] == '?' and
-          header.startswith('\0\0\0') and len(header) >= 4 and
-          ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0 and
-          header[4 : 8] == 'ftyp'):
-        info['format'] = 'mp4'  # Can also be (new) .mov, .f4v etc. as a subformat.
-        analyze_mp4(f, info, fskip, header)
-      if (info['format'] == '?' and
-          header.startswith('\0\0\0\x0cjP  ')):
-        if len(header) < 12:
-          header += f.read(12 - len(header))
-        if header.startswith('\0\0\0\x0cjP  \r\n\x87\n'):
-          info['format'] = 'jp2'  # JPEG2000 container format.
-          analyze_mp4(f, info, fskip, header[12:])
-      if (info['format'] == '?' and
-          header[4 : 8] == 'mdat'):  # TODO(pts): Make it compatible with 'winexe'.
-        info['format'] = 'mov'
-        analyze_mp4(f, info, fskip, header)
-      if (info['format'] == '?' and
-            header.startswith('\0\0') and
-            header[4 : 8] in ('wide', 'free', 'skip')):
-        # Immediately followed by a 4-byte size, then 'mdat'.
-        info['format'] = 'mov'
-        analyze_mp4(f, info, fskip, header)
-      if (info['format'] == '?' and
-          header[0] == '\0' and header[1] in '\0\1\2\3\4\5\6\7\x08' and
-          header[4 : 8] == 'moov'):
-        info['format'] = 'mov'
-        analyze_mp4(f, info, fskip, header)
-      if (info['format'] == '?' and
-            header.startswith('\0\0\0') and
-            header[4 : 8] == 'pnot'):
-        info['format'] = 'pnot'  # Seems to contain an image.
-      if (info['format'] == '?' and
-          header.startswith('BM')):
-        if len(header) < 10:  # Don't read too much, for other formats later.
-          header += f.read(10 - len(header))
-        if header[6 : 10] == '\0\0\0\0':
-          if len(header) < 18:
-            header += f.read(18 - len(header))
-          if header[15 : 18] == '\0\0\0' and 12 <= ord(header[14]) <= 127:
-            if len(header) < 26:
-              header += f.read(26 - len(header))
-            info['format'] = 'bmp'
-            b = ord(header[14])
-            if b in (12, 64) and len(header) >= 22:
-              info['width'], info['height'] = struct.unpack(
-                  '<HH', header[18 : 22])
-            elif b in (40, 124) and len(header) >= 26:
-              info['width'], info['height'] = struct.unpack(
-                  '<LL', header[18 : 26])
-
-      if (info['format'] == '?' and header[4 : 6] in ('\x12\xaf', '\x11\xaf')):
-        if len(header) < 16:
-          header += f.read(16 - len(header))
-        if header[12 : 14] == '\x08\0' and header[14 : 16] in ('\3\0', '\0\0'):
-          # Autodesk Animator FLI or Autodesk Animator Pro flc.
-          # http://www.drdobbs.com/windows/the-flic-file-format/184408954
-          info['format'] = 'flic'
-          if header[4] == '\x12':
-            info['subformat'] = 'flc'
-          else:
-            info['subformat'] = 'fli'
-          width, height = struct.unpack('<HH', header[8 : 12])
-          video_track_info = {'type': 'video', 'codec': 'rle'}
-          info['tracks'] = [video_track_info]
-          set_video_dimens(video_track_info, width, height)
-      if (info['format'] == '?' and
-          (header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
-        # https://en.wikipedia.org/wiki/MPEG_transport_stream
-        i = header.find('\x47')
-        if len(header) >= i + 4:
-          b, = struct.unpack('>L', header[i : i + 4])
-          tei = (b >> 23) & 1
-          pusi = (b >> 22) & 1
-          tp = (b >> 21) & 1
-          packet_id = (b >> 8) & 0x1fff  # 13-bit.
-          tsc = (b >> 6) & 3
-          afc = (b >> 4) & 3
-          cc = b & 15
-          # TODO(pts): If packet_id == 8191, then it's the null packet, and find
-          # the next packet.
-          if tei == 0 and cc == 0 and tsc == 0 and packet_id in (0, 0x11, 8191):
-            # Also applies to .m2ts.
-            info['format'] = 'mpegts'
-            # packet_id=0 is Program Association Table (PAT)
-            # packet_id=0x11 is
-            # https://en.wikipedia.org/wiki/Service_Description_Table
-          elif (header[0] == '\x47' and
-                header[2] == '\0' and (ord(header[1]) & 0x5f) == 0x40 and
-                (ord(header[3]) & 0x10) == 0x10):
-            info['format'] = 'mpegts'  # Old getting of parameters.
-      if (info['format'] == '?' and
-          header[0] == '\n' and header[2] == '\1' and ord(header[1]) <= 5 and
-          header[3] in '\1\2\4\x08'):  # Move this down.
-        format = 'pcx'  # sam2p can read it.
-      if (info['format'] == '?' and
-          30 <= ord(header[0]) <= 63 and ord(header[1]) <= 11):
-        if len(header) < 17:
-          header += f.read(17 - len(header))
-        if ord(header[16]) <= 8 or ord(header[16]) == 24:
-          # Unfortunately not all tga (targa) files have 'TRUEVISION-XFILE.\0'.
-          format = 'tga'  # sam2p can read it.
-      if (info['format'] == '?' and
-          (header.startswith('\xff\xfa') or header.startswith('\xff\xfb')) and
-           ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12):
-        # The technically more correct term is MPEG ADTS.
-        info['format'] = 'mp3'
-      if (info['format'] == '?' and header.startswith('MZ')):
-        # Windows .exe file (PE, Portable Executable).
-        if len(header) < 64:
-          header += f.read(64 - len(header))
-        pe_ofs, = struct.unpack('<L', header[60: 64])
-        if pe_ofs < 8180 and len(header) < pe_ofs + 300:
-          header += f.read(pe_ofs + 300 - len(header))
-        if (len(header) >= pe_ofs + 6 and
-            header.startswith('MZ') and
-            header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
-            header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
-            # Only i386 and amd64 are recognized.
-            header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
-          info['format'] = 'winexe'
-          # 108 bytes instead of 92 bytes for PE32+.
-          rva_ofs = pe_ofs + 24 + 92 + 16 * (
-              header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
-          rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
-          if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
-            vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
-            if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
-              info['format'] = 'dotnetexe'  # .NET executable assembly.
-
-    if not info.get('format'):
-      info['format'] = '?'
     if info.get('tracks'):
       copy_info_from_tracks(info)
     return info
@@ -2347,10 +2325,19 @@ def main(argv):
       had_error = True
       print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
       continue
+    filesize = None
     try:
-      had_error_here, info = True, {}
+      f.seek(0, 2)
+      filesize = int(f.tell())
+      f.seek(0)
+    except (IOError, OSError, ValueError, AttributeError):
+      pass
+    try:
+      had_error_here, info = True, {'f': filename}
+      if filesize is not None:
+        info['size'] = filesize
       try:
-        info = mediafileinfo_detect.detect(f, info, is_seek_ok=True)
+        info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
         had_error_here = False
       except ValueError, e:
         info['error'] = 'bad_data'
@@ -2378,7 +2365,7 @@ def main(argv):
         # header_end_offset, hdr_done_at: Offset we reached after parsing
         # headers.
         info['hdr_done_at'] = int(f.tell())
-      except (IOError, OSError, AttributeError):
+      except (IOError, OSError, ValueError, AttributeError):
         pass
       sys.stdout.write(format_info(info))
       sys.stdout.flush()
