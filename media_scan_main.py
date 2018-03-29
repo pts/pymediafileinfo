@@ -735,7 +735,7 @@ def detect_file(filename, filesize, do_fp, do_sha256):
       info['size'] = filesize
     elif info['size'] != filesize:
       print >>sys.stderr, (
-          'warning file size mismatch for %r: '
+          'warning: file size mismatch for %r: '
           'from_fileobj=%d from_stat=%d' %
           (filename, info['size'], filesize))
 

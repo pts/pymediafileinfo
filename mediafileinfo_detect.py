@@ -2116,6 +2116,7 @@ def analyze(f, info=None, file_size_for_seek=None):
   Returns:
     The info dict.
   """
+  # !! fix bug: not an .iso file: error: bad data in file 'KB3AIK_EN.iso': mp4 box size too small for xtype '\x00\x00\x00\x00': 0
   if info is None:
     info = {}
   # Set it early, in case of an exception.
