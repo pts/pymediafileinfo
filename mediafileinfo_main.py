@@ -95,6 +95,7 @@ def main(argv):
         info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
         had_error_here = False
       except ValueError, e:
+        #raise
         info['error'] = 'bad_data'
         if e.__class__ == ValueError:
           print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)

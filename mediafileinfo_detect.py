@@ -981,7 +981,7 @@ def analyze_mp4(fread, info, fskip):
 # See all on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
 # All keys are converted to lowercase, and whitespace-trimmed.
 # TODO(pts): Merge this with MP4_VIDEO_CODECS?
-# !! TODO(pts): Fill this.
+# TODO(pts): Fill this.
 WINDOWS_VIDEO_CODECS = {
     'avc1': 'h264',
     'dx50': 'divx5',
@@ -1045,7 +1045,7 @@ def get_windows_video_codec(codec):
 # http://www.onicos.com/staff/iz/formats/wav.html
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
-# !! TODO(pts): Find more.
+# TODO(pts): Find more.
 WINDOWS_AUDIO_FORMATS = {
     0x0001: 'pcm',
     0x0002: 'adpcm',
@@ -1830,9 +1830,11 @@ FORMAT_ITEMS = (
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
     ('mov-mdat', (4, 'mdat')),
-    # Immediately followed by a 4-byte size, then 'mdat'.
-    ('mov-small', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
-    ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'))),
+    # This box ('wide', 'free' or 'skip'), after it's data, is immediately
+    # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
+    # can't detect 'mdat' here, it's too far for us.
+    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
+    ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
@@ -1939,8 +1941,11 @@ FORMAT_ITEMS = (
     ('fileinfo', (0, 'format=')),
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+    ('?-zeros8', (0, '\0' * 8)),
+    ('?-zeros16', (0, '\0' * 16)),
+    ('?-zeros32', (0, '\0' * 32)),
+    ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
 )
-
 
 
 class FormatDb(object):
@@ -1983,7 +1988,7 @@ class FormatDb(object):
           hps = max(hps, size + len(pattern[0]))
         else:
           hps = max(hps, size)
-    self.header_preread_size = hps
+    self.header_preread_size = hps  # Typically 64.
     self.formats_by_prefix = fbp
 
 
@@ -2119,7 +2124,6 @@ def analyze(f, info=None, file_size_for_seek=None):
   Returns:
     The info dict.
   """
-  # !! fix bug: not an .iso file: error: bad data in file 'KB3AIK_EN.iso': mp4 box size too small for xtype '\x00\x00\x00\x00': 0
   if info is None:
     info = {}
   # Set it early, in case of an exception.
