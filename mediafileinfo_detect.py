@@ -522,27 +522,27 @@ def analyze_mkv(fread, info, fskip):
       return (b & 63) << 8 | ord(data)
     if b > 31:
       data = read_n(2)
-      if not len(data) != 2:
+      if len(data) != 2:
         raise ValueError('EOF in mkv element size 9')
       return (b & 31) << 16 | struct.unpack('>H', data)[0]
     if b > 15:
       data = read_n(3)
-      if not len(data) != 3:
+      if len(data) != 3:
         raise ValueError('EOF in mkv element size 10')
       return (b & 15) << 24 | struct.unpack('>L', '\0' + data)[0]
     if b > 7:
       data = read_n(4)
-      if not len(data) != 4:
+      if len(data) != 4:
         raise ValueError('EOF in mkv element size 11')
       return (b & 7) << 32 | struct.unpack('>L', data)[0]
     if b > 3:
       data = read_n(5)
-      if not len(data) != 5:
+      if len(data) != 5:
         raise ValueError('EOF in mkv element size 12')
       return (b & 3) << 40 | struct.unpack('>Q', '\0\0\0' + data)[0]
     if b > 1:
       data = read_n(6)
-      if not len(data) != 6:
+      if len(data) != 6:
         raise ValueError('EOF in mkv element size 13')
       return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
     raise ValueError('Invalid ID prefix: %d' % b)
