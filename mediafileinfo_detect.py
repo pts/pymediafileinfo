@@ -667,6 +667,7 @@ def analyze_mkv(fread, info, fskip):
             data = read_n(size)
             if len(data) != size:
               raise ValueError('EOF in CodecID element.')
+            data = data.rstrip('\0')  # Broken, but some mkv files have it.
             track_info['codec'] = MKV_CODEC_IDS.get(data, data)
           elif xid == '\x25\x86\x88':  # CodecName.
             data = read_n(size)
