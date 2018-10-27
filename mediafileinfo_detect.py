@@ -806,10 +806,12 @@ def analyze_mp4(fread, info, fskip):
       ofs_limit = size
       while ofs_limit > 0:  # Dump sequences of boxes inside.
         if ofs_limit < 8:
-          raise ValueError('MP4E2')
+          raise ValueError('EOF in mp4 composite box size')
         size2, xtype2 = struct.unpack('>L4s', fread(8))
         if not (8 <= size2 <= ofs_limit):
-          raise ValueError('MP4E3 size=%d ofs_limit=%d' % (size2, ofs_limit))
+          raise ValueError(
+              'EOF in mp4 cmposite box, size=%d ofs_limit=%d' %
+              (size2, ofs_limit))
         ofs_limit -= size2
         xtype_path.append(xtype2)
         process_box(size2 - 8)
@@ -874,23 +876,23 @@ def analyze_mp4(fread, info, fskip):
           last_hdlr_type_list.append(data[8 : 12])
         elif xytype == 'stbl/stsd':  # /moov/trak/mdia/minf/stbl/stsd
           if not last_hdlr_type_list:
-            raise ValueError('Found stsd without a hdlr first.')
+            raise ValueError('Found mp4 stsd without a hdlr first.')
           if len(data) < 8:
-            raise ValueError('MP4E11')
+            raise ValueError('mp4 ststd too short.')
           version_and_flags, count = struct.unpack('>LL', data[:8])
           if version_and_flags:
             raise ValueError('Bad mp4 stsd bad_version_and_flags=%d' % version_and_flags)
           i = 8
           while i < len(data):
             if len(data) - i < 8:
-              raise ValueError('MP4E12')
+              raise ValueError('mp4 stsd item size too short.')
             if not count:
-              raise ValueError('MP4E13')
+              raise ValueError('Too few mp4 stsd items.')
             # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
             ysize, codec = struct.unpack('>L4s', data[i : i + 8])
             codec = codec.strip().lower()  # Remove whitespace, e.g. 'raw'.
             if ysize < 8 or i + ysize > len(data):
-              raise ValueError('MP4E14')
+              raise ValueError('Bad mp4 stsd item size.')
             yitem = data[i + 8 : i + ysize]
             last_hdlr_type_list.append('d')  # Signal above.
             # The 'rle ' codec has ysize < 28.
@@ -926,7 +928,7 @@ def analyze_mp4(fread, info, fskip):
             i += ysize
             count -= 1
           if count:
-            raise ValueError('MP4E15')
+            raise ValueError('Too many mp4 stsd items.')
 
   xtype_path = ['']
   toplevel_xtypes = set()
