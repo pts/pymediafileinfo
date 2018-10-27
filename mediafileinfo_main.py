@@ -61,7 +61,7 @@ def format_info(info):
 
 def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
-    print >>sys.exit(
+    print >>sys.stderr, (
         'mediafileinfo.py: Get parameters and dimension of media files.\n'
         'This is free software, GNU GPL >=2.0. '
         'There is NO WARRANTY. Use at your risk.\n'
