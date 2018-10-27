@@ -558,27 +558,27 @@ def mediafileinfo_detect():
         return (b & 63) << 8 | ord(data)
       if b > 31:
         data = read_n(2)
-        if not len(data) != 2:
+        if len(data) != 2:
           raise ValueError('EOF in mkv element size 9')
         return (b & 31) << 16 | struct.unpack('>H', data)[0]
       if b > 15:
         data = read_n(3)
-        if not len(data) != 3:
+        if len(data) != 3:
           raise ValueError('EOF in mkv element size 10')
         return (b & 15) << 24 | struct.unpack('>L', '\0' + data)[0]
       if b > 7:
         data = read_n(4)
-        if not len(data) != 4:
+        if len(data) != 4:
           raise ValueError('EOF in mkv element size 11')
         return (b & 7) << 32 | struct.unpack('>L', data)[0]
       if b > 3:
         data = read_n(5)
-        if not len(data) != 5:
+        if len(data) != 5:
           raise ValueError('EOF in mkv element size 12')
         return (b & 3) << 40 | struct.unpack('>Q', '\0\0\0' + data)[0]
       if b > 1:
         data = read_n(6)
-        if not len(data) != 6:
+        if len(data) != 6:
           raise ValueError('EOF in mkv element size 13')
         return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
       raise ValueError('Invalid ID prefix: %d' % b)
@@ -703,6 +703,7 @@ def mediafileinfo_detect():
               data = read_n(size)
               if len(data) != size:
                 raise ValueError('EOF in CodecID element.')
+              data = data.rstrip('\0')  # Broken, but some mkv files have it.
               track_info['codec'] = MKV_CODEC_IDS.get(data, data)
             elif xid == '\x25\x86\x88':  # CodecName.
               data = read_n(size)
@@ -842,10 +843,12 @@ def mediafileinfo_detect():
         ofs_limit = size
         while ofs_limit > 0:  # Dump sequences of boxes inside.
           if ofs_limit < 8:
-            raise ValueError('MP4E2')
+            raise ValueError('EOF in mp4 composite box size')
           size2, xtype2 = struct.unpack('>L4s', fread(8))
           if not (8 <= size2 <= ofs_limit):
-            raise ValueError('MP4E3 size=%d ofs_limit=%d' % (size2, ofs_limit))
+            raise ValueError(
+                'EOF in mp4 cmposite box, size=%d ofs_limit=%d' %
+                (size2, ofs_limit))
           ofs_limit -= size2
           xtype_path.append(xtype2)
           process_box(size2 - 8)
@@ -910,23 +913,23 @@ def mediafileinfo_detect():
             last_hdlr_type_list.append(data[8 : 12])
           elif xytype == 'stbl/stsd':  # /moov/trak/mdia/minf/stbl/stsd
             if not last_hdlr_type_list:
-              raise ValueError('Found stsd without a hdlr first.')
+              raise ValueError('Found mp4 stsd without a hdlr first.')
             if len(data) < 8:
-              raise ValueError('MP4E11')
+              raise ValueError('mp4 ststd too short.')
             version_and_flags, count = struct.unpack('>LL', data[:8])
             if version_and_flags:
               raise ValueError('Bad mp4 stsd bad_version_and_flags=%d' % version_and_flags)
             i = 8
             while i < len(data):
               if len(data) - i < 8:
-                raise ValueError('MP4E12')
+                raise ValueError('mp4 stsd item size too short.')
               if not count:
-                raise ValueError('MP4E13')
+                raise ValueError('Too few mp4 stsd items.')
               # codec usually indicates the codec, e.g. 'avc1' for video and 'mp4a' for audio.
               ysize, codec = struct.unpack('>L4s', data[i : i + 8])
               codec = codec.strip().lower()  # Remove whitespace, e.g. 'raw'.
               if ysize < 8 or i + ysize > len(data):
-                raise ValueError('MP4E14')
+                raise ValueError('Bad mp4 stsd item size.')
               yitem = data[i + 8 : i + ysize]
               last_hdlr_type_list.append('d')  # Signal above.
               # The 'rle ' codec has ysize < 28.
@@ -962,7 +965,7 @@ def mediafileinfo_detect():
               i += ysize
               count -= 1
             if count:
-              raise ValueError('MP4E15')
+              raise ValueError('Too many mp4 stsd items.')
 
     xtype_path = ['']
     toplevel_xtypes = set()
@@ -1014,7 +1017,7 @@ def mediafileinfo_detect():
   # See all on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
   # All keys are converted to lowercase, and whitespace-trimmed.
   # TODO(pts): Merge this with MP4_VIDEO_CODECS?
-  # !! TODO(pts): Fill this.
+  # TODO(pts): Fill this.
   WINDOWS_VIDEO_CODECS = {
       'avc1': 'h264',
       'dx50': 'divx5',
@@ -1078,7 +1081,7 @@ def mediafileinfo_detect():
   # http://www.onicos.com/staff/iz/formats/wav.html
   # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
   # See many on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Audio_Riff.csv
-  # !! TODO(pts): Find more.
+  # TODO(pts): Find more.
   WINDOWS_AUDIO_FORMATS = {
       0x0001: 'pcm',
       0x0002: 'adpcm',
@@ -1863,9 +1866,11 @@ def mediafileinfo_detect():
       # DIF DV (digital video).
       ('dv', (0, '\x1f\x07\x00')),
       ('mov-mdat', (4, 'mdat')),
-      # Immediately followed by a 4-byte size, then 'mdat'.
-      ('mov-small', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
-      ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'))),
+      # This box ('wide', 'free' or 'skip'), after it's data, is immediately
+      # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
+      # can't detect 'mdat' here, it's too far for us.
+      ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
+      ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
       # Autodesk Animator FLI or Autodesk Animator Pro flc.
       # http://www.drdobbs.com/windows/the-flic-file-format/184408954
       ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
@@ -1972,8 +1977,11 @@ def mediafileinfo_detect():
       ('fileinfo', (0, 'format=')),
       ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
       ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+      ('?-zeros8', (0, '\0' * 8)),
+      ('?-zeros16', (0, '\0' * 16)),
+      ('?-zeros32', (0, '\0' * 32)),
+      ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
   )
-
 
 
   class FormatDb(object):
@@ -2016,7 +2024,7 @@ def mediafileinfo_detect():
             hps = max(hps, size + len(pattern[0]))
           else:
             hps = max(hps, size)
-      self.header_preread_size = hps
+      self.header_preread_size = hps  # Typically 64.
       self.formats_by_prefix = fbp
 
 
@@ -2340,6 +2348,7 @@ def main(argv):
         info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
         had_error_here = False
       except ValueError, e:
+        #raise
         info['error'] = 'bad_data'
         if e.__class__ == ValueError:
           print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
