@@ -1941,6 +1941,20 @@ FORMAT_ITEMS = (
     ('fileinfo', (0, 'format=')),
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+    ('cue', (0, 'REM GENRE ')),
+    ('cue', (0, 'REM DATE ')),
+    ('cue', (0, 'REM DISCID ')),
+    ('cue', (0, 'REM COMMENT ')),
+    ('cue', (0, 'PERFORMER ')),
+    ('cue', (0, 'TITLE ')),
+    ('cue', (0, 'FILE ')),
+    ('cue', (0, '\xef\xbb\xbfREM GENRE ')),
+    ('cue', (0, '\xef\xbb\xbfREM DATE ')),
+    ('cue', (0, '\xef\xbb\xbfREM DISCID ')),
+    ('cue', (0, '\xef\xbb\xbfREM COMMENT ')),
+    ('cue', (0, '\xef\xbb\xbfPERFORMER ')),
+    ('cue', (0, '\xef\xbb\xbfTITLE ')),
+    ('cue', (0, '\xef\xbb\xbfFILE ')),
     ('?-zeros8', (0, '\0' * 8)),
     ('?-zeros16', (0, '\0' * 16)),
     ('?-zeros32', (0, '\0' * 32)),
@@ -1952,8 +1966,9 @@ class FormatDb(object):
   __slots__ = ('formats_by_prefix', 'header_preread_size')
 
   def __init__(self, format_items):
-    if len(dict(format_items)) != len(format_items):
-      raise ValueError('Duplicate key in format_items.')
+    # It's OK to have duplicate, e.g. 'cue'.
+    #if len(dict(format_items)) != len(format_items):
+    #  raise ValueError('Duplicate key in format_items.')
     hps = 0
     fbp = [{} for i in xrange(5)]
     for format_spec in format_items:
