@@ -25,17 +25,17 @@ Advantages of mediafileinfo.py:
 * It's fast (see FAQ entry Q4) even though it's written in Python, and some of
   the alternatives are written in C or C++.
 * It has only a few dependencies: stock Python 2.4, 2.5, 2.6 or 2.7; no
-  external package installation needed.
+  package installation needed.
 * It isn't not fooled by incorrect media metadata: it gets media parameters
   directly from the media data (e.g. width sometimes from the video
   frames themselves).
 
 Disadvantages of mediafileinfo.py:
 
-* Doesn't support many media formats for width and height.
-* Isn't able to get metadata (such as author and EXIF tags).
+* It oesn't support many media formats for width and height.
+* It isn't able to get metadata (such as author and EXIF tags).
 
-Usage (don't type the leading $):
+Usage on Unix (don't type the leading $):
 
   $ curl -L -o mediafileinfo.py https://github.com/pts/pymediafileinfo/raw/master/mediafileinfo.py
   $ chmod 755 mediafileinfo.py
@@ -61,6 +61,11 @@ A2. For only a few new formats, please open an issue or send a patch.
 Q3. What are the alternatives of mediafileinfo.py?
 
 A3. Some alternatives are:
+
+    * mediafileinfo.pl (http://github.com/pts/plmediafileinfo) is a Perl
+      script similar to mediafileinfo.py: it has the same output format, it
+      has similarly few dependencies (only Perl 5 with built-in packages).
+      It supports only a few (about 5) media formats though.
 
     * MediaInfo (https://mediaarea.net/en/MediaInfo) is a library in C++
       with the command-line tool mediainfo(1) and also some GUI tools. It
@@ -178,6 +183,8 @@ TODO
 * TODO(pts): Extend media_scan.py with code from here.
 * TODO(pts): Add memory limits against large reads everywhere.
 * TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
-             my @formats) for more image formats.
+             my @formats) for more image formats. Publish img_bbox.pl on
+             GitHub (copy metadata from
+             http://freshmeat.sourceforge.net/projects/img_bbox)
 
 __END__
