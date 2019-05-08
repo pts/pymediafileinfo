@@ -193,7 +193,7 @@ def mediafileinfo_detect():
 
     if not data.startswith('FLV'):
       raise ValueError('flv signature not found.')
-    info['type'] = 'flv'
+    info['format'] = 'flv'
     if data[3] != '\1':
       # Not found any files with other versions.
       raise ValueError('Only flv version 1 is supported.')
@@ -1305,7 +1305,7 @@ def mediafileinfo_detect():
     riff_id, ofs_limit, avi_id = struct.unpack('<4sL4s', data)
     if riff_id != 'RIFF' or avi_id != 'AVI ':
       raise ValueError('avi signature not found.')
-    info['type'] = 'avi'
+    info['format'] = 'avi'
     if ofs_limit == 0:
       ofs_limit = None
     else:
@@ -1947,6 +1947,7 @@ def mediafileinfo_detect():
 
       # Non-compressed, non-media.
 
+      ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
       # Or DOS .bat file.
       ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
       ('xml', (0, '<?xml', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
