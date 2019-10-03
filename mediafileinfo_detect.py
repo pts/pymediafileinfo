@@ -611,6 +611,11 @@ def analyze_mkv(fread, info, fskip):
         size = read_size()
         if ofs_list[0] + size > tracks_end:
           raise ValueError('Size of in-Tracks element too large.')
+        if xid == '\xbf':  # Some (buggy?) .mkv files have it.
+          data = read_n(size)
+          if len(data) != size:
+            raise ValueError('EOF in bf element.')
+          continue
         if xid != '\xae':  # Track.
           raise ValueError('Expected Track element, got: %s' % xid.encode('hex'))
         track_end = ofs_list[0] + size
