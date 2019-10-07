@@ -1419,6 +1419,24 @@ def analyze_flac(fread, info, fskip):
   })
 
 
+def analyze_ac3(fread, info, fskip):
+  # https://raw.githubusercontent.com/trms/dvd_import/master/Support/a_52a.pdf
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for ac3.')
+  if not header.startswith('\x0b\x77'):
+    raise ValueError('ac3 signature not found.')
+  arate = (48000, 44100, 32000, 0)[ord(header[4]) >> 6]  # fscod.
+  if arate == 0:
+    raise ValueError('Invalid arate for ac3.')
+  anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[5]) & 7]  # acmod.
+  info['format'] = 'ac3'
+  info['acodec'] = 'ac3'
+  info['asbits'] = 16
+  info['arate'] = arate
+  info['anch'] = anch
+
+
 def analyze_mpeg_ps(fread, info, fskip):
   # https://en.wikipedia.org/wiki/MPEG_program_stream
   header = fread(14)
@@ -1975,6 +1993,7 @@ FORMAT_ITEMS = (
     ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
+    ('ac3', (0, '\x0b\x77', 7, lambda header: (len(header) >= 7 and ord(header[4]) >> 6 != 3, 20))),
 
     # Document media.
 
@@ -2330,6 +2349,8 @@ def analyze(f, info=None, file_size_for_seek=None):
   elif format == 'mpeg-adts':
     # Can change info['format'] = 'mp3'.
     analyze_mpeg_adts(fread, info, fskip)
+  elif format == 'ac3':
+    analyze_ac3(fread, info, fskip)
   elif format == 'mp3-id3v2':
     analyze_id3v2(fread, info, fskip)
     analyze_mpeg_adts(fread, info, fskip)
