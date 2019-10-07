@@ -1650,7 +1650,7 @@ def get_brn_dimensions(fread):
     raise ValueError('Dimensions not found in BRN.')
 
 
-def is_mpegts(header):
+def is_mpeg_ts(header):
   if ((header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
     # https://en.wikipedia.org/wiki/MPEG_transport_stream
     i = header.find('\x47')
@@ -1843,7 +1843,7 @@ FORMAT_ITEMS = (
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
-    ('mpegts', (0, ('\0', '\x47'), 7, lambda header: (is_mpegts(header), 301))),
+    ('mpeg-ts', (0, ('\0', '\x47'), 7, lambda header: (is_mpeg_ts(header), 301))),
 
     # Image.
 
