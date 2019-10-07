@@ -1437,6 +1437,20 @@ def analyze_ac3(fread, info, fskip):
   info['anch'] = anch
 
 
+def analyze_mpeg_video(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Elementary_stream
+  header = fread(7)
+  if len(header) < 7:
+    raise ValueError('Too short for mpeg-video.')
+  if not header.startswith('\0\0\1\xb3'):
+    raise ValueError('mpeg-video signature not found.')
+  info['format'] = 'mpeg-video'
+  wdht, = struct.unpack('>L', header[3 : 7])
+  info['vcodec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
+  info['width'] = (wdht >> 12) & 0xfff
+  info['height'] = wdht & 0xfff
+
+
 def analyze_mpeg_ps(fread, info, fskip):
   # https://en.wikipedia.org/wiki/MPEG_program_stream
   header = fread(14)
@@ -1916,10 +1930,11 @@ FORMAT_ITEMS = (
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
+    ('mpeg-video', (0, '\0\0\1\xb3')),
     ('mpeg-ts', (0, ('\0', '\x47'), 7, lambda header: (is_mpeg_ts(header), 301))),
     # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
     # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
-    ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5', '\xb3'))),
+    ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5'))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     ('swf', (0, ('FWS', 'CWS'))),
     ('rm', (0, '.RMF\0\0\0')),
@@ -2316,6 +2331,8 @@ def analyze(f, info=None, file_size_for_seek=None):
     analyze_avi(fread, info, fskip)
   elif format == 'mpeg-ps':
     analyze_mpeg_ps(fread, info, fskip)
+  elif format == 'mpeg-video':
+    analyze_mpeg_video(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
