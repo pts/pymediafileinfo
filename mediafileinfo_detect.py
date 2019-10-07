@@ -2038,28 +2038,32 @@ def detect_format(f):
       assert isinstance(spec, tuple)
       confidence = 0
       i = 0
+      prev_ofs = 0
       while i < len(spec):
-        size = spec[i]
-        assert isinstance(size, int)
+        ofs = spec[i]
+        assert isinstance(ofs, int)
         pattern = spec[i + 1]
         if isinstance(pattern, str):
-          assert size + len(pattern) <= 128
-          if header[size : size + len(pattern)] != pattern:
+          assert ofs + len(pattern) <= 128
+          if header[ofs : ofs + len(pattern)] != pattern:
             break
-          confidence += 100 * len(pattern) + 10 * max(10 - size, 0)
+          confidence += 100 * len(pattern) - 10 * min(ofs - prev_ofs, 10)
+          prev_ofs = ofs + len(pattern)
         elif isinstance(pattern, tuple):
           # TODO(pts): Check that each str in pattern has the same len.
-          header_sub = header[size : size + len(pattern[0])]
+          header_sub = header[ofs : ofs + len(pattern[0])]
           if not [1 for pattern2 in pattern if header_sub == pattern2]:
             break
           # We use log2_sub here to decrease the confidence when there are
-          # many patterns. We us `10 - size' to increase the confidence when
+          # many patterns. We use `-ofs' to increase the confidence when
           # matching near the start of the string.
           confidence += (
-              100 * len(header_sub) - ord(log2_sub[min(len(pattern), lmi)]) +
-              10 * max(10 - size, 0))
+              100 * len(header_sub) - ord(log2_sub[min(len(pattern), lmi)]) -
+              10 * min(ofs - prev_ofs, 10))
+          prev_ofs = ofs + len(pattern[0])
         elif callable(pattern):
-          assert size <= 128
+          # Don't update prev_ofs, ofs is too large here.
+          assert ofs <= 128
           is_matching, cadd = pattern(header)
           if not is_matching:
             break
@@ -2070,7 +2074,7 @@ def detect_format(f):
       if i == len(spec):  # The spec has matched.
         matches.append((confidence, format))
   if matches:
-    matches.sort()  # By confidence ascending.
+    matches.sort()  # By (confidence, format) ascending.
     format = matches[-1][1]
   else:
     format = '?'
