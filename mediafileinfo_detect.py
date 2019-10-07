@@ -1470,6 +1470,28 @@ def analyze_mpeg_adts(fread, info, fskip):
     info['format'] = 'mpeg-adts'
 
 
+def analyze_id3v2(fread, info, fskip):
+  # Just reads the ID3v2 header with fread and fskip.
+  # http://id3.org/id3v2.3.0
+  header = fread(10)
+  if len(header) < 10:
+    raise ValueError('Too short for id3v2.')
+  if not header.startswith('ID3'):
+    raise ValueError('id3v2 signature not found.')
+  version = '2.%d.%d' % (ord(header[3]), ord(header[4]))
+  if ord(header[3]) > 9:
+    raise ValueError('id3v2 version too large: %d' % version)
+  if ord(header[5]) & 7:
+    raise ValueError('Unexpected id3v2 flags: 0x%x' % ord(header[5]))
+  if ord(header[6]) >> 7 or ord(header[7]) >> 7 or ord(header[8]) >> 7 or ord(header[9]) >> 7:
+    raise ValueError('Invalid id3v2 size bits.')
+  size = ord(header[6]) << 21 | ord(header[7]) << 14 | ord(header[8]) << 7 | ord(header[9])
+  if not fskip(size):
+    raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
+  info.setdefault('format', 'id3v2')
+  info['id3_version'] = version
+
+
 # --- Image file formats.
 
 
@@ -1944,7 +1966,11 @@ FORMAT_ITEMS = (
     # Audio.
 
     ('wav', (0, 'RIFF', 8, 'WAVE')),
-    ('mp3-id3', (0, 'ID3')),
+    # https://en.wikipedia.org/wiki/ID3
+    # http://id3.org/id3v2.3.0
+    # ID3v1 is at the end of the file, so we don't care.
+    # ID3v2 is at the start of the file, before the mpeg-adts frames.
+    ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
     # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
     ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
     ('aac', (0, 'ADIF')),
@@ -2303,6 +2329,9 @@ def analyze(f, info=None, file_size_for_seek=None):
     analyze_mp4(fread, info, fskip)
   elif format == 'mpeg-adts':
     # Can change info['format'] = 'mp3'.
+    analyze_mpeg_adts(fread, info, fskip)
+  elif format == 'mp3-id3v2':
+    analyze_id3v2(fread, info, fskip)
     analyze_mpeg_adts(fread, info, fskip)
   elif format.startswith('mp3-'):
     # TODO(pts): Skip the ID3 tags in the beginning, then parse as
