@@ -1435,6 +1435,41 @@ def analyze_mpeg_ps(fread, info, fskip):
     raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
 
 
+def analyze_mpeg_adts(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Elementary_stream
+  header = fread(4)
+  if len(header) < 4:
+    raise ValueError('Too short for mpeg-adts.')
+  sfi = (ord(header[2]) >> 2) & 3
+  if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
+      (ord(header[1]) & 6) == 2):
+    info['subformat'] = 'mpeg-25'  # 2.5.
+    info['arate'] = (11025, 12000, 8000, 0)[sfi]
+  elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
+    if (ord(header[1]) >> 4) & 1:
+      info['subformat'] = 'mpeg-1'
+      info['arate'] = (44100, 48000, 32000, 0)[sfi]
+    else:
+      info['subformat'] = 'mpeg-2'
+      info['arate'] = (22050, 24000, 16000, 0)[sfi]
+  else:
+    raise ValueError('mpeg-adts signature not found.')
+  info['alayer'] = 4 - ((ord(header[1]) >> 1) & 3)
+  if info['alayer'] == 4:
+    raise ValueError('Invalid layer.')
+  if ord(header[2]) >> 4 in (0, 15):
+    raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
+  if sfi == 3:
+    raise ValueError('Invalid sampling frequency index 3.')
+  info['acodec'] = ('', 'mp1', 'mp2', 'mp3')[info['alayer']]
+  info['asbits'] = 16
+  info['anch'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
+  if info['alayer'] == 3 and info['subformat'] == 'mpeg-1':
+    info['format'] = 'mp3'
+  else:
+    info['format'] = 'mpeg-adts'
+
+
 # --- Image file formats.
 
 
@@ -1910,8 +1945,8 @@ FORMAT_ITEMS = (
 
     ('wav', (0, 'RIFF', 8, 'WAVE')),
     ('mp3-id3', (0, 'ID3')),
-    # The technically more correct term is MPEG ADTS.
-    ('mp3-adts', (0, '\xff', 1, ('\xfa', '\xfb'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
+    # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
+    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
 
@@ -2266,7 +2301,12 @@ def analyze(f, info=None, file_size_for_seek=None):
     info['codec'] = 'lzma'
   elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
+  elif format == 'mpeg-adts':
+    # Can change info['format'] = 'mp3'.
+    analyze_mpeg_adts(fread, info, fskip)
   elif format.startswith('mp3-'):
+    # TODO(pts): Skip the ID3 tags in the beginning, then parse as
+    # mpeg-adts.
     info['format'] = 'mp3'
   elif format == 'jp2':
     if len(fread(12)) != 12:
