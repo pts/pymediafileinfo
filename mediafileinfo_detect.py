@@ -1465,6 +1465,11 @@ def analyze_mpeg_ps(fread, info, fskip):
     info['subformat'] = 'mpeg-1'  # MPEG-1 system stream.
   else:
     raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
+  # TODO(pts): Use http://www.hampa.ch/mpegdemux/
+  # http://www.hampa.ch/mpegdemux/mpegdemux-0.1.4.tar.gz
+  # mpegdemux-0.1.4/src/mpeg_parse.c
+  # $ mpegdemux.static -d -s 0xe0 -b /tmp/m1dvideo.mpg m1.mpg
+  # $ mpegdemux.static -d -s 0xc0 -b /tmp/m1daudio.mpg m1.mpg
 
 
 def analyze_mpeg_adts(fread, info, fskip):
@@ -1931,6 +1936,12 @@ FORMAT_ITEMS = (
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-video', (0, '\0\0\1\xb3')),
+    # TODO(pts): Use any of these to get more info.
+    # https://github.com/topics/mpeg-ts
+    # https://github.com/asticode/go-astits
+    # https://github.com/drillbits/go-ts
+    # https://github.com/small-teton/MpegTsAnalyzer
+    # https://github.com/mzinin/ts_splitter
     ('mpeg-ts', (0, ('\0', '\x47'), 7, lambda header: (is_mpeg_ts(header), 301))),
     # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
     # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
