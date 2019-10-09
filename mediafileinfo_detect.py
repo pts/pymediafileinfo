@@ -1761,31 +1761,43 @@ def get_brn_dimensions(fread):
 
 
 def is_mpeg_ts(header):
-  if ((header[0] == '\x47' or header.startswith('\0\0\0\0\x47'))):
-    # https://en.wikipedia.org/wiki/MPEG_transport_stream
-    i = header.find('\x47')
-    if len(header) >= i + 4:
-      b, = struct.unpack('>L', header[i : i + 4])
-      tei = (b >> 23) & 1
-      pusi = (b >> 22) & 1
-      tp = (b >> 21) & 1
-      packet_id = (b >> 8) & 0x1fff  # 13-bit.
-      tsc = (b >> 6) & 3
-      afc = (b >> 4) & 3
-      cc = b & 15
-      # TODO(pts): If packet_id == 8191, then it's the null packet, and find
-      # the next packet.
-      if tei == 0 and cc == 0 and tsc == 0 and packet_id in (0, 0x11, 8191):
-        # Also applies to .m2ts.
-        True
-        # packet_id=0 is Program Association Table (PAT)
-        # packet_id=0x11 is
-        # https://en.wikipedia.org/wiki/Service_Description_Table
-      if (header[i + 2] == '\0' and (ord(header[i + 1]) & 0x5f) == 0x40 and
-          (ord(header[i + 3]) & 0x10) == 0x10):
-        # TODO(pts): Integrate this the the previous condition.
-        return True  # Old way of getting of parameters.
-  return False
+  # https://en.wikipedia.org/wiki/MPEG_transport_stream
+  is_m2ts = header.startswith('\0\0')  # Or BDAV.
+  i = (0, 4)[is_m2ts]
+  if len(header) < i + 4:
+    return False
+  had_pat = False
+  for pc in xrange(5):  # Number of packets to scan.
+    if len(header) < i + 4:
+      return True
+    if header[i] != '\x47':
+      return False
+    b, = struct.unpack('>L', header[i : i + 4])
+    tei = (b >> 23) & 1
+    pusi = (b >> 22) & 1
+    tp = (b >> 21) & 1
+    packet_id = (b >> 8) & 0x1fff  # 13-bit.
+    tsc = (b >> 6) & 3
+    afc = (b >> 4) & 3
+    cc = b & 15
+    #print (tei, cc, tsc, packet_id)
+    # TODO(pts): If packet_id == 8191, then it's the null packet, and find
+    # the next packet.
+    if tei == 0 and cc == 0 and tsc == 0 and packet_id == 0:  # PAT.
+      had_pat = True
+    elif tei == 0 and cc == 0 and tsc == 0 and 0x10 <= packet_id <= 0x20:
+      # packet_id=0x11 is
+      # https://en.wikipedia.org/wiki/Service_Description_Table
+      pass  # DVB metadata.
+    elif tei == 0 and cc == 0 and tsc == 0 and packet_id == 0x1fff: # Null.
+      pass
+    elif (tei == 0 and cc == 0 and tsc == 0 and 0x20 <= packet_id < 0x1fff and
+          had_pat):
+      break
+    else:
+      return False
+    i += (188, 192)[is_m2ts]
+  return True
 
 
 def analyze_wav(fread, info, fskip):
@@ -1942,7 +1954,7 @@ FORMAT_ITEMS = (
     # https://github.com/drillbits/go-ts
     # https://github.com/small-teton/MpegTsAnalyzer
     # https://github.com/mzinin/ts_splitter
-    ('mpeg-ts', (0, ('\0', '\x47'), 7, lambda header: (is_mpeg_ts(header), 301))),
+    ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
     # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
     ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5'))),
