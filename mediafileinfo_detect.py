@@ -2092,6 +2092,9 @@ FORMAT_ITEMS = (
 )
 
 
+HEADER_SIZE_LIMIT = 512
+
+
 class FormatDb(object):
   __slots__ = ('formats_by_prefix', 'header_preread_size')
 
@@ -2134,6 +2137,7 @@ class FormatDb(object):
         else:
           hps = max(hps, size)
     self.header_preread_size = hps  # Typically 64.
+    assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
 
 
@@ -2142,7 +2146,6 @@ FORMAT_DB = FormatDb(FORMAT_ITEMS)
 # import math; print ["\0"+"".join(chr(int(100. / 8 * math.log(i) / math.log(2))) for i in xrange(1, 1084))]'
 LOG2_SUB = '\0\0\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccdddddddddddddddeeeeeeeeeeeeeeeeffffffffffffffffggggggggggggggggghhhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiijjjjjjjjjjjjjjjjjjjjkkkkkkkkkkkkkkkkkkkkklllllllllllllllllllllllmmmmmmmmmmmmmmmmmmmmmmmmnnnnnnnnnnnnnnnnnnnnnnnnnnoooooooooooooooooooooooooopppppppppppppppppppppppppppppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsssssssssssssssssssssssssssssssssttttttttttttttttttttttttttttttttttttuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{|||||||||||||||||||||||||||||||||||||||||||||||||||||||}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}~'
 assert len(LOG2_SUB) == 1084
-
 
 def detect_format(f):
   """Detects the file format.
@@ -2167,7 +2170,7 @@ def detect_format(f):
         assert isinstance(ofs, int)
         pattern = spec[i + 1]
         if isinstance(pattern, str):
-          assert ofs + len(pattern) <= 128
+          assert ofs + len(pattern) <= HEADER_SIZE_LIMIT, 'Header too long.'
           if header[ofs : ofs + len(pattern)] != pattern:
             break
           confidence += 100 * len(pattern) - 10 * min(ofs - prev_ofs, 10)
@@ -2175,6 +2178,7 @@ def detect_format(f):
         elif isinstance(pattern, tuple):
           # TODO(pts): Check that each str in pattern has the same len.
           header_sub = header[ofs : ofs + len(pattern[0])]
+          assert ofs + len(pattern[0]) <= HEADER_SIZE_LIMIT, 'Header too long.'
           if not [1 for pattern2 in pattern if header_sub == pattern2]:
             break
           # We use log2_sub here to decrease the confidence when there are
@@ -2186,7 +2190,7 @@ def detect_format(f):
           prev_ofs = ofs + len(pattern[0])
         elif callable(pattern):
           # Don't update prev_ofs, ofs is too large here.
-          assert ofs <= 128
+          assert ofs <= HEADER_SIZE_LIMIT, 'Header too long.'
           is_matching, cadd = pattern(header)
           if not is_matching:
             break
