@@ -1470,6 +1470,20 @@ def analyze_mpeg_ps(fread, info, fskip):
   # mpegdemux-0.1.4/src/mpeg_parse.c
   # $ mpegdemux.static -d -s 0xe0 -b /tmp/m1dvideo.mpg m1.mpg
   # $ mpegdemux.static -d -s 0xc0 -b /tmp/m1daudio.mpg m1.mpg
+  #
+  # MPEG-PES packet SID (http://dvd.sourceforge.net/dvdinfo/pes-hdr.html):
+  #
+  # * 0xbd; Private stream 1 (non MPEG audio, subpictures); has extension
+  #         Audio streams are typically bd[80], bd[81] etc.
+  # * 0xbe; Padding stream; no extension, just ignore contents
+  # * 0xbf; Private stream 2 (navigation data); mostly in DVD .vob; no extension
+  # * 0xc0...0xdf; MPEG-1 or MPEG-2 audio stream; has extension
+  # * 0xe0...0xef; MPEG-1 or MPEG-2 video stream; has extension
+  #
+  # These are present, but not as MPEG-PES SID (stream ID) values:
+  #
+  # * 0xba: MPEG-PS header (file signature)
+  # * 0xbb: MPEG-PS system header packet
 
 
 def analyze_mpeg_adts(fread, info, fskip):
