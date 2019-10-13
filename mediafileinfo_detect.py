@@ -1419,9 +1419,7 @@ def analyze_flac(fread, info, fskip):
   })
 
 
-def analyze_ac3(fread, info, fskip):
-  # https://raw.githubusercontent.com/trms/dvd_import/master/Support/a_52a.pdf
-  header = fread(8)
+def get_ac3_track_info(header):
   if len(header) < 8:
     raise ValueError('Too short for ac3.')
   if not header.startswith('\x0b\x77'):
@@ -1430,46 +1428,48 @@ def analyze_ac3(fread, info, fskip):
   if arate == 0:
     raise ValueError('Invalid arate for ac3.')
   anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[5]) & 7]  # acmod.
+  track_info = {'type': 'audio'}
+  track_info['codec'] = 'ac3'
+  track_info['sample_size'] = 16
+  track_info['sample_rate'] = arate
+  track_info['channel_count'] = anch
+  return track_info
+
+
+def analyze_ac3(fread, info, fskip):
+  # https://raw.githubusercontent.com/trms/dvd_import/master/Support/a_52a.pdf
+  header = fread(8)
   info['format'] = 'ac3'
-  info['acodec'] = 'ac3'
-  info['asbits'] = 16
-  info['arate'] = arate
-  info['anch'] = anch
+  info['tracks'] = [get_ac3_track_info(header)]
+
+
+def get_mpeg_video_track_info(header):
+  if len(header) < 7:
+    raise ValueError('Too short for mpeg-video.')
+  if not header.startswith('\0\0\1\xb3'):
+    raise ValueError('mpeg-video signature not found.')
+  wdht, = struct.unpack('>L', header[3 : 7])
+  track_info = {'type': 'video'}
+  track_info['codec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
+  track_info['width'] = (wdht >> 12) & 0xfff
+  track_info['height'] = wdht & 0xfff
+  return track_info
 
 
 def analyze_mpeg_video(fread, info, fskip):
   # https://en.wikipedia.org/wiki/Elementary_stream
   header = fread(7)
-  if len(header) < 7:
-    raise ValueError('Too short for mpeg-video.')
-  if not header.startswith('\0\0\1\xb3'):
-    raise ValueError('mpeg-video signature not found.')
   info['format'] = 'mpeg-video'
-  wdht, = struct.unpack('>L', header[3 : 7])
-  info['vcodec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
-  info['width'] = (wdht >> 12) & 0xfff
-  info['height'] = wdht & 0xfff
+  info['tracks'] = [get_mpeg_video_track_info(header)]
 
 
 def analyze_mpeg_ps(fread, info, fskip):
-  # https://en.wikipedia.org/wiki/MPEG_program_stream
-  header = fread(14)
-  if len(header) < 14:
-    raise ValueError('Too short for mpeg-ps.')
-  if not header.startswith('\0\0\1\xba'):
-    raise ValueError('mpeg-ps signature not found.')
-  info['format'] = 'mpeg-ps'
-  if ord(header[4]) >> 6 == 1:
-    info['subformat'] = 'mpeg-2'  # MPEG-2 program stream.
-  elif ord(header[4]) >> 4 == 2:
-    info['subformat'] = 'mpeg-1'  # MPEG-1 system stream.
-  else:
-    raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
-  # TODO(pts): Use http://www.hampa.ch/mpegdemux/
-  # http://www.hampa.ch/mpegdemux/mpegdemux-0.1.4.tar.gz
-  # mpegdemux-0.1.4/src/mpeg_parse.c
-  # $ mpegdemux.static -d -s 0xe0 -b /tmp/m1dvideo.mpg m1.mpg
-  # $ mpegdemux.static -d -s 0xc0 -b /tmp/m1daudio.mpg m1.mpg
+  # Based on: https://en.wikipedia.org/wiki/MPEG_program_stream
+  # Also based on: Use http://www.hampa.ch/mpegdemux/
+  #   http://www.hampa.ch/mpegdemux/mpegdemux-0.1.4.tar.gz
+  #   mpegdemux-0.1.4/src/mpeg_parse.c
+  #   $ mpegdemux.static -d -s 0xe0 -b /tmp/m1dvideo.mpg m1.mpg
+  #   $ mpegdemux.static -d -s 0xc0 -b /tmp/m1daudio.mpg m1.mpg
   #
   # MPEG-PES packet SID (http://dvd.sourceforge.net/dvdinfo/pes-hdr.html):
   #
@@ -1479,43 +1479,207 @@ def analyze_mpeg_ps(fread, info, fskip):
   # * 0xbf; Private stream 2 (navigation data); mostly in DVD .vob; no extension
   # * 0xc0...0xdf; MPEG-1 or MPEG-2 audio stream; has extension
   # * 0xe0...0xef; MPEG-1 or MPEG-2 video stream; has extension
+  # * Others: http://dvd.sourceforge.net/dvdinfo/mpeghdrs.html
   #
   # These are present, but not as MPEG-PES SID (stream ID) values:
   #
+  # * 0xb9: MPEG-PS end
   # * 0xba: MPEG-PS header (file signature)
   # * 0xbb: MPEG-PS system header packet
+  # * 0xbc: program stream map
+  # * 0xff: program stream directory
+  #
+  # TODO(pts): Can we get a list of SIDs without scanning through the file?
+  #
+  header = fread(12)
+  if len(header) < 12:
+    raise ValueError('Too short for mpeg-ps.')
+  if not header.startswith('\0\0\1\xba'):
+    raise ValueError('mpeg-ps signature not found.')
+  info['format'] = 'mpeg-ps'
+  if ord(header[4]) >> 6 == 1:
+    info['subformat'] = 'mpeg-2'  # MPEG-2 program stream.
+    header += fread(2)
+    if len(header) < 14:
+      raise ValueError('Too short for mpeg-ps mpeg-2.')
+    size = 14 + (ord(header[13]) & 7)
+  elif ord(header[4]) >> 4 == 2:
+    info['subformat'] = 'mpeg-1'  # MPEG-1 system stream.
+    size = 12
+  else:
+    raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
+  assert size >= len(header)
+  if not fskip(size - len(header)):
+    raise ValueError('EOF in mpeg-ps header.')
+
+  # Scan for packets and packs.
+  expect_system_header = True
+  had_audio = had_video = False
+  info['tracks'] = []
+  skip_count = av_packet_count = packet_count = 0
+  while 1:
+    data = fread(4)
+    while len(data) == 4 and not data.startswith('\0\0\1'):
+      # TODO(pts): Don't skip or read too much in total.
+      data = data[1 : 4] + fread(1)
+      skip_count += 1
+      if skip_count >= 100000:
+        break
+    if len(data) != 4:
+      break
+    sid = ord(data[3])
+    if sid == 0xb9:  # MPEG end code.
+      break
+    elif sid == 0xba:  # MPEG pack.
+      data = fread(8)
+      if len(data) < 8:
+        raise ValueError('EOF in mpeg-ps pack.')
+      if ord(data[0]) >> 6 == 1:  # MPEG-2.
+        data += fread(2)
+        if len(data) < 10:
+          raise ValueError('Too short for mpeg-ps mpeg-2 pack.')
+        size = 10 + (ord(data[9]) & 7)
+      elif ord(data[0]) >> 4 == 2:  # MPEG-1.
+        size = 8
+      else:
+        raise ValueError('Invalid mpeg-ps pack subformat 0x%02x.' % ord(data[0]))
+      assert size >= len(data)
+      if not fskip(size - len(data)):
+        raise ValueError('EOF in mpeg-ps pack header.')
+      expect_system_header = True
+    elif sid == 0xbb:  # MPEG system header.
+      packet_count += 1
+      if packet_count > 1500:
+        break
+      if not expect_system_header:
+        raise ValueError('Unexpected mpeg-ps system header.')
+      expect_system_header = False
+      data = fread(2)
+      if len(data) < 2:
+        raise ValueError('EOF in mpeg-ps system header size.')
+      size = struct.unpack('>H', data)[0]
+      if not fskip(size):
+        raise ValueError('EOF in mpeg-ps system header.')
+    elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):
+      packet_count += 1
+      if packet_count > 1500:
+        break
+      data = fread(2)
+      if len(data) < 2:
+        raise ValueError('EOF in mpeg-ps packet size.')
+      size = struct.unpack('>H', data)[0]
+      data = fread(size)
+      if len(data) < size:
+        raise ValueError('EOF in mpeg-ps packet.')
+      i = 0
+      if 0xc0 <= sid < 0xf0 or sid == 0xbd:
+        while i < len(data) and i <= 16 and data[i] == '\xff':
+          i += 1
+        if i >= len(data):
+          raise ValueError('EOF in mpeg-ps packet data.')
+        if ord(data[i]) >> 6 == 2:
+          if len(data) < i + 3:
+            raise ValueError('EOF in mpeg-ps packet type 2 data.')
+          i += 3 + ord(data[i + 2])
+        else:
+          if ord(data[i]) >> 6 == 1:
+            i += 2
+            if i >= len(data):
+              raise ValueError('EOF in mpeg-ps packet type 1 data.')
+          if (ord(data[i]) & 0xf0) == 0x20:
+            i += 5
+          elif (ord(data[i]) & 0xf0) == 0x30:
+            i += 10
+          elif ord(data[i]) == 0x0f:
+            i += 1
+        if sid == 0xbd:
+          if i >= len(data):
+            raise ValueError('EOF in mpeg-ps packet SSID.')
+          sid = 0x100 | ord(data[i])
+          i += 1
+          if 0x180 <= sid < 0x1a0:
+            if (data[i : i + 2] != '\x0b\x77' and
+                data[i + 3 : i + 5] == '\x0b\x77'):
+              # TODO(pts): What does the data[i : i + 3] == '\3\0\1' mean here
+              # for AC3 audio?
+              i += 3
+        #print 'mpeg-ps 0x%x data %s' % (sid, data[i : i + 20].encode('hex'))
+        # Packet boundaries don't coincide with MPEG elementary stream frame
+        # boundaries except for the first packet of the stream, so we only
+        # analyze the first packet of the stream, for simplicity.
+        if len(data) >= i + 16:  # Non-empty packet audio or video packet.
+          if 0xe0 <= sid < 0xf0:  # Video.
+            av_packet_count += 1
+            if not had_video:
+              had_video = True
+              # TODO(pts): This fails for some VTS_01_2.VOB files, but never
+              # for VTS_01_1 files. Maybe ignore the first few video packets
+              # until a new frame starts? Also for audio in other files?
+              info['tracks'].append(get_mpeg_video_track_info(data[i : i + 16]))
+          elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a0:  # Audio.
+            av_packet_count += 1
+            if not had_audio:
+              had_audio = True
+              if data[i : i + 2] == '\x0b\x77':
+                info['tracks'].append(get_ac3_track_info(data[i : i + 16]))
+              else:
+                # TODO(pts): For some files mpv reports: [ffmpeg/audio] mp2:
+                # Header missing How do we recover it?
+                info['tracks'].append(
+                    get_mpeg_adts_track_info(data[i : i + 16]))
+          if (had_audio and had_video) or av_packet_count > 1000:
+            break
+    else:
+      raise ValueError('unexpected mpeg-ps sid=0x%02x' % sid)
+  info['hdr_packet_count'] = packet_count
+  info['hdr_av_packet_count'] = av_packet_count
+  info['hdr_skip_count'] = skip_count
 
 
-def analyze_mpeg_adts(fread, info, fskip):
-  # https://en.wikipedia.org/wiki/Elementary_stream
-  header = fread(4)
+def is_mpeg_adts(header):
+  return (len(header) >= 4 and
+          (((header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and
+            (ord(header[1]) & 6) == 2) or
+           (header.startswith('\xff') and ord(header[1]) >> 4 == 0xf)))
+
+
+def get_mpeg_adts_track_info(header):
   if len(header) < 4:
     raise ValueError('Too short for mpeg-adts.')
+  track_info = {'type': 'audio'}
   sfi = (ord(header[2]) >> 2) & 3
   if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
       (ord(header[1]) & 6) == 2):
-    info['subformat'] = 'mpeg-25'  # 2.5.
-    info['arate'] = (11025, 12000, 8000, 0)[sfi]
+    track_info['subformat'] = 'mpeg-25'  # 2.5.
+    track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
   elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
     if (ord(header[1]) >> 4) & 1:
-      info['subformat'] = 'mpeg-1'
-      info['arate'] = (44100, 48000, 32000, 0)[sfi]
+      track_info['subformat'] = 'mpeg-1'
+      track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
     else:
-      info['subformat'] = 'mpeg-2'
-      info['arate'] = (22050, 24000, 16000, 0)[sfi]
+      track_info['subformat'] = 'mpeg-2'
+      track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
   else:
     raise ValueError('mpeg-adts signature not found.')
-  info['alayer'] = 4 - ((ord(header[1]) >> 1) & 3)
-  if info['alayer'] == 4:
+  layer = 4 - ((ord(header[1]) >> 1) & 3)
+  if layer == 4:
     raise ValueError('Invalid layer.')
   if ord(header[2]) >> 4 in (0, 15):
     raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
   if sfi == 3:
     raise ValueError('Invalid sampling frequency index 3.')
-  info['acodec'] = ('', 'mp1', 'mp2', 'mp3')[info['alayer']]
-  info['asbits'] = 16
-  info['anch'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
-  if info['alayer'] == 3 and info['subformat'] == 'mpeg-1':
+  track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+  track_info['sample_size'] = 16
+  track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
+  return track_info
+
+
+def analyze_mpeg_adts(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Elementary_stream
+  header = fread(4)
+  info['tracks'] = [get_mpeg_adts_track_info(header)]
+  if (info['tracks'][0]['codec'] == 'mp3' and
+      info['tracks'][0]['subformat'] == 'mpeg-1'):
     info['format'] = 'mp3'
   else:
     info['format'] = 'mpeg-adts'
@@ -2173,6 +2337,7 @@ FORMAT_DB = FormatDb(FORMAT_ITEMS)
 LOG2_SUB = '\0\0\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccdddddddddddddddeeeeeeeeeeeeeeeeffffffffffffffffggggggggggggggggghhhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiijjjjjjjjjjjjjjjjjjjjkkkkkkkkkkkkkkkkkkkkklllllllllllllllllllllllmmmmmmmmmmmmmmmmmmmmmmmmnnnnnnnnnnnnnnnnnnnnnnnnnnoooooooooooooooooooooooooopppppppppppppppppppppppppppppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsssssssssssssssssssssssssssssssssttttttttttttttttttttttttttttttttttttuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{|||||||||||||||||||||||||||||||||||||||||||||||||||||||}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}~'
 assert len(LOG2_SUB) == 1084
 
+
 def detect_format(f):
   """Detects the file format.
 
@@ -2250,10 +2415,10 @@ def copy_info_from_tracks(info):
         key = 'arate'  # Also used by medid.
       elif key == 'sample_size':
         key = 'asbits'
+      elif key == 'subformat':
+        key = 'asubformat'
       elif key == 'type':
-        if value == 'audio':
-          continue
-        key = 'atype'
+        continue
       else:
         key = 'audio_%s' % key
       info[key] = value
