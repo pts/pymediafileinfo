@@ -1532,7 +1532,9 @@ class MpegAudioHeaderFinder(object):
     if ((buf.startswith('\xff') and is_mpeg_adts(buf)) or
         (buf.startswith('\x0b\x77') and is_ac3(buf))):
       return  # Found before.
-    # TODO(pts): Fewer copies, do 2-pass, with `data[:7]' first.
+    # We could do fewer copies with a 2-pass with data[:6] in pass 1 if data
+    # is an str. We don't bother optimizing this, because data is a buffer
+    # in production.
     buf = self._buf + data[:]
     limit = len(buf) - 6
     i = 0
