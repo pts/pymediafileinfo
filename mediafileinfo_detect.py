@@ -1419,8 +1419,69 @@ def analyze_flac(fread, info, fskip):
   })
 
 
+# --- Audio streams in MPEG.
+
+
+def is_mpeg_adts(header):
+  # Works with: isinstance(header, (str, buffer)).
+  return (len(header) >= 4 and
+          header[0] == '\xff' and
+          header[1] in '\xe2\xe3\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
+          ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12)
+
+
+def get_mpeg_adts_track_info(header):
+  # https://en.wikipedia.org/wiki/Elementary_stream
+  if len(header) < 4:
+    raise ValueError('Too short for mpeg-adts.')
+  track_info = {'type': 'audio'}
+  sfi = (ord(header[2]) >> 2) & 3
+  if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
+      (ord(header[1]) & 6) == 2):
+    track_info['subformat'] = 'mpeg-25'  # 2.5.
+    track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
+  elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
+    if (ord(header[1]) >> 4) & 1:
+      track_info['subformat'] = 'mpeg-1'
+      track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
+    else:
+      track_info['subformat'] = 'mpeg-2'
+      track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
+  else:
+    raise ValueError('mpeg-adts signature not found.')
+  layer = 4 - ((ord(header[1]) >> 1) & 3)
+  if layer == 4:
+    raise ValueError('Invalid layer.')
+  if ord(header[2]) >> 4 in (0, 15):
+    raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
+  if sfi == 3:
+    raise ValueError('Invalid sampling frequency index 3.')
+  track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+  track_info['sample_size'] = 16
+  track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
+  return track_info
+
+
+def analyze_mpeg_adts(fread, info, fskip):
+  header = fread(4)
+  info['tracks'] = [get_mpeg_adts_track_info(header)]
+  if (info['tracks'][0]['codec'] == 'mp3' and
+      info['tracks'][0]['subformat'] == 'mpeg-1'):
+    info['format'] = 'mp3'
+  else:
+    info['format'] = 'mpeg-adts'
+
+
+def is_ac3(header):
+  # Works with: isinstance(header, (str, buffer)).
+  return (len(header) >= 7 and
+          header[0] == '\x0b' and header[1] == '\x77' and
+          ord(header[4]) >> 6 != 3)
+
+
 def get_ac3_track_info(header):
-  if len(header) < 8:
+  # https://raw.githubusercontent.com/trms/dvd_import/master/Support/a_52a.pdf
+  if len(header) < 7:
     raise ValueError('Too short for ac3.')
   if not header.startswith('\x0b\x77'):
     raise ValueError('ac3 signature not found.')
@@ -1437,23 +1498,136 @@ def get_ac3_track_info(header):
 
 
 def analyze_ac3(fread, info, fskip):
-  # https://raw.githubusercontent.com/trms/dvd_import/master/Support/a_52a.pdf
-  header = fread(8)
+  header = fread(7)
   info['format'] = 'ac3'
   info['tracks'] = [get_ac3_track_info(header)]
+
+
+class MpegAudioHeaderFinder(object):
+  """Supports the mpeg-adts (mp1, mp2, mp3) and ac3 audio codecs."""
+
+  __slots__ = ('_buf', '_header_ofs')
+
+  def __init__(self):
+    self._buf, self._header_ofs = '', 0
+
+  def get_track_info(self):
+    buf = self._buf
+    if buf.startswith('\xff') and is_mpeg_adts(buf):
+      track_info = get_mpeg_adts_track_info(buf)
+    elif buf.startswith('\x0b\x77') and is_ac3(buf):
+      track_info = get_ac3_track_info(buf)
+    else:
+      return None
+    track_info['header_ofs'] = self._header_ofs
+    return track_info
+
+  def append(self, data):
+    """Processes data until the first MPEG video sequence header is found."""
+    if not isinstance(data, (str, buffer)):
+      raise TypeError
+    if not data:
+      return
+    buf = self._buf
+    if ((buf.startswith('\xff') and is_mpeg_adts(buf)) or
+        (buf.startswith('\x0b\x77') and is_ac3(buf))):
+      return  # Found before.
+    # TODO(pts): Fewer copies, do 2-pass, with `data[:7]' first.
+    buf = self._buf + data[:]
+    limit = len(buf) - 6
+    i = 0
+    while i < limit:
+      j1 = buf.find('\xff', i)
+      if j1 < 0:
+        j1 = limit
+      j2 = buf.find('\x0b\x77', i)
+      if j2 < 0:
+        j2 = limit
+      if j1 <= j2:
+        if j1 < limit and is_mpeg_adts(buffer(buf, j1)):
+          self._header_ofs += j1
+          self._buf = buf[j1:]  # Found.
+          return
+        else:
+          i = j1 + 1
+      else:
+        if j2 < limit and is_ac3(buffer(buf, j2)):
+          self._header_ofs += j2
+          self._buf = buf[j2:]  # Found.
+          return
+        else:
+          i = j2 + 1
+    if len(buf) > 6:
+      self._header_ofs += len(buf) - 6
+    self._buf = buf[-6:]  # Not found.
+
+
+# --- Video streams in MPEG.
 
 
 def get_mpeg_video_track_info(header):
   if len(header) < 7:
     raise ValueError('Too short for mpeg-video.')
+  # MPEG video sequence header start code.
   if not header.startswith('\0\0\1\xb3'):
     raise ValueError('mpeg-video signature not found.')
   wdht, = struct.unpack('>L', header[3 : 7])
   track_info = {'type': 'video'}
   track_info['codec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
+  # TODO(pts): Verify that width and height are positive.
   track_info['width'] = (wdht >> 12) & 0xfff
   track_info['height'] = wdht & 0xfff
   return track_info
+
+
+class MpegVideoHeaderFinder(object):
+  """Supports the mpeg video codec."""
+
+  __slots__ = ('_buf', '_header_ofs')
+
+  def __init__(self):
+    self._buf, self._header_ofs = '', 0
+
+  def get_track_info(self):
+    buf = self._buf
+    # MPEG video sequence header start code.
+    if buf.startswith('\0\0\1\xb3') and len(buf) >= 7:
+      track_info = get_mpeg_video_track_info(buf)
+      track_info['header_ofs'] = self._header_ofs
+      return track_info
+    return None
+
+  def append(self, data):
+    """Processes data until the first MPEG video sequence header is found."""
+    if not isinstance(data, (str, buffer)):
+      raise TypeError
+    if data:
+      buf = self._buf
+      # MPEG video sequence header start code. We need 7 bytes of header.
+      if buf.startswith('\0\0\1\xb3'):  # Found before signature.
+        if len(buf) < 7:
+          self._buf = buf + data[:7 - len(buf)]
+      elif buf.endswith('\0\0\1') and data[0] == '\xb3':
+        self._header_ofs += len(buf) - 3
+        self._buf = buf[-3:] + data[:16]  # Found signature.
+      elif buf.endswith('\0\1') and data[:2] == '\1\xb3':
+        self._header_ofs += len(buf) - 2
+        self._buf = buf[-2:] + data[:16]  # Found signature.
+      elif buf.endswith('\0') and data[:3] == '\0\1\xb3':
+        self._header_ofs += len(buf) - 1
+        self._buf = buf[-1] + data[:16]  # Found signature.
+      else:
+        self._header_ofs += len(buf)
+        data = data[:]  # Convert buffer to str.
+        i = data.find('\0\0\1\xb3')
+        if i >= 0:
+          self._header_ofs += i
+          self._buf = data[i : i + 7]  # Found signature.
+        elif len(data) >= 3:
+          self._header_ofs += len(data) - 3
+          self._buf = data[-3:]  # Not found.
+        else:
+          self._buf = buf[-3 + len(data):] + data  # Not found.
 
 
 def analyze_mpeg_video(fread, info, fskip):
@@ -1461,6 +1635,9 @@ def analyze_mpeg_video(fread, info, fskip):
   header = fread(7)
   info['format'] = 'mpeg-video'
   info['tracks'] = [get_mpeg_video_track_info(header)]
+
+
+# --- Multiplexed MPEG.
 
 
 def analyze_mpeg_ps(fread, info, fskip):
@@ -1517,6 +1694,10 @@ def analyze_mpeg_ps(fread, info, fskip):
   had_audio = had_video = False
   info['tracks'] = []
   skip_count = av_packet_count = packet_count = 0
+  # Maps from SID to MpegVideoHeaderFinder or MpegAudioHeaderFinder. We use
+  # finders to find the MPEG elementary stream header for video and audio
+  # frames because the beginning of the frame may be truncated.
+  finders = {}
   while 1:
     data = fread(4)
     while len(data) == 4 and not data.startswith('\0\0\1'):
@@ -1580,6 +1761,8 @@ def analyze_mpeg_ps(fread, info, fskip):
         if ord(data[i]) >> 6 == 2:
           if len(data) < i + 3:
             raise ValueError('EOF in mpeg-ps packet type 2 data.')
+          # The `is_aligned = bool(ord(data[i]) & 4)' is useless here, it's
+          # False even at the beginning of the elementary stream.
           i += 3 + ord(data[i + 2])
         else:
           if ord(data[i]) >> 6 == 1:
@@ -1597,92 +1780,46 @@ def analyze_mpeg_ps(fread, info, fskip):
             raise ValueError('EOF in mpeg-ps packet SSID.')
           sid = 0x100 | ord(data[i])
           i += 1
-          if 0x180 <= sid < 0x1a0:
-            if (data[i : i + 2] != '\x0b\x77' and
-                data[i + 3 : i + 5] == '\x0b\x77'):
-              # TODO(pts): What does the data[i : i + 3] == '\3\0\1' mean here
-              # for AC3 audio?
-              i += 3
+          # For AC3 audio in DVD MPEGs (0x180 <= sid < 0x1a0), the first 3
+          # bytes should be ignored: data[i : i + 3] == '\3\0\1'. No
+          # problem, MpegAudioHeaderFinder takes care of this.
         #print 'mpeg-ps 0x%x data %s' % (sid, data[i : i + 20].encode('hex'))
-        # Packet boundaries don't coincide with MPEG elementary stream frame
-        # boundaries except for the first packet of the stream, so we only
-        # analyze the first packet of the stream, for simplicity.
-        if len(data) >= i + 16:  # Non-empty packet audio or video packet.
-          if 0xe0 <= sid < 0xf0:  # Video.
-            av_packet_count += 1
-            if not had_video:
-              had_video = True
-              # TODO(pts): This fails for some VTS_01_2.VOB files, but never
-              # for VTS_01_1 files. Maybe ignore the first few video packets
-              # until a new frame starts? Also for audio in other files?
-              info['tracks'].append(get_mpeg_video_track_info(data[i : i + 16]))
-          elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a0:  # Audio.
-            av_packet_count += 1
-            if not had_audio:
-              had_audio = True
-              if data[i : i + 2] == '\x0b\x77':
-                info['tracks'].append(get_ac3_track_info(data[i : i + 16]))
-              else:
-                # TODO(pts): For some files mpv reports: [ffmpeg/audio] mp2:
-                # Header missing How do we recover it?
-                info['tracks'].append(
-                    get_mpeg_adts_track_info(data[i : i + 16]))
+        #if sid == 0xe0:
+        #  open('videodump.mpg', 'ab').write(buffer(data, i))
+        #if sid == 0xc0 or sid == 0x180:
+        #  open('audiodump.mpg', 'ab').write(buffer(data, i))
+        if 0xe0 <= sid < 0xf0:  # Video.
+          av_packet_count += 1
+          if not had_video:
+             if sid not in finders:
+               finders[sid] = MpegVideoHeaderFinder()
+             finders[sid].append(buffer(data, i))
+             track_info = finders[sid].get_track_info()
+             if track_info:
+               had_video = True
+               info['tracks'].append(track_info)
+               info['pes_video_at'] = track_info['header_ofs']
+        elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a0:  # Audio.
+          av_packet_count += 1
+          if not had_audio:
+             if sid not in finders:
+               finders[sid] = MpegAudioHeaderFinder()
+             finders[sid].append(buffer(data, i))
+             track_info = finders[sid].get_track_info()
+             if track_info:
+               had_audio = True
+               info['tracks'].append(track_info)
+               info['pes_audio_at'] = track_info['header_ofs']
           if (had_audio and had_video) or av_packet_count > 1000:
             break
-    else:
-      raise ValueError('unexpected mpeg-ps sid=0x%02x' % sid)
+    #else:  # Some broken MPEGs have useless SIDs, ingore those silently.
+    #  raise ValueError('unexpected mpeg-ps sid=0x%02x' % sid)
   info['hdr_packet_count'] = packet_count
   info['hdr_av_packet_count'] = av_packet_count
   info['hdr_skip_count'] = skip_count
 
 
-def is_mpeg_adts(header):
-  return (len(header) >= 4 and
-          (((header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and
-            (ord(header[1]) & 6) == 2) or
-           (header.startswith('\xff') and ord(header[1]) >> 4 == 0xf)))
-
-
-def get_mpeg_adts_track_info(header):
-  if len(header) < 4:
-    raise ValueError('Too short for mpeg-adts.')
-  track_info = {'type': 'audio'}
-  sfi = (ord(header[2]) >> 2) & 3
-  if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
-      (ord(header[1]) & 6) == 2):
-    track_info['subformat'] = 'mpeg-25'  # 2.5.
-    track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
-  elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
-    if (ord(header[1]) >> 4) & 1:
-      track_info['subformat'] = 'mpeg-1'
-      track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
-    else:
-      track_info['subformat'] = 'mpeg-2'
-      track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
-  else:
-    raise ValueError('mpeg-adts signature not found.')
-  layer = 4 - ((ord(header[1]) >> 1) & 3)
-  if layer == 4:
-    raise ValueError('Invalid layer.')
-  if ord(header[2]) >> 4 in (0, 15):
-    raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
-  if sfi == 3:
-    raise ValueError('Invalid sampling frequency index 3.')
-  track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
-  track_info['sample_size'] = 16
-  track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
-  return track_info
-
-
-def analyze_mpeg_adts(fread, info, fskip):
-  # https://en.wikipedia.org/wiki/Elementary_stream
-  header = fread(4)
-  info['tracks'] = [get_mpeg_adts_track_info(header)]
-  if (info['tracks'][0]['codec'] == 'mp3' and
-      info['tracks'][0]['subformat'] == 'mpeg-1'):
-    info['format'] = 'mp3'
-  else:
-    info['format'] = 'mpeg-adts'
+# ---
 
 
 def analyze_id3v2(fread, info, fskip):
@@ -2206,10 +2343,10 @@ FORMAT_ITEMS = (
     # ID3v2 is at the start of the file, before the mpeg-adts frames.
     ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
     # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
-    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (len(header) >= 3 and ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12, 30))),
+    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (is_mpeg_adts(header), 30))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
-    ('ac3', (0, '\x0b\x77', 7, lambda header: (len(header) >= 7 and ord(header[4]) >> 6 != 3, 20))),
+    ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
 
     # Document media.
 
