@@ -1714,7 +1714,7 @@ def analyze_mpeg_ps(fread, info, fskip):
     elif sid == 0xba:  # MPEG pack.
       data = fread(8)
       if len(data) < 8:
-        raise ValueError('EOF in mpeg-ps pack.')
+        break  # raise ValueError('EOF in mpeg-ps pack.')
       if ord(data[0]) >> 6 == 1:  # MPEG-2.
         data += fread(2)
         if len(data) < 10:
@@ -1726,7 +1726,7 @@ def analyze_mpeg_ps(fread, info, fskip):
         raise ValueError('Invalid mpeg-ps pack subformat 0x%02x.' % ord(data[0]))
       assert size >= len(data)
       if not fskip(size - len(data)):
-        raise ValueError('EOF in mpeg-ps pack header.')
+        break  # raise ValueError('EOF in mpeg-ps pack header.')
       expect_system_header = True
     elif sid == 0xbb:  # MPEG system header.
       packet_count += 1
@@ -1737,30 +1737,30 @@ def analyze_mpeg_ps(fread, info, fskip):
       expect_system_header = False
       data = fread(2)
       if len(data) < 2:
-        raise ValueError('EOF in mpeg-ps system header size.')
+        break  # raise ValueError('EOF in mpeg-ps system header size.')
       size = struct.unpack('>H', data)[0]
       if not fskip(size):
-        raise ValueError('EOF in mpeg-ps system header.')
+        break  # raise ValueError('EOF in mpeg-ps system header.')
     elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):
       packet_count += 1
       if packet_count > 1500:
         break
       data = fread(2)
       if len(data) < 2:
-        raise ValueError('EOF in mpeg-ps packet size.')
+        break  # raise ValueError('EOF in mpeg-ps packet size.')
       size = struct.unpack('>H', data)[0]
       data = fread(size)
       if len(data) < size:
-        raise ValueError('EOF in mpeg-ps packet.')
+        break  # raise ValueError('EOF in mpeg-ps packet.')
       i = 0
       if 0xc0 <= sid < 0xf0 or sid == 0xbd:
         while i < len(data) and i <= 16 and data[i] == '\xff':
           i += 1
         if i >= len(data):
-          raise ValueError('EOF in mpeg-ps packet data.')
+          break  # raise ValueError('EOF in mpeg-ps packet data.')
         if ord(data[i]) >> 6 == 2:
           if len(data) < i + 3:
-            raise ValueError('EOF in mpeg-ps packet type 2 data.')
+            break  # raise ValueError('EOF in mpeg-ps packet type 2 data.')
           # The `is_aligned = bool(ord(data[i]) & 4)' is useless here, it's
           # False even at the beginning of the elementary stream.
           i += 3 + ord(data[i + 2])
@@ -1768,7 +1768,7 @@ def analyze_mpeg_ps(fread, info, fskip):
           if ord(data[i]) >> 6 == 1:
             i += 2
             if i >= len(data):
-              raise ValueError('EOF in mpeg-ps packet type 1 data.')
+              break  # raise ValueError('EOF in mpeg-ps packet type 1 data.')
           if (ord(data[i]) & 0xf0) == 0x20:
             i += 5
           elif (ord(data[i]) & 0xf0) == 0x30:
@@ -1777,7 +1777,7 @@ def analyze_mpeg_ps(fread, info, fskip):
             i += 1
         if sid == 0xbd:
           if i >= len(data):
-            raise ValueError('EOF in mpeg-ps packet SSID.')
+            break  # raise ValueError('EOF in mpeg-ps packet SSID.')
           sid = 0x100 | ord(data[i])
           i += 1
           # For AC3 audio in DVD MPEGs (0x180 <= sid < 0x1a0), the first 3
@@ -1795,7 +1795,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                finders[sid] = MpegVideoHeaderFinder()
              finders[sid].append(buffer(data, i))
              track_info = finders[sid].get_track_info()
-             if track_info:
+             if track_info:  # Use first video stream with header.
                had_video = True
                info['tracks'].append(track_info)
                info['pes_video_at'] = track_info['header_ofs']
@@ -1806,7 +1806,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                finders[sid] = MpegAudioHeaderFinder()
              finders[sid].append(buffer(data, i))
              track_info = finders[sid].get_track_info()
-             if track_info:
+             if track_info:  # Use first video stream with header.
                had_audio = True
                info['tracks'].append(track_info)
                info['pes_audio_at'] = track_info['header_ofs']
