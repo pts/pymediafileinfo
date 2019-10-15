@@ -2100,15 +2100,15 @@ def is_mpeg_ts(header):
     #print (tei, cc, tsc, packet_id)
     # TODO(pts): If packet_id == 8191, then it's the null packet, and find
     # the next packet.
-    if tei == 0 and cc == 0 and tsc == 0 and packet_id == 0:  # PAT.
+    if tei == 0 and cc in (0, 1) and tsc == 0 and packet_id == 0:  # PAT.
       had_pat = True
-    elif tei == 0 and cc == 0 and tsc == 0 and 0x10 <= packet_id <= 0x20:
+    elif tei == 0 and cc in (0, 1) and tsc == 0 and 0x10 <= packet_id <= 0x20:
       # packet_id=0x11 is
       # https://en.wikipedia.org/wiki/Service_Description_Table
       pass  # DVB metadata.
-    elif tei == 0 and cc == 0 and tsc == 0 and packet_id == 0x1fff: # Null.
+    elif tei == 0 and cc in (0, 1) and tsc == 0 and packet_id == 0x1fff: # Null.
       pass
-    elif (tei == 0 and cc == 0 and tsc == 0 and 0x20 <= packet_id < 0x1fff and
+    elif (tei == 0 and cc in (0, 1) and tsc == 0 and 0x20 <= packet_id < 0x1fff and
           had_pat):
       break
     else:
