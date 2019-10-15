@@ -1427,8 +1427,9 @@ def is_mpeg_adts(header):
   # Works with: isinstance(header, (str, buffer)).
   return (len(header) >= 4 and
           header[0] == '\xff' and
-          header[1] in '\xe2\xe3\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
-          ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12)
+          (header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' '\xf0\xf1\xf8\xf9' and
+           ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
+          (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13))
 
 
 def get_mpeg_adts_track_info(header):
@@ -1436,30 +1437,44 @@ def get_mpeg_adts_track_info(header):
   if len(header) < 4:
     raise ValueError('Too short for mpeg-adts.')
   track_info = {'type': 'audio'}
-  sfi = (ord(header[2]) >> 2) & 3
-  if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
-      (ord(header[1]) & 6) == 2):
-    track_info['subformat'] = 'mpeg-25'  # 2.5.
-    track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
-  elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
-    if (ord(header[1]) >> 4) & 1:
-      track_info['subformat'] = 'mpeg-1'
-      track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
-    else:
-      track_info['subformat'] = 'mpeg-2'
-      track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
+  if header[0] == '\xff' and header[1] in '\xf0\xf1\xf8\xf9':
+    # https://wiki.multimedia.cx/index.php/ADTS
+    track_info['codec'] = 'aac'
+    track_info['subformat'] = 'mpeg-4'
+    sfi = (ord(header[2]) >> 2) & 15
+    if sfi > 12:
+      raise ValueError('Invalid mpeg-adts AAC sampling frequency index: %d' % sfi)
+    track_info['sample_rate'] = (96000, 88200, 6400, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0)[sfi]
+    if ord(header[2]) >> 6:
+      raise ValueError('Unexpected mpeg-adts AAC private bit.')
+    cc = ord(header[2]) >> 7 << 2 | ord(header[3]) >> 6
+    if cc:
+      track_info['channel_count'] = cc + (cc == 7)
   else:
-    raise ValueError('mpeg-adts signature not found.')
-  layer = 4 - ((ord(header[1]) >> 1) & 3)
-  if layer == 4:
-    raise ValueError('Invalid layer.')
-  if ord(header[2]) >> 4 in (0, 15):
-    raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
-  if sfi == 3:
-    raise ValueError('Invalid sampling frequency index 3.')
-  track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+    sfi = (ord(header[2]) >> 2) & 3
+    if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
+        (ord(header[1]) & 6) == 2):
+      track_info['subformat'] = 'mpeg-25'  # 2.5.
+      track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
+    elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
+      if (ord(header[1]) >> 4) & 1:
+        track_info['subformat'] = 'mpeg-1'
+        track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
+      else:
+        track_info['subformat'] = 'mpeg-2'
+        track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
+    else:
+      raise ValueError('mpeg-adts signature not found.')
+    layer = 4 - ((ord(header[1]) >> 1) & 3)
+    if layer == 4:
+      raise ValueError('Invalid layer.')
+    if ord(header[2]) >> 4 in (0, 15):
+      raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
+    if sfi == 3:
+      raise ValueError('Invalid sampling frequency index 3.')
+    track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+    track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
   track_info['sample_size'] = 16
-  track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
   return track_info
 
 
@@ -2372,7 +2387,7 @@ FORMAT_ITEMS = (
     # ID3v2 is at the start of the file, before the mpeg-adts frames.
     ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
     # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
-    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (is_mpeg_adts(header), 30))),
+    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff', '\xf0', '\xf1', '\xf8', '\xf9'), 3, lambda header: (is_mpeg_adts(header), 30))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
