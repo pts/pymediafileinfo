@@ -1504,7 +1504,7 @@ def get_ac3_track_info(header):
   arate = (48000, 44100, 32000, 0)[ord(header[4]) >> 6]  # fscod.
   if arate == 0:
     raise ValueError('Invalid arate for ac3.')
-  anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[5]) & 7]  # acmod.
+  anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[6]) >> 5]  # acmod.
   track_info = {'type': 'audio'}
   track_info['codec'] = 'ac3'
   track_info['sample_size'] = 16
