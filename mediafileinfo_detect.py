@@ -1584,14 +1584,22 @@ class MpegAudioHeaderFinder(object):
 
 
 def get_mpeg_video_track_info(header):
-  if len(header) < 7:
+  if (header.startswith('\0\0\1\xb5') or
+      (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5')):
+    # https://en.wikipedia.org/wiki/MPEG-4_Part_2
+    # Also called: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of H.263.
+    # '\0\0\1\xb0' is the profile header, with a single-byte value.
+    i = 4 + 5 * header.startswith('\0\0\1\xb0')
+    track_info = {'type': 'video', 'codec': 'mpeg-4'}
+    # TODO(pts): Analyze, get width, height.
+    return track_info
+  if len(header) < 9:
     raise ValueError('Too short for mpeg-video.')
   # MPEG video sequence header start code.
   if not header.startswith('\0\0\1\xb3'):
     raise ValueError('mpeg-video signature not found.')
   wdht, = struct.unpack('>L', header[3 : 7])
-  track_info = {'type': 'video'}
-  track_info['codec'] = 'mpeg'
+  track_info = {'type': 'video', 'codec': 'mpeg'}
   # TODO(pts): Verify that width and height are positive.
   track_info['width'] = (wdht >> 12) & 0xfff
   track_info['height'] = wdht & 0xfff
@@ -1629,12 +1637,14 @@ class MpegVideoHeaderFinder(object):
   def get_track_info(self):
     buf = self._buf
     # MPEG video sequence header start code.
-    if buf.startswith('\0\0\1\xb3') and (
-        len(buf) >= 144 or
-        (len(buf) >= 80 and
-         (ord(buf[11]) & 2 and not ord(buf[75]) & 1) or
-         (not ord(buf[11]) & 2 and ord(buf[11]) & 1)) or
-        (len(buf) >= 16 and not ord(buf[11]) & 3)):
+    if (buf.startswith('\0\0\1\xb3') and
+        (len(buf) >= 144 or
+         (len(buf) >= 80 and
+          (ord(buf[11]) & 2 and not ord(buf[75]) & 1) or
+          (not ord(buf[11]) & 2 and ord(buf[11]) & 1)) or
+         (len(buf) >= 16 and not ord(buf[11]) & 3)) or
+        buf.startswith('\0\0\1\xb5') or
+        (buf.startswith('\0\0\1\xb0') and buf[5 : 9] == '\0\0\1\xb5')):
       track_info = get_mpeg_video_track_info(buf)
       track_info['header_ofs'] = self._header_ofs
       return track_info
@@ -1647,22 +1657,28 @@ class MpegVideoHeaderFinder(object):
     if data:
       buf = self._buf
       # MPEG video sequence header start code. We need 7 bytes of header.
-      if buf.startswith('\0\0\1\xb3'):  # Found before signature.
+      if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb0\xb5':  # Found before signature.
         if len(buf) < 144:
           self._buf = buf + data[:144 - len(buf)]
-      elif buf.endswith('\0\0\1') and data[0] == '\xb3':
+      elif buf.endswith('\0\0\1') and data[0] in '\xb3\xb0\xb5':
         self._header_ofs += len(buf) - 3
         self._buf = buf[-3:] + data[:16]  # Found signature.
-      elif buf.endswith('\0\1') and data[:2] == '\1\xb3':
+      elif buf.endswith('\0\1') and data[:2] in ('\1\xb3', '\1\xb0', '\1\xb5'):
         self._header_ofs += len(buf) - 2
         self._buf = buf[-2:] + data[:16]  # Found signature.
-      elif buf.endswith('\0') and data[:3] == '\0\1\xb3':
+      elif buf.endswith('\0') and data[:3] == ('\0\1\xb3', '\0\1\xb0', '\0\1\xb5'):
         self._header_ofs += len(buf) - 1
         self._buf = buf[-1] + data[:16]  # Found signature.
       else:
         self._header_ofs += len(buf)
         data = data[:]  # Convert buffer to str.
-        i = data.find('\0\0\1\xb3')
+        i = i1 = data.find('\0\0\1\xb3')
+        i2 = data.find('\0\0\1\xb0')
+        i3 = data.find('\0\0\1\xb5')
+        if i < 0 or (i2 >= 0 and i2 < i):
+          i = i2
+        if i < 0 or (i3 >= 0 and i3 < i):
+          i = i3
         if i >= 0:
           self._header_ofs += i
           self._buf = data[i : i + 144]  # Found signature.
@@ -2121,6 +2137,12 @@ def get_brn_dimensions(fread):
 
 def is_mpeg_ts(header):
   # https://en.wikipedia.org/wiki/MPEG_transport_stream
+  # TODO(pts): Use any of these to get more info.
+  # https://github.com/topics/mpeg-ts
+  # https://github.com/asticode/go-astits
+  # https://github.com/drillbits/go-ts
+  # https://github.com/small-teton/MpegTsAnalyzer
+  # https://github.com/mzinin/ts_splitter
   is_m2ts = header.startswith('\0\0')  # Or BDAV.
   i = (0, 4)[is_m2ts]
   if len(header) < i + 4:
@@ -2306,17 +2328,11 @@ FORMAT_ITEMS = (
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
-    ('mpeg-video', (0, '\0\0\1\xb3')),
-    # TODO(pts): Use any of these to get more info.
-    # https://github.com/topics/mpeg-ts
-    # https://github.com/asticode/go-astits
-    # https://github.com/drillbits/go-ts
-    # https://github.com/small-teton/MpegTsAnalyzer
-    # https://github.com/mzinin/ts_splitter
+    ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
     # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
-    ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5'))),
+    ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     ('swf', (0, ('FWS', 'CWS'))),
     ('rm', (0, '.RMF\0\0\0')),
