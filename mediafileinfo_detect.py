@@ -1,5 +1,6 @@
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
+
 import struct
 
 # ---
@@ -1575,10 +1576,30 @@ def get_mpeg_video_track_info(header):
     raise ValueError('mpeg-video signature not found.')
   wdht, = struct.unpack('>L', header[3 : 7])
   track_info = {'type': 'video'}
-  track_info['codec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
+  track_info['codec'] = 'mpeg'
   # TODO(pts): Verify that width and height are positive.
   track_info['width'] = (wdht >> 12) & 0xfff
   track_info['height'] = wdht & 0xfff
+  if len(header) >= 16 and not ord(header[11]) & 3:
+    i = 12
+  elif len(header) >= 144 and ord(header[11]) & 2 and ord(header[75]) & 1:
+    i = 140
+  elif len(header) >= 80 and (
+      (ord(header[11]) & 2 and not ord(header[75]) & 1) or
+      (not ord(header[11]) & 2 and ord(header[11]) & 1)):
+    i = 76
+  else:
+    i = None
+  if i:
+    start_data = header[i : i + 4]
+    if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):
+      track_info['codec'] = 'mpeg-1'
+    elif start_data in ('\0\0\1\xb5'):  # MPEG-2 sequence extension.
+      track_info['codec'] = 'mpeg-2'
+    elif not start_data.startswith('\0\0\1'):
+      raise ValueError('mpeg-video start expected.')
+    else:
+      raise ValueError('Unexpected mpeg-video start code: 0x%02x' % ord(start_data[3]))
   return track_info
 
 
@@ -1593,7 +1614,12 @@ class MpegVideoHeaderFinder(object):
   def get_track_info(self):
     buf = self._buf
     # MPEG video sequence header start code.
-    if buf.startswith('\0\0\1\xb3') and len(buf) >= 7:
+    if buf.startswith('\0\0\1\xb3') and (
+        len(buf) >= 144 or
+        (len(buf) >= 80 and
+         (ord(buf[11]) & 2 and not ord(buf[75]) & 1) or
+         (not ord(buf[11]) & 2 and ord(buf[11]) & 1)) or
+        (len(buf) >= 16 and not ord(buf[11]) & 3)):
       track_info = get_mpeg_video_track_info(buf)
       track_info['header_ofs'] = self._header_ofs
       return track_info
@@ -1607,8 +1633,8 @@ class MpegVideoHeaderFinder(object):
       buf = self._buf
       # MPEG video sequence header start code. We need 7 bytes of header.
       if buf.startswith('\0\0\1\xb3'):  # Found before signature.
-        if len(buf) < 7:
-          self._buf = buf + data[:7 - len(buf)]
+        if len(buf) < 144:
+          self._buf = buf + data[:144 - len(buf)]
       elif buf.endswith('\0\0\1') and data[0] == '\xb3':
         self._header_ofs += len(buf) - 3
         self._buf = buf[-3:] + data[:16]  # Found signature.
@@ -1624,7 +1650,7 @@ class MpegVideoHeaderFinder(object):
         i = data.find('\0\0\1\xb3')
         if i >= 0:
           self._header_ofs += i
-          self._buf = data[i : i + 7]  # Found signature.
+          self._buf = data[i : i + 144]  # Found signature.
         elif len(data) >= 3:
           self._header_ofs += len(data) - 3
           self._buf = data[-3:]  # Not found.
@@ -1634,7 +1660,8 @@ class MpegVideoHeaderFinder(object):
 
 def analyze_mpeg_video(fread, info, fskip):
   # https://en.wikipedia.org/wiki/Elementary_stream
-  header = fread(7)
+  # http://www.cs.columbia.edu/~delbert/docs/Dueck%20--%20MPEG-2%20Video%20Transcoding.pdf
+  header = fread(144)
   info['format'] = 'mpeg-video'
   info['tracks'] = [get_mpeg_video_track_info(header)]
 
