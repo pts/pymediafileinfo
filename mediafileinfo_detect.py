@@ -1589,6 +1589,11 @@ def get_mpeg_video_track_info(header):
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
     # Also called: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of H.263.
     # '\0\0\1\xb0' is the profile header, with a single-byte value.
+    # https://www.google.com/search?q="video_object_layer_verid"
+    # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
+    # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
+    # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
+    # extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
     i = 4 + 5 * header.startswith('\0\0\1\xb0')
     track_info = {'type': 'video', 'codec': 'mpeg-4'}
     # TODO(pts): Analyze, get width, height.
