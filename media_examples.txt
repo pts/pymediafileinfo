@@ -1,0 +1,142 @@
+Media examples
+^^^^^^^^^^^^^^
+by pts@fazekas.hu at Fri Oct 18 01:05:59 CEST 2019
+
+This file contains hexdumps and annotated hexdumps of various media file
+elements. Some elements are truncated.
+
+* example mpeg-ts pat #1:
+  00: pointer_field=0
+  00: table_id=0(pat)
+  b00d: section_syntax=1(pat) private=0(pat) reserved=3 section_size_unused=0 section_size=13 section:
+    0001: transport_stream_identifier=1
+    c3: reserved=3 version=1 current=1
+    00: section_number=0
+    00: last_section_number=0
+    : table_data:
+      0001: program_num=1
+      e100: reserved=7 pmt_pid=0x100
+    76578e5f: crc32
+  ff+: stuffing bytes
+* example mpeg-ts pat #1:
+  00: pointer_field=0
+  00: table_id=0
+  b00d: section_syntax=1(pat) private=0(pat) reserved=3 section_size_unused=0 section_size=13 section:
+    0001: transport_stream_identifier=1
+    c1: reserved=3 version=0 current=1
+    00: section_number=0
+    00: last_section_number=0
+    : table_data:
+      0001: program_num=1
+      f000: reserved=7 pmt_pid=0x1000
+    2ab104b2: crc32
+  ff+: stuffing bytes
+* example mpeg-ts pmt for example pat #1:
+  00: pointer_field=0
+  02: table_id=2(pmt)
+  b023: section_syntax=1(pmt) private=0(pmt) reserved=3 section_size_unused=0 section_size=35 section:
+    0001: program_num=1
+    c1: reserved=3 version=0 current=1
+    00: section_number=0
+    00: last_section_number=0
+    : table_data:
+      f011: reserved=7 pcr_pid=0x1011
+      f000: reserved=15 program_info_size=0
+      : program_info (!! What are program descriptors used for?)
+      : stream_info
+        1b: stream_type=0x1b(h264)
+        f011: reserved=7 pes_pid=0x1011
+        f000: reserved=15 es_info_size_unused=0 es_info_size=0
+        : es_info
+      : stream_info:
+        81: stream_type=0x81(ac3)
+        f100: reserved=7 pes_pid=0x1100
+        f00c: reserved=15 es_info_size_unused=0 es_info_size=12
+        0a04656e6700050441432d33: es_info (!! What is it used for?)
+    4a1fa123: crc32
+  ff+: stuffing bytes
+* example mpeg-ts pmt for example pat #2:
+  00: pointer_field=0
+  02: table_id=2(pmt)
+  b017: section_syntax=1(pmt) private=0(pmt) reserved=3 section_size_unused=0 section_size=23 section:
+    0001: program_num=1
+    c1: reserved=3 version=0 current=1
+    00: section_number=0
+    00: last_section_number=0
+    : table_data:
+      e100: reserved=7
+      f000: reserved=15 program_info_size=0
+      : program_info
+        1b: stream_type=0x1b(h264)
+        e100: reserved=7 pes_pid=0x100
+        f000: reserved=15 es_info_size_unused=0 es_info_size=0
+        : es_info
+      : program_info
+        03: stream_type=0x03(format=mpeg-adts asubformat=mpeg-1 audio)
+        e101: reserved=7 pes_pid=0x101
+        f000: reserved=15 es_info_size_unused=0 es_info_size=0
+        : es_info
+    4e593d1e: crc32
+  ff+: stuffing bytes
+* example mpeg-ts pes header
+  000001
+  e0: sid
+  0000: size
+  808005:
+  2100018ca1:
+* example vcodec=mpeg1 es packet: 000001b316012013ffffe018000001b80008004000000100000ffff80000010113f9a009c0130036219083431201a06210924a430690834056821909280d400ad09426b03000a00190190c0d0036425218180610848690d284a007a84868c4868237e25090d01edce4a02064c3014808006577003f00d407642480a123005764422120350137d200d0100a8013003e00b1002600c100
+* example vcodec=mpeg2 es packet: 000001b316012013ffffe018000001b5148a00010000000001b80008004000000100000ffff8000001b58ffff341800000010113f9a009c0130036219083431201a06210924a430690834056821909280d400ad09426b03000a00190190c0d0036425218180610848690d284a007a84868c4868237fe25090d01edce4a02064c30148008006577003f00d407642480a1230057644221
+* example vcodec=mpeg4 es packet: 000001b001000001b58913000001000000012000c48d8800cd0b04241443000001b24c61766335382e33352e313030000001b3001007000001b610604d82d0bc148080caa658d1098cf6877f545a5cac15fe1f977fc9fc0c52d36d05ea78192028072c320c1f66fd8541f7bdf565fff7fc0a9f7d5967d383c37fe2db4d9783e37fee4ac2a0b2b80f2500383e6400e3c238f4bd8d0566
+    000001b0: visual_object_sequence_start (optional)
+      01: data
+    000001b5: visual_object_start
+      8913: data
+    00000100: video_object_start
+    00000120: video_object_layer_start
+      00c48d8800cd0b04241443: contains width: video_object_layer_width (13 bits) and height: video_object_layer_width (13 bits)
+    000001b2: user_data_start
+      4c61766335382e33352e313030000001b3001007000001b610604d82d0bc...: data
+* example vcodec=mpeg4 es packet: 000001b0f3000001b509000001010000012002044007a85820f0a21f000001b61062188a092df8151d7f18556c5deffe647da304cf6e9e856fa34ff98b8c0fb7e5c5dedd7e6fbf7d1d13f38dcf4fda4876eee0abd73ef60a7d8fee531dfd31a350fd1f9356f6a7dcff36dbfcdb6ff36dbfd1b9bdbfcdb6ffc91746d52b81e4c5317ed881e41267018dec6968524616d375564ffb096c99bdfa85e768d4c7e166e0bd67aff7764ef6714a0c0dec8842b30ddc672c6b545b06d5087b223e8a13fed2349ac5036060cd182382f2fe311ef036f9e744c3765bfcc5a1959f7cdb6ff7738b5b17185ae698162d0601ca418071ffc4811289dfc77fd77560bcaee5271b74edcfd3f7cdbfff3edbfcdfeef9ffdf73ffffc7e9dfcf4a2358c3ae7dbfbfba9d7d69ed57dcf36edc9cb6ddbb2539fdb2ec16aa57714606fd40f418b4544327cb94ef2f1751d0b3ee4180b28952c45c50dae08dcb3827db977d0ad0caa6706859b60b572c6aea2eee7560952ccccc2cc9cc255c299dfdb3d9dbc98e30cffecc1c26c8be15ea92ac9437c42287f6a372e6a2791939248b059db2cacbb7dc5cb7ebdfc8bf031139de3c405f2a81bcf55fb79da260c327481feb4739c7cc8f6fb8400b168300e521241d95b148300e52124f3d134b33af3ff374ff71fa7536916abf3df95bba7db9f6dc99b6df73f4dcfbfa5e538e
+    !! no emulation previention byte
+    000001b0: visual_object_sequence_start
+      f3: data
+    000001b5: visual_object_start
+      09: data
+    00000101: video_object_start
+    00000120: video_object_layer_start
+      02044007a85820f0a21f
+    000001b6: vop_start
+      1062188a092df8151d7f18556c5deffe647da304cf6e9e856fa34ff98b8c...: data
+* example vcodec=mjpeg es packet: ffd8ffe000104a46494600010200000100010000fffe00104c61766335382e35342e31303000ffdb0043000804040404040505050505050606060606060606060606060607070708080807070706060707080808080909090808080809090a0a0a0c0c0b0b0e0e0e111114ffc400b70000010501010000000000000000000000030504000201060701000203010101000000000000000000000201050304000607100001020404040306050203040903050102031222050400135232426272f0069214822307c2b2a21543e2f233d2246353731683082534261154171835944401d5a5a3845164369174110001030203050408050305010100000002120003042232054252627206130792f082a214152317b2c2d2e2433316115393f273019183514494ffc00011080120016003012200021100031100ffda000c03010002110311003f00f2aa4ee09e215092a35ea910e9155aba5ca482e2491729090d954eea9f612a979f311515c52214901212e12149c29ff684852e1b4b1289d7677517c572196d1524c3ef455c2e99e738cad6
+* example vcodec=h264 es packet: 00000109100000000001274d40289a6280f0088fbc07d404040500000303e90000ea60e8c0004c4b0002faf2ef380a00fe3c800000000106000780afc800000300400601510104004008148000000001218882220511161dffce9476e99daf8a53f6aaff59c484622613c2528d9e92c995737ce45d3d500db3e82dfff2ec1f0f6f362ba597fff77cf27fcdedf525fc9cead6ab045328af7f759ba8ee1c65c929ff791c45355e9f6a07cbfe6d155aab2ba1eaaf8a2c4fd6661925a4d23d500abd07a82a6e657a6367712bdb3cfe7c6b40248212e05ead9b27e4dc8c408ce59261282f3c14611bc2f602b113b783fbed62025a7487f0d9ac387883f4633e5d932eeda797f1501ea69ab85fa419ddcf65cb1e3cd7d7063e75fe37ba0cbca22941137d20cb6f664e8ffa8f04570951377e3acfdbdf998c4167783efcecfbc3f0323934af8deb56bbd905643bac364e0fc8f792fc0873d171
+   000001: NAL unit
+     09: NAL unit type 9: access_unit_delimiter
+     100000
+   000001: NAL unit
+     27: NAL unit type 7: sequence_parameter_set
+     4d40289a6280f0088fbc07d404040500000303e90000ea60e8c0004c4b0002faf2ef380a00
+   000001: NAL unit
+     28: NAL unit type 8: picture_parameter_set
+     fe3c80...: data
+* example vcodec=h264 es packet: 0000000109f0000000016764000dacd9416096c044000003000400000300c83c50a6580000000168ebe3cb22c00000010605ffffaadc45e9bde6d948b7962cd820d923eeef78323634202d20636f7265203135352072323931372030613834643938202d20482e3236342f4d5045472d342041564320636f646563202d20436f70796c65667420323030332d32303138202d20687474
+    0000000109: access unit delimiter
+      f0: primary_pic_type=7 (3 bits, 8 options), then rbsp_trailing_bits (0b10000)
+    0000000167: sequence parameter set, contains formula to compute width and heigh
+      64000dacd9416096c044000003000400000300c83c50a658
+    0000000168: picture parameter set
+      ebe3cb22c0
+    00000106: additional information (SEI)
+      05ffff...: data
+* example vcodec=h265 es packet: 000000014601500000000140010c01ffff01600000030090000003000003003c9598090000000142010101600000030090000003000003003ca00b08048596566924caf010100000030010000003019080000000014401c172b462400000014e0105ffffffffffffffa02ca2de09b51747dbbb55a4fe7fc2fc4e7832363520286275696c642031363529202d20322e393a5b4c696e75
+    000000014601: nal_unit_type=35 nuh_layer_id=0 nuh_temporal_id_plus1=1 access unit delimiter (>= 32, non-VCL)
+      50: pic_type=2 (3 bits, can be 0, 1 or 2)
+    000000014001: nal_unit_type=32 nuh_layer_id=0 nuh_temporal_id_plus1=1 video parameter set
+      0c01ffff01600000030090000003000003003c959809
+    000000014201: nal_unit_type=33 nuh_layer_id=0 nuh_temporal_id_plus1=1 sequence parameter set
+      0101600000030090000003000003003ca00b08048596566924caf010100000030010000003019080
+    000000014401: nal_unit_type=34 nuh_layer_id=0 nuh_temporal_id_plus1=1 picture parameter set
+      c172b46240
+    0000014e01: nal_unit_type=39 supplemental enhancement information (SEI)
+      05ffff...: data
+
+__END__
