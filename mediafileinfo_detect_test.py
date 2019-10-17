@@ -14,6 +14,7 @@ This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
 Typical usage: mediafileinfo.py *.mp4
 """
 
+import sys
 import unittest
 
 import mediafileinfo_detect
@@ -31,7 +32,51 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_ts_es_track_info('ffd8ffe000104a46494600010200000100010000fffe00104c61766335382e35342e31303000ffdb0043000804040404040505050505050606060606060606060606060607070708080807070706060707080808080909090808080809090a0a0a0c0c0b0b0e0e0e111114ffc400b70000010501010000000000000000000000030504000201060701000203010101000000000000000000000201050304000607100001020404040306050203040903050102031222050400135232426272f0069214822307c2b2a21543e2f233d2246353731683082534261154171835944401d5a5a3845164369174110001030203050408050305010100000002120003042232054252627206130792f082a214152317b2c2d2e2433316115393f273019183514494ffc00011080120016003012200021100031100ffda000c03010002110311003f00f2aa4ee09e215092a35ea910e9155aba5ca482e2491729090d954eea9f612a979f311515c52214901212e12149c29ff684852e1b4b1289d7677517c572196d1524c3ef455c2e99e738cad6'.decode('hex'), 0x06),
         {'width': 352, 'codec': 'mjpeg', 'type': 'video', 'height': 288})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_ts_es_track_info('0000000109100000000001274d40289a6280f0088fbc07d404040500000303e90000ea60e8c0004c4b0002faf2ef380a'.decode('hex'), 0x1b),
+        {'width': 1920, 'codec': 'h264', 'type': 'video', 'height': 1080})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_ts_es_track_info('0b7739181c30e1'.decode('hex'), 0x81),
+        {'sample_size': 16, 'codec': 'ac3', 'sample_rate': 48000, 'channel_count': 5, 'type': 'audio'})
+
+  def test_get_mpeg_ts_pes_track_info(self):
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001e000008080052100018ca100000109100000000001274d40289a6280f0088fbc07d404040500000303e90000ea60e8c0004c4b0002faf2ef380a'.decode('hex'), 0x1b),
+        {'width': 1920, 'codec': 'h264', 'type': 'video', 'height': 1080})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001bd06088080052100018ca10b7739181c30e1'.decode('hex'), 0x81),
+        {'sample_size': 16, 'codec': 'ac3', 'sample_rate': 48000, 'channel_count': 5, 'type': 'audio'})
+    try:
+      mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001bd06088080052100018ca1'.decode('hex'), 0x81)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e), 'EOF after mpeg-ts pes payload pes header: empty es packet.')
+    try:
+      mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001bd06088080052100018ca10b'.decode('hex'), 0x81)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e), 'EOF in mpeg-ts pes es packet: Too short for ac3.')
+    try:
+      mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001bd000a8080052100018ca10b77'.decode('hex'), 0x81)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e), 'Too short for ac3.')
+    try:
+      mediafileinfo_detect.get_mpeg_ts_pes_track_info('000001bd00008080052100018ca10b77'.decode('hex'), 0x81)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e),  'EOF in mpeg-ts pes es packet: Too short for ac3.')
+
+  def test_parse_mpeg_ps_pat(self):
+    self.assertEqual(
+        mediafileinfo_detect.parse_mpeg_ts_pat(buffer('0000b00d0001c300000001e10076578e5fffffff'.decode('hex'))),
+        [(256, 1)])
+
+  def test_parse_mpeg_ps_pmt(self):
+    self.assertEqual(
+        mediafileinfo_detect.parse_mpeg_ts_pmt(buffer('0002b0230001c10000f011f0001bf011f00081f100f00c0a04656e6700050441432d334a1fa123ffff'.decode('hex')), 1),
+        [(0x1011, 0x1b), (0x1100, 0x81)])
 
 
 if __name__ == '__main__':
-  unittest.main()
+  unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
