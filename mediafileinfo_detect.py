@@ -3342,30 +3342,7 @@ def copy_info_from_tracks(info):
     info.setdefault('vcodec', '?')
 
 
-def analyze(f, info=None, file_size_for_seek=None):
-  """Detects file format, and gets media parameters in file f.
-
-  For videos, info['tracks'] is a list with an item for each video or audio
-  track (info['tracks'][...]['type'] in ('video', 'audio'). Presence and
-  parameters of subtitle tracks are not reported.
-
-  Args:
-    f: File-like object with a .read(n) method and an optional .seek(n) method,
-        should do buffering for speed, and must return exactly n bytes unless
-        at EOF. Seeking will be avoided if possible.
-    info: A dict to update with the info found, or None to create a new one.
-    file_size_for_seek: None or an integer specifying the file size up to which
-        it is OK to seek forward (fskip).
-  Returns:
-    The info dict.
-  """
-  if info is None:
-    info = {}
-  # Set it early, in case of an exception.
-  info.setdefault('format', '?')
-  format, header = detect_format(f)
-  info['format'] = format
-
+def _analyze_detected_format(f, info, header, file_size_for_seek):
   prebuf = [0, header]
   header = ''
 
@@ -3418,6 +3395,7 @@ def analyze(f, info=None, file_size_for_seek=None):
         f.seek(size, 1)
         return f.tell() <= file_size_for_seek
 
+  format = info['format']
   if format == 'flv':
     analyze_flv(fread, info, fskip)
   elif format == 'mkv':
@@ -3485,6 +3463,33 @@ def analyze(f, info=None, file_size_for_seek=None):
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
 
-  if info.get('tracks'):
-    copy_info_from_tracks(info)
+
+def analyze(f, info=None, file_size_for_seek=None):
+  """Detects file format, and gets media parameters in file f.
+
+  For videos, info['tracks'] is a list with an item for each video or audio
+  track (info['tracks'][...]['type'] in ('video', 'audio'). Presence and
+  parameters of subtitle tracks are not reported.
+
+  Args:
+    f: File-like object with a .read(n) method and an optional .seek(n) method,
+        should do buffering for speed, and must return exactly n bytes unless
+        at EOF. Seeking will be avoided if possible.
+    info: A dict to update with the info found, or None to create a new one.
+    file_size_for_seek: None or an integer specifying the file size up to which
+        it is OK to seek forward (fskip).
+  Returns:
+    The info dict.
+  """
+  if info is None:
+    info = {}
+  # Set it early, in case of an exception.
+  info.setdefault('format', '?')
+  format, header = detect_format(f)
+  info['format'] = format
+  try:
+    _analyze_detected_format(f, info, header, file_size_for_seek)
+  finally:
+    if info.get('tracks'):
+      copy_info_from_tracks(info)
   return info
