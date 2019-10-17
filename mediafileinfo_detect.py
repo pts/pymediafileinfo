@@ -1894,7 +1894,7 @@ def analyze_mpeg_ps(fread, info, fskip):
     size = 12
   else:
     raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
-  assert size >= len(header)
+  assert size >= len(header), 'mpeg-ps size too large.'
   if not fskip(size - len(header)):
     raise ValueError('EOF in mpeg-ps header.')
 
@@ -1933,7 +1933,7 @@ def analyze_mpeg_ps(fread, info, fskip):
         size = 8
       else:
         raise ValueError('Invalid mpeg-ps pack subformat 0x%02x.' % ord(data[0]))
-      assert size >= len(data)
+      assert size >= len(data), 'mpeg-ps pack size too large.'
       if not fskip(size - len(data)):
         break  # raise ValueError('EOF in mpeg-ps pack header.')
       expect_system_header = True
@@ -2678,7 +2678,7 @@ class FormatDb(object):
         if isinstance(pattern, str):
           hps = max(hps, size + len(pattern))
         elif isinstance(pattern, tuple):
-          assert pattern
+          assert pattern, 'Empty pattern tuple.'
           assert len(set(len(s) for s in pattern)) == 1, (
               'Non-uniform pattern choice sizes for %s: %r' %
               (format, pattern))
@@ -2694,7 +2694,7 @@ FORMAT_DB = FormatDb(FORMAT_ITEMS)
 
 # import math; print ["\0"+"".join(chr(int(100. / 8 * math.log(i) / math.log(2))) for i in xrange(1, 1084))]'
 LOG2_SUB = '\0\0\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccdddddddddddddddeeeeeeeeeeeeeeeeffffffffffffffffggggggggggggggggghhhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiijjjjjjjjjjjjjjjjjjjjkkkkkkkkkkkkkkkkkkkkklllllllllllllllllllllllmmmmmmmmmmmmmmmmmmmmmmmmnnnnnnnnnnnnnnnnnnnnnnnnnnoooooooooooooooooooooooooopppppppppppppppppppppppppppppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsssssssssssssssssssssssssssssssssttttttttttttttttttttttttttttttttttttuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{|||||||||||||||||||||||||||||||||||||||||||||||||||||||}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}~'
-assert len(LOG2_SUB) == 1084
+assert len(LOG2_SUB) == 1084, 'Unexpected LOG2_SUB size.'
 
 
 def detect_format(f):
@@ -2711,13 +2711,13 @@ def detect_format(f):
   fbp = format_db.formats_by_prefix
   for j in xrange(min(len(header), 4), -1, -1):
     for format, spec in fbp[j].get(header[:j], ()):
-      assert isinstance(spec, tuple)
+      assert isinstance(spec, tuple), 'spec must be tuple.'
       confidence = 0
       i = 0
       prev_ofs = 0
       while i < len(spec):
         ofs = spec[i]
-        assert isinstance(ofs, int)
+        assert isinstance(ofs, int), 'ofs must be int.'
         pattern = spec[i + 1]
         if isinstance(pattern, str):
           assert ofs + len(pattern) <= HEADER_SIZE_LIMIT, 'Header too long.'
