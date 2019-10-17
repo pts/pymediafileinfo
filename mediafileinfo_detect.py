@@ -1,6 +1,5 @@
 # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
 
-
 import struct
 
 # ---
@@ -1302,7 +1301,7 @@ def has_bad_emulation_prevention(data):
     i = data.find('\0\0\3', i) + 3
     if i < 3 or i >= len(data):
       return False
-    if data[i] not in '\0\1\2':
+    if data[i] not in '\0\1\2\3':
       return True
 
 
@@ -1321,12 +1320,16 @@ def count_is_h264(header):
     i += 1
   if header[i : i + 3] == '\0\0\0':
     i += 1
+    if header[i : i + 3] == '\0\0\0':
+      i += 1
   if header[i : i + 3] != '\0\0\1':
     return False
   i += 3
-  if header[i : i + 1] not in '\x27\x47\x67':
+  if i >= len(header) or header[i] not in '\x27\x47\x67':
     return False
   i += 1
+  if i >= len(header):
+    return False
   return i * 100
 
 
@@ -1467,12 +1470,13 @@ def analyze_h264(fread, info, fskip):
   # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.264-201610-S!!PDF-E&type=items
   # http://gentlelogic.blogspot.com/2011/11/exploring-h264-part-2-h264-bitstream.html
   # https://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/
-  header = fread(11)
+  header = fread(13)
   i = count_is_h264(header) // 100
   if not i:
     raise ValueError('h264 signature not found.')
-  info['tracks'] = [{'type': 'video', 'codec': 'h264'}]
+  assert i <= len(header), 'h264 preread header too short.'
   header = header[i:]
+  info['tracks'] = [{'type': 'video', 'codec': 'h264'}]
   if len(header) < 40:  # Maybe 32 bytes are also enough.
     header += fread(40 - len(header))
   if has_bad_emulation_prevention(header):
@@ -1505,12 +1509,16 @@ def count_is_h265(header):
     i += 1
   if header[i : i + 3] == '\0\0\0':
     i += 1
+    if header[i : i + 3] == '\0\0\0':
+      i += 1
   if header[i : i + 3] != '\0\0\1':
     return False
   i += 3
   if header[i : i + 2] not in ('\x40\1', '\x42\1'):
     return False
   i += 2
+  if i >= len(header):
+    return False
   return i * 100
 
 
@@ -1519,10 +1527,11 @@ def analyze_h265(fread, info, fskip):
   #
   # https://www.itu.int/rec/dologin.asp?lang=e&id=T-REC-H.265-201504-S!!PDF-E&type=items
   # https://www.codeproject.com/Tips/896030/The-Structure-of-HEVC-Video
-  header = fread(13)
+  header = fread(15)
   i = count_is_h265(header) // 100
   if not i:
     raise ValueError('h265 signature not found.')
+  assert i <= len(header), 'h265 preread header too short.'
   info['tracks'] = [{'type': 'video', 'codec': 'h265'}]
   if len(header) - i < 160:  # TODO(pts): Is this enough?
     header += fread(160 - (len(header) - i))
