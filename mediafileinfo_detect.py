@@ -27,138 +27,6 @@ def analyze_flv(fread, info, fskip):
   # http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
   #
 
-  def parse_h264_sps(
-      data, expected, expected_sps_id,
-      _hextable='0123456789abcdef',
-      # TODO(pts): Precompute this, don't run it each time analyze_flv runs.
-      _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
-      ):
-    # Based on function read_seq_parameter_set_rbsp in
-    # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
-    # , except for the very first byte.
-    #
-    # The formula for width and height is based on:
-    # https://stackoverflow.com/a/31986720/97248
-    if len(data) < 5:
-      raise ValueError('flv h264 avcc sps too short.')
-    if data[0] != '\x67':  # nalu_type=7 nalu_reftype=3.
-      raise ValueError('Bad flv h264 avcc sps type.')
-    if not data[1 : 4].startswith(expected):
-      raise ValueError('Unexpected start of sps.')
-    if len(data) > 255:  # Typically just 22 bytes.
-      raise ValueError('flv h264 avcc sps too long.')
-    io = {}
-    io['chroma_format'] = 1
-    io['profile'] = ord(data[1])
-    io['compatibility'] = ord(data[2])
-    io['level'] = ord(data[3])
-    io['residual_color_transform_flag'] = 0
-    # TODO(pts): Maybe bit shifting is faster.
-    data = iter(''.join(  # Convert to binary.
-        _hex_to_bits[_hextable.find(c)]
-        for c in str(buffer(data, 4)).encode('hex')))
-    def read_1():
-      return int(data.next() == '1')
-    def read_n(n):
-      r = 0
-      for _ in xrange(n):
-        r = r << 1 | (data.next() == '1')
-      return r
-    def read_ue():  # Unsigned varint.
-      r = n = 0
-      while data.next() == '0' and n < 32:
-        n += 1
-      for _ in xrange(n):
-        r = r << 1 | (data.next() == '1')
-      return r + (1 << n) - 1
-    def read_se():  # Signed varint.
-      r = read_ue()
-      if r & 1:
-        return (r + 1) >> 1;
-      else:
-        return -(r >> 1)
-    def read_scaling_list(size):  # Return value ingored.
-      # Untested, based on h264_scale.c.
-      last_scale, next_scale = 8, 8
-      for j in xrange(size):
-        if next_scale:
-          next_scale = (last_scale + read_se()) & 255
-        if next_scale:
-          last_scale = next_scale
-    try:
-      io['sps_id'] = read_ue()
-      if io['sps_id'] != expected_sps_id:
-        raise ValueError('Unexpected flv h264 avcc sps id: expected=%d, got=%d' %
-                         (expecteD_sps_id, io['sps_id']))
-      if io['profile'] in (
-          100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
-        # Untested.
-        io['chroma_format'] = read_ue()
-        if io['chroma_format'] == 3:
-          io['residual_colour_transform_flag'] = read_1()
-        io['bit_depth_luma_minus8'] = read_ue()
-        io['bit_depth_chroma_minus8'] = read_ue()
-        io['qpprime_y_zero_transform_bypass_flag'] = read_1()
-        io['seq_scaling_matrix_present_flag'] = read_1()
-        if io['seq_scaling_matrix_present_flag']:
-          for si in xrange(8):
-            if read_1():
-              read_scaling_list((64, 16)[i < 6])
-      io['log2_max_frame_num'] = 4 + read_ue()
-      io['pic_order_cnt_type'] = read_ue()
-      if io['pic_order_cnt_type'] == 0:
-        io['log2_max_pic_order_cnt'] = 4 + read_ue()
-      elif io['pic_order_cnt_type'] == 1:
-        io['log2_max_pic_order_cnt'] = 0
-        io['delta_pic_order_always_zero_flag'] = read_1()
-        io['offset_for_non_ref_pic'] = read_se()
-        io['offset_for_top_to_bottom_field'] = read_se()
-        for _ in read_ue():
-          read_se()
-      elif io['pic_order_cnt_type'] == 2:
-        io['log2_max_pic_order_cnt'] = 0
-      else:
-        raise ValueError('Unknown flv h264 avcc sps pic_order_cnt_type: %d' %
-                         io['pic_order_cnt_type'])
-      io['num_ref_frames'] = read_ue()
-      io['gaps_in_frame_num_value_allowed_flag'] = read_1()
-      io['width_in_mbs'] = read_ue() + 1
-      io['height_in_map_units'] = read_ue() + 1
-      io['frame_mbs_only_flag'] = read_1()
-      if not io['frame_mbs_only_flag']:
-        io['mb_adaptive_frame_field_flag'] = read_1()
-      io['direct_8x8_inference_flag'] = read_1()
-      io['frame_cropping_flag'] = read_1()
-      if io['frame_cropping_flag']:
-        io['crop_left'] = read_ue()
-        io['crop_right'] = read_ue()
-        io['crop_top'] = read_ue()
-        io['crop_bottom'] = read_ue()
-      else:
-        io['crop_left'] = io['crop_right'] = 0
-        io['crop_top'] = io['crop_bottom'] = 0
-      # Stop parsing here, we are not interested in the VUI parameters which
-      # follow.
-
-      if io['chroma_format'] == 0:
-        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = 'monochrome', 0, 0
-      elif io['chroma_format'] == 1:
-        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:0', 2, 2
-      elif io['chroma_format'] == 2:
-        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:2', 2, 1
-      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 0:
-        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 1, 1
-      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 1:
-        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 0, 0
-      else:
-        raise ValueError('Unknown flv h264 sps chroma_format: %d' % io['chroma_format'])
-      io['height_in_mbs'] = (2 - io['frame_mbs_only_flag']) * io['height_in_map_units']
-      io['width'] =  (io['width_in_mbs']  << 4) - io['sub_width_c']  * (io['crop_left'] + io['crop_right'])
-      io['height'] = (io['height_in_mbs'] << 4) - io['sub_height_c'] * (2 - io['frame_mbs_only_flag']) * (io['crop_top'] + io['crop_bottom'])
-      return io  # h264_sps_info.
-    except StopIteration:
-      raise ValueError('EOF in flv h264 avcc sps.')
-
   data = fread(13)
   if len(data) < 13:
     raise ValueError('Too short for flv.')
@@ -342,13 +210,17 @@ def analyze_flv(fread, info, fskip):
           sps_count &= 31  # Also: lsm &= 3.
           if sps_count != 1:
             raise ValueError('Expected 1 flv h264 avcc sps, got %d' % sps_count)
-          if len(data) < 13:
+          if len(data) < 14:
             raise ValueError('EOF in flv h264 avcc sps size.')
           sps_size, = struct.unpack('>H', data[11 : 13])
           if 13 + sps_size > len(data):
             raise ValueError('EOF in flv h264 avcc sps.')
+          if data[13] != '\x67':
+            raise ValueError('Bad flv h264 avcc sps type.')
+          if data[14 : 17] != expected:
+            raise ValueError('Unexpected start of flv h264 sps.')
           h264_sps_info = parse_h264_sps(
-              buffer(data, 13, sps_size), expected, 0)
+              buffer(data, 14, sps_size - 1), expected_sps_id=0)
           set_video_dimens(video_track_info,
                            h264_sps_info['width'], h264_sps_info['height'])
     elif xtype in (15, 18):
@@ -1420,6 +1292,268 @@ def analyze_flac(fread, info, fskip):
   })
 
 
+# --- H.264.
+
+
+def has_bad_emulation_prevention(data):
+  """Returns true iff \0\0\3 is followed by anything else than \0 or \1 or \2 ."""
+  i = 0
+  while 1:
+    i = data.find('\0\0\3', i) + 3
+    if i < 3 or i >= len(data):
+      return False
+    if data[i] not in '\0\1\2':
+      return True
+
+
+def count_is_h264(header):
+  """Returns confidence (100 * size) or 0."""
+  # Allowed prefix hex regexp: ((00)?00000109(10|30|50|70|90|b0|d0|f0))?(00)?000001(27|47|67)
+  #
+  # We check that forbidden_zero_bit is 0, nal_refc_idc is 0 for AUD and 1,
+  # 2 or 3 for SPS and PPS NAL unit types.
+  if has_bad_emulation_prevention(header):
+    return False
+  i = 4 * header.startswith('\0\0\1\x09') or 5 * header.startswith('\0\0\0\1\x09')
+  if i:
+    if i >= len(header) or header[i] not in '\x10\x30\x50\x70\x90\xb0\xd0\xf0':
+      return False
+    i += 1
+  if header[i : i + 3] == '\0\0\0':
+    i += 1
+  if header[i : i + 3] != '\0\0\1':
+    return False
+  i += 3
+  if header[i : i + 1] not in '\x27\x47\x67':
+    return False
+  i += 1
+  return i * 100
+
+
+def parse_h264_sps(
+    data, expected_sps_id=0,
+    _hextable='0123456789abcdef',
+    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
+    ):
+  """Parses a H.264 sequence parameter set (SPS) NAL unit data."""
+  # Based on function read_seq_parameter_set_rbsp in
+  # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
+  # , except for the very first byte.
+  #
+  # The formula for width and height is based on:
+  # https://stackoverflow.com/a/31986720
+  #
+  # TODO(pts): Estimate how many bytes are used (looks like data[:10], data[:22]).
+  if len(data) < 4:
+    raise ValueError('h264 avcc sps too short.')
+  if len(data) > 255:  # Typically just 22 bytes.
+    raise ValueError('h264 avcc sps too long.')
+  io = {}
+  io['chroma_format'] = 1
+  io['profile'] = ord(data[0])
+  io['compatibility'] = ord(data[1])
+  io['level'] = ord(data[2])
+  io['residual_color_transform_flag'] = 0
+  # TODO(pts): Maybe bit shifting is faster.
+  data = iter(''.join(  # Convert to binary.
+      _hex_to_bits[_hextable.find(c)]
+      for c in str(buffer(data, 3)).encode('hex')))
+  def read_1():
+    return int(data.next() == '1')
+  def read_n(n):
+    r = 0
+    for _ in xrange(n):
+      r = r << 1 | (data.next() == '1')
+    return r
+  def read_ue():  # Unsigned varint.
+    r = n = 0
+    while data.next() == '0' and n < 32:
+      n += 1
+    for _ in xrange(n):
+      r = r << 1 | (data.next() == '1')
+    return r + (1 << n) - 1
+  def read_se():  # Signed varint.
+    r = read_ue()
+    if r & 1:
+      return (r + 1) >> 1;
+    else:
+      return -(r >> 1)
+  def read_scaling_list(size):  # Return value ingored.
+    # Untested, based on h264_scale.c.
+    last_scale, next_scale = 8, 8
+    for j in xrange(size):
+      if next_scale:
+        next_scale = (last_scale + read_se()) & 255
+      if next_scale:
+        last_scale = next_scale
+  try:
+    io['sps_id'] = read_ue()
+    if expected_sps_id is not None and io['sps_id'] != expected_sps_id:
+      raise ValueError('Unexpected flv h264 avcc sps id: expected=%d, got=%d' %
+                       (expected_sps_id, io['sps_id']))
+    if io['profile'] in (
+        100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
+      # Untested.
+      io['chroma_format'] = read_ue()
+      if io['chroma_format'] == 3:
+        io['residual_colour_transform_flag'] = read_1()
+      io['bit_depth_luma_minus8'] = read_ue()
+      io['bit_depth_chroma_minus8'] = read_ue()
+      io['qpprime_y_zero_transform_bypass_flag'] = read_1()
+      io['seq_scaling_matrix_present_flag'] = read_1()
+      if io['seq_scaling_matrix_present_flag']:
+        for si in xrange(8):
+          if read_1():
+            read_scaling_list((64, 16)[i < 6])
+    io['log2_max_frame_num'] = 4 + read_ue()
+    io['pic_order_cnt_type'] = read_ue()
+    if io['pic_order_cnt_type'] == 0:
+      io['log2_max_pic_order_cnt'] = 4 + read_ue()
+    elif io['pic_order_cnt_type'] == 1:
+      io['log2_max_pic_order_cnt'] = 0
+      io['delta_pic_order_always_zero_flag'] = read_1()
+      io['offset_for_non_ref_pic'] = read_se()
+      io['offset_for_top_to_bottom_field'] = read_se()
+      for _ in read_ue():
+        read_se()
+    elif io['pic_order_cnt_type'] == 2:
+      io['log2_max_pic_order_cnt'] = 0
+    else:
+      raise ValueError('Unknown h264 avcc sps pic_order_cnt_type: %d' %
+                       io['pic_order_cnt_type'])
+    io['num_ref_frames'] = read_ue()
+    io['gaps_in_frame_num_value_allowed_flag'] = read_1()
+    io['width_in_mbs'] = read_ue() + 1
+    io['height_in_map_units'] = read_ue() + 1
+    io['frame_mbs_only_flag'] = read_1()
+    if not io['frame_mbs_only_flag']:
+      io['mb_adaptive_frame_field_flag'] = read_1()
+    io['direct_8x8_inference_flag'] = read_1()
+    io['frame_cropping_flag'] = read_1()
+    if io['frame_cropping_flag']:
+      io['crop_left'] = read_ue()
+      io['crop_right'] = read_ue()
+      io['crop_top'] = read_ue()
+      io['crop_bottom'] = read_ue()
+    else:
+      io['crop_left'] = io['crop_right'] = 0
+      io['crop_top'] = io['crop_bottom'] = 0
+    # Stop parsing here, we are not interested in the VUI parameters which
+    # follow.
+
+    if io['chroma_format'] == 0:
+      io['color_mode'], io['sub_width_c'], io['sub_height_c'] = 'monochrome', 0, 0
+    elif io['chroma_format'] == 1:
+      io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:0', 2, 2
+    elif io['chroma_format'] == 2:
+      io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:2', 2, 1
+    elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 0:
+      io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 1, 1
+    elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 1:
+      io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 0, 0
+    else:
+      raise ValueError('Unknown h264 sps chroma_format: %d' % io['chroma_format'])
+    io['height_in_mbs'] = (2 - io['frame_mbs_only_flag']) * io['height_in_map_units']
+    io['width'] =  (io['width_in_mbs']  << 4) - io['sub_width_c']  * (io['crop_left'] + io['crop_right'])
+    io['height'] = (io['height_in_mbs'] << 4) - io['sub_height_c'] * (2 - io['frame_mbs_only_flag']) * (io['crop_top'] + io['crop_bottom'])
+    return io  # h264_sps_info.
+  except StopIteration:
+    raise ValueError('EOF in h264 avcc sps.')
+
+
+def analyze_h264(fread, info, fskip):
+  # H.264 is also known as MPEG-4 AVC.
+  #
+  # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.264-201610-S!!PDF-E&type=items
+  # http://gentlelogic.blogspot.com/2011/11/exploring-h264-part-2-h264-bitstream.html
+  # https://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/
+  header = fread(11)
+  i = count_is_h264(header) // 100
+  if not i:
+    raise ValueError('h264 signature not found.')
+  info['tracks'] = [{'type': 'video', 'codec': 'h264'}]
+  header = header[i:]
+  if len(header) < 40:  # Maybe 32 bytes are also enough.
+    header += fread(40 - len(header))
+  if has_bad_emulation_prevention(header):
+    raise ValueError('Bad emulation prevention in h264.')
+  i = header.find('\0\0\1')
+  if i >= 0:
+    header = header[:i]  # Keep until end of SPS NAL unit.
+  # Remove emulation_prevention_three_byte()s.
+  header = header.replace('\0\0\3', '\0\0')
+  h264_sps_info = parse_h264_sps(header)
+  set_video_dimens(info['tracks'][0],
+                   h264_sps_info['width'], h264_sps_info['height'])
+
+
+# --- H.265.
+
+
+def count_is_h265(header):
+  # Allowed prefix hex regexp: ((00)?0000014601(10|30|50))?(00)?000001(40|42)01
+  #
+  # We check that forbidden_zero_bit is 0, nuh_layer_id is 1,
+  # nuh_temporal_id_plus1 == 1. According to the H.265 spec, these are true
+  # for AUD, VPS and SPS NAL unit types.
+  if has_bad_emulation_prevention(header):
+    return False
+  i = 5 * header.startswith('\0\0\1\x46\1') or 6 * header.startswith('\0\0\0\1\x46\1')
+  if i:
+    if i >= len(header) or header[i] not in '\x10\x30\x50':
+      return False
+    i += 1
+  if header[i : i + 3] == '\0\0\0':
+    i += 1
+  if header[i : i + 3] != '\0\0\1':
+    return False
+  i += 3
+  if header[i : i + 2] not in ('\x40\1', '\x42\1'):
+    return False
+  i += 2
+  return i * 100
+
+
+def analyze_h265(fread, info, fskip):
+  # H.265 is also known as MPEG-4 HEVC.
+  #
+  # https://www.itu.int/rec/dologin.asp?lang=e&id=T-REC-H.265-201504-S!!PDF-E&type=items
+  # https://www.codeproject.com/Tips/896030/The-Structure-of-HEVC-Video
+  header = fread(13)
+  i = count_is_h265(header) // 100
+  if not i:
+    raise ValueError('h265 signature not found.')
+  info['tracks'] = [{'type': 'video', 'codec': 'h265'}]
+  if len(header) - i < 160:  # TODO(pts): Is this enough?
+    header += fread(160 - (len(header) - i))
+  if has_bad_emulation_prevention(header):
+    raise ValueError('Bad emulation prevention in h265.')
+  if header[i - 2] == '\x40':  # Ignore video parameter set (VPS).
+    i = header.find('\0\0\1', i)
+    if i < 0:
+      raise ValueError('EOF in h265 vps.')
+    i += 5
+  if header[i - 2: i] != '\x42\1':
+    raise ValueError('Expected h265 sps, got nalu_type=%d' %
+                     ((ord(header[i - 2]) >> 1) & 63))
+  i = header.find('\0\0\1')
+  if i >= 0:
+    header = header[:i]  # Keep until end of SPS NAL unit.
+  # Remove emulation_prevention_three_byte()s.
+  header = header.replace('\0\0\3', '\0\0')
+  # TODO(pts): Add getting width and height from sps:pic_width_in_luma_samples.
+  # h265_sps_info = parse_h265_sps(header)
+  # set_video_dimens(info['tracks'][0],
+  #                  h265_sps_info['width'], h265_sps_info['height'])
+  # TODO(pts): The conformance cropping window contains the luma samples with horizontal picture coordinates from
+  #        SubWidthC * conf_win_left_offset to pic_width_in_luma_samples ... ( SubWidthC * conf_win_right_offset + 1 ) and
+  #        vertical picture coordinates from SubHeightC * conf_win_top_offset to
+  #        pic_height_in_luma_samples ... ( SubHeightC * conf_win_bottom_offset + 1 ), inclusive.
+  #        The value of SubWidthC * ( conf_win_left_offset + conf_win_right_offset ) shall be less than
+  #        pic_width_in_luma_samples, and the value of SubHeightC * ( conf_win_top_offset + conf_win_bottom_offset ) shall be
+  #        less than pic_height_in_luma_samples.
+
+
 # --- Audio streams in MPEG.
 
 
@@ -1587,7 +1721,7 @@ def get_mpeg_video_track_info(header):
   if (header.startswith('\0\0\1\xb5') or
       (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5')):
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
-    # Also called: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of H.263.
+    # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of H.263.
     # '\0\0\1\xb0' is the profile header, with a single-byte value.
     # https://www.google.com/search?q="video_object_layer_verid"
     # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
@@ -1596,7 +1730,7 @@ def get_mpeg_video_track_info(header):
     # extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
     i = 4 + 5 * header.startswith('\0\0\1\xb0')
     track_info = {'type': 'video', 'codec': 'mpeg-4'}
-    # TODO(pts): Analyze, get width, height.
+    # TODO(pts): Analyze mpeg-4, get media parameters (width, height).
     return track_info
   if len(header) < 9:
     raise ValueError('Too short for mpeg-video.')
@@ -2297,6 +2431,11 @@ def analyze_gif(fread, info, fskip):
 # --- File format detection for many file formats and getting media
 # parameters for some.
 
+
+def adjust_confidence(base_confidence, confidence):
+  return (confidence, max(1, confidence - base_confidence))
+
+
 MAX_CONFIDENCE = 100000
 
 # TODO(pts): Static analysis: fail on duplicate format name.
@@ -2338,6 +2477,8 @@ FORMAT_ITEMS = (
     # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
     # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
     ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
+    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
+    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42',  '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     ('swf', (0, ('FWS', 'CWS'))),
     ('rm', (0, '.RMF\0\0\0')),
@@ -2741,6 +2882,16 @@ def analyze(f, info=None, file_size_for_seek=None):
     analyze_mpeg_ps(fread, info, fskip)
   elif format == 'mpeg-video':
     analyze_mpeg_video(fread, info, fskip)
+  elif format == 'mpeg-adts':
+    # Can change info['format'] = 'mp3'.
+    analyze_mpeg_adts(fread, info, fskip)
+  elif format == 'mp3-id3v2':
+    analyze_id3v2(fread, info, fskip)
+    analyze_mpeg_adts(fread, info, fskip)
+  elif format == 'h264':
+    analyze_h264(fread, info, fskip)
+  elif format == 'h265':
+    analyze_h265(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
@@ -2771,18 +2922,8 @@ def analyze(f, info=None, file_size_for_seek=None):
     info['codec'] = 'lzma'
   elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
-  elif format == 'mpeg-adts':
-    # Can change info['format'] = 'mp3'.
-    analyze_mpeg_adts(fread, info, fskip)
   elif format == 'ac3':
     analyze_ac3(fread, info, fskip)
-  elif format == 'mp3-id3v2':
-    analyze_id3v2(fread, info, fskip)
-    analyze_mpeg_adts(fread, info, fskip)
-  elif format.startswith('mp3-'):
-    # TODO(pts): Skip the ID3 tags in the beginning, then parse as
-    # mpeg-adts.
-    info['format'] = 'mp3'
   elif format == 'jp2':
     if len(fread(12)) != 12:
       raise ValueError('Too short for jp2 header.')

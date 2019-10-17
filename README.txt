@@ -178,7 +178,6 @@ TODO
 * TODO(pts): Estimate better size limits.
 * TODO(pts): Better format=html detection, longer strings etc.
 * TODO(pts): Full detection of 'JASC BROWS FILE\0'.
-* TODO(pts): Add getting media parameters from MP3.
 * TODO(pts): Add getting media parameters from Ogg Vorbis.
 * TODO(pts): Add type=video, type=audio, type=image etc.
 * TODO(pts): Extend media_scan.py with code from here.
