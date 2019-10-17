@@ -2553,6 +2553,11 @@ FORMAT_ITEMS = (
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
+    # TODO(pts): Add analyizing of audio parameters.
+    #     https://en.wikipedia.org/wiki/DTS_(sound_system)
+    #     http://www.ac3filter.net/wiki/DTS
+    #     https://wiki.multimedia.cx/index.php/DTS
+    ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80'))),
 
     # Document media.
 
