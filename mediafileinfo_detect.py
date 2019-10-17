@@ -2627,17 +2627,21 @@ def analyze_mpeg_ts(fread, info, fskip):
         try:
           track_info = get_mpeg_ts_pes_track_info(payload[:], es_stream[0])
         except ValueError, e:
-          if not str(e).startswith('EOF ') or len(payload) > 1000:
-            raise
-          if not buffered_data:
-            buffered_data.append(payload[:])
+          if str(e).startswith('EOF ') and len(payload) <= 1000:
+            if not buffered_data:
+              buffered_data.append(payload[:])
+          else:
+            track_info = e
         payload = None  # Save memory.
         assert track_info is not None, (
             'Unexpected unknown stream_type: 0x%02x' % stream_type)
         if track_info:
           es_stream[2] = track_info
           type_str = es_stream[1]['type']
-          info['tracks'].append(track_info)
+          if isinstance(track_info, Exception):
+            info['tracks'].append(es_stream[1])  # Fallback track_info.
+          else:
+            info['tracks'].append(track_info)
           expected_es_streams -= 1
           if not expected_es_streams:
             break  # Stop scanning when all es streams have been found.
@@ -2663,6 +2667,10 @@ def analyze_mpeg_ts(fread, info, fskip):
     raise ValueError('Missing some mpeg-ts pes payloads (tracks).')
   else:
     assert not eof_msg, 'mpeg-ts EOF reached after all pes payloads were detected.'
+  errors = ['Error for stream_type=0x%02x fallback_track_info=%r: %s' % (es_stream[0], es_stream[1], es_stream[2])
+            for es_stream in es_streams.itervalues() if isinstance(es_stream[2], Exception)]
+  if errors:
+    raise ValueError('Bad mpeg-ts pes payloads: ' + '; '.join(errors))
   if eof_msg:
     raise ValueError(eof_msg)
 
