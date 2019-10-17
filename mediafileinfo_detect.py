@@ -1575,14 +1575,17 @@ def is_mpeg_adts(header):
           (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13))
 
 
-def get_mpeg_adts_track_info(header):
+def get_mpeg_adts_track_info(header, expect_aac=None):
   # https://en.wikipedia.org/wiki/Elementary_stream
   if len(header) < 4:
     raise ValueError('Too short for mpeg-adts.')
   track_info = {'type': 'audio'}
-  if header[0] == '\xff' and header[1] in '\xf0\xf1\xf8\xf9':
+  is_aac = header[0] == '\xff' and header[1] in '\xf0\xf1\xf8\xf9'
+  if expect_aac or (expect_aac is None and is_aac):
     # https://wiki.multimedia.cx/index.php/ADTS
     # AAC is also known as MPEG-4 Part 3 audio, MPEG-2 Part 7 audio.
+    if not is_aac:
+      raise ValueError('mpeg-adts aac signature not found.')
     track_info['codec'] = 'aac'
     track_info['subformat'] = 'mpeg-4'
     sfi = (ord(header[2]) >> 2) & 15
@@ -1727,11 +1730,16 @@ class MpegAudioHeaderFinder(object):
 # --- Video streams in MPEG.
 
 
-def get_mpeg_video_track_info(header):
-  if (header.startswith('\0\0\1\xb5') or
-      (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5')):
+def get_mpeg_video_track_info(header, expect_mpeg4=None):
+  is_mpeg4 = (
+      header.startswith('\0\0\1\xb5') or
+      (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5'))
+  if expect_mpeg4 or (expect_mpeg4 is None and is_mpeg4):
+    if not is_mpeg4:
+      raise ValueError('mpeg-video mpeg-4 signature not found.')
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
-    # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of H.263.
+    # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of
+    # H.263, DivX.
     # '\0\0\1\xb0' is the profile header, with a single-byte value.
     # https://www.google.com/search?q="video_object_layer_verid"
     # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
@@ -1947,17 +1955,20 @@ def analyze_mpeg_ps(fread, info, fskip):
       data = fread(2)
       if len(data) < 2:
         break  # raise ValueError('EOF in mpeg-ps system header size.')
-      size = struct.unpack('>H', data)[0]
+      size, = struct.unpack('>H', data)
       if not fskip(size):
         break  # raise ValueError('EOF in mpeg-ps system header.')
-    elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):
+    elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):  # PES packet.
       packet_count += 1
       if packet_count > 1500:
         break
       data = fread(2)
       if len(data) < 2:
         break  # raise ValueError('EOF in mpeg-ps packet size.')
-      size = struct.unpack('>H', data)[0]
+      size, = struct.unpack('>H', data)
+      if size == 0:
+        # TODO(pts): Can we figure out the size?
+        raise ValueError('Bad size 0 in PES packet.')
       data = fread(size)
       if len(data) < size:
         break  # raise ValueError('EOF in mpeg-ps packet.')
@@ -2026,6 +2037,634 @@ def analyze_mpeg_ps(fread, info, fskip):
   info['hdr_packet_count'] = packet_count
   info['hdr_av_packet_count'] = av_packet_count
   info['hdr_skip_count'] = skip_count
+
+
+# --- mpeg-ts (MPEG TS).
+
+
+def get_jpeg_dimensions(fread):
+  """Returns (width, height) of a JPEG file.
+
+  Args:
+    f: An object supporting the .read(size) method. Should be seeked to the
+        beginning of the file.
+    header: The first few bytes already read from fread.
+  Returns:
+    (width, height) pair of integers.
+  Raises:
+    ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
+    IOError: If raised by fread(size).
+  """
+  # Implementation based on pts-qiv
+  #
+  # A typical JPEG file has markers in these order:
+  #   d8 e0_JFIF e1 e1 e2 db db fe fe c0 c4 c4 c4 c4 da d9.
+  #   The first fe marker (COM, comment) was near offset 30000.
+  # A typical JPEG file after filtering through jpegtran:
+  #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
+  #   The first fe marker (COM, comment) was at offset 20.
+
+  def read_all(size):
+    data = fread(size)
+    if len(data) != size:
+      raise ValueError(
+          'EOF in jpeg: wanted=%d got=%d' % (size, len(data)))
+    return data
+
+  data = fread(4)
+  if len(data) < 4:
+    raise ValueError('Too short for jpeg.')
+  if not data.startswith('\xff\xd8\xff'):
+    raise ValueError('jpeg signature not found.')
+  m = ord(data[3])
+  while 1:
+    while m == 0xff:  # Padding.
+      m = ord(read_all(1))
+    if m in (0xd8, 0xd9, 0xda):
+      # 0xd8: SOI unexpected.
+      # 0xd9: EOI unexpected before SOF.
+      # 0xda: SOS unexpected before SOF.
+      raise ValueError('Unexpected marker: 0x%02x' % m)
+    ss, = struct.unpack('>H', read_all(2))
+    if ss < 2:
+      raise ValueError('Segment too short.')
+    ss -= 2
+    if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
+      if ss < 5:
+        raise ValueError('SOF segment too short.')
+      height, width = struct.unpack('>xHH', read_all(5))
+      return width, height
+    read_all(ss)
+
+    # Read next marker to m.
+    m = read_all(2)
+    if m[0] != '\xff':
+      raise ValueError('Marker expected.')
+    m = ord(m[1])
+  raise AssertionError('Internal JPEG parser error.')
+
+
+def get_string_fread(header):
+  i_ary = [0]
+
+  def fread(n):
+    result = header[i_ary[0] : i_ary[0] + n]
+    i_ary[0] += len(result)
+    return result
+
+  return fread
+
+
+def get_track_info_from_analyze_func(header, analyze_func, track_info=None):
+  if not isinstance(header, (str, buffer)):
+    raise TypeError
+  info = {}
+
+  if header:
+    i_ary = [0]
+
+    def fread(n):
+      result = header[i_ary[0] : i_ary[0] + n]
+      i_ary[0] += len(result)
+      return result
+
+    def fskip(n):
+      return len(fread(n)) == n
+
+    analyze_func(fread, info, fskip)
+
+  track_info = dict(track_info or ())
+  if isinstance(info.get('tracks'), (list, tuple)) and info['tracks']:
+    track_info.update(info['tracks'][0])
+  elif 'width' in info and 'height' in info and 'codec' in info:
+    track_info = {'type': 'video'}
+    for key in ('width', 'height', 'codec'):
+      track_info[key] = info[key]
+  if track_info.get('codec') in ('jpeg', 'jpeg2000'):
+    track_info['codec'] = 'm' + track_info['codec']  # E.g. 'mjpeg'.
+  return track_info
+
+
+def get_mpeg_ts_es_track_info(header, stream_type):
+  if not isinstance(header, str):
+    raise TypeError
+  # mpeg-ts elementary stream types:
+  # https://en.wikipedia.org/wiki/Program-specific_information#Elementary_stream_types
+  if stream_type in (0x01, 0x02):
+    # Sometimes the wrong stream_type is used (e.g. 0x02 for mpeg-2).
+    track_info = {'type': 'video', 'codec': 'mpeg-12'}
+    if header:
+      track_info.update(get_mpeg_video_track_info(header, expect_mpeg4=False))
+  elif stream_type == 0x06:
+    # stream_type=0x06 chosen by ffmpeg. The standard says any ``privately defined MPEG-2 packetized data''.
+    if not header:
+      return {'type': 'video', 'codec': 'maybe-mjpeg'}
+    if not header.startswith('\xff\xd8\xff'):
+      return {'type': 'video', 'codec': 'not-mjpeg'}
+    track_info = {'type': 'video', 'codec': 'mjpeg'}
+    track_info['width'], track_info['height'] = get_jpeg_dimensions(
+        get_string_fread(header))
+  elif stream_type == 0x10:
+    track_info = {'type': 'video', 'codec': 'mpeg-4'}
+    if header:
+      track_info.update(get_mpeg_video_track_info(header, expect_mpeg4=True))
+  elif stream_type == 0x1b:
+    track_info = get_track_info_from_analyze_func(
+        header, analyze_h264, {'type': 'video', 'codec': 'h264'})
+  elif stream_type == 0x21:
+    # TODO(pts): What is the actual format here? Is it jp2? How can we get width and height?
+    return {'type': 'video', 'codec': 'mjpeg2000'}
+  elif stream_type == 0x24:
+    return get_track_info_from_analyze_func(
+        header, analyze_h265, {'type': 'video', 'codec': 'h265'})
+  elif stream_type == 0x52:
+    return {'type': 'video', 'codec': 'chinese-video'}
+  elif stream_type == 0xd1:
+    return {'type': 'video', 'codec': 'bbc-dirac'}
+  elif stream_type == 0xea:
+    return {'type': 'video', 'codec': 'vc1'}
+  elif stream_type in (0x03, 0x04):
+    track_info = {'type': 'audio', 'codec': 'mp123'}
+    if header:
+      track_info.update(get_mpeg_adts_track_info(header, expect_aac=False))
+  elif stream_type == 0x0f:
+    track_info = {'type': 'audio', 'codec': 'aac'}
+    if header:
+      track_info.update(get_mpeg_adts_track_info(header, expect_aac=True))
+  elif stream_type == 0x11:
+    return {'type': 'audio', 'codec': 'loas'}
+  elif stream_type == 0x1c:
+    # TODO(pts): Is this LPCM (uncompressed) audio? If yes, get
+    # audio paramaters.
+    return {'type': 'audio', 'codec': 'pcm'}
+  elif stream_type == 0x81:
+    track_info = {'type': 'audio', 'codec': 'ac3'}
+    if header:
+      track_info.update(get_ac3_track_info(header))
+  elif stream_type in (0x82, 0x85):
+    if not (header.startswith('\x7f\xfe\x80\x01') or
+            header.startswith('\xfe\x7f\x01\x80')):
+      # Can be SCTE subtitle.
+      return {'type': 'audio', 'codec': 'not-dts'}
+    # TODO(pts): Get audio parameters.
+    return {'type': 'audio', 'codec': 'dts'}
+  elif stream_type == 0x83:
+    return {'type': 'audio', 'codec': 'truehd'}  # Dolby.
+  elif stream_type == 0x84:
+    return {'type': 'audio', 'codec': 'digital-plus'}  # Dolby.
+  else:
+    return None  # Unknown stream type.
+  return track_info
+
+
+def get_mpeg_ts_pes_track_info(header, stream_type):
+  if not isinstance(header, str):
+    raise TypeError
+  if len(header) < 6:
+    raise ValueError('EOF in mpeg-ts pes payload signature.')
+  if not header.startswith('\0\0\1'):
+    raise ValueError('Bad mpeg-ts pes payload signature.')
+  sid = ord(header[3])
+  if not (0xc0 <= sid < 0xf0 or sid == 0xbd or sid == 0xfd):
+    # TODO(pts): Should we be more permissive and accept anything?
+    raise ValueError('Bad mpeg-ts pes sid: 0x%02x' % sid)
+  size, = struct.unpack('>H', header[4 : 6])
+  j = 6
+  if size:
+    i = j + size
+  else:
+    i = len(header)
+  while j < len(header) and j <= 16 and header[j] == '\xff':
+    j += 1
+  if j >= len(header):
+    raise ValueError('EOF in mpeg-ts pes payload pes header.')
+  if ord(header[j]) >> 6 == 2:
+    if len(header) < j + 3:
+      raise ValueError('EOF in mpeg-ps packet type 2 data.')
+    j += 3 + ord(header[j + 2])
+  else:
+    if ord(header[j]) >> 6 == 1:
+      j += 2
+      if j >= len(header):
+        raise ValueError('EOF in mpeg-ps packet type 1 header.')
+    if (ord(header[j]) & 0xf0) == 0x20:
+      j += 5
+    elif (ord(header[j]) & 0xf0) == 0x30:
+      j += 10
+    elif ord(header[j]) == 0x0f:
+      j += 1
+  if j > i:
+    raise ValueError('EOF in mpeg-ts pes payload sized pes header.')
+  if j >= i or j >= len(header):
+    # We need to check this, because get_mpeg_ts_es_track_info special-cases
+    # an empty header.
+    raise ValueError('EOF after mpeg-ts pes payload pes header: empty es packet.')
+  if size and i <= len(header):
+    # TODO(pts): Avoid copying, use buffer.
+    return get_mpeg_ts_es_track_info(header[j : i], stream_type)
+  try:
+    return get_mpeg_ts_es_track_info(header[j : i], stream_type)
+  except ValueError, e:
+    if not str(e).startswith('Too short for '):
+      raise
+    raise ValueError('EOF in mpeg-ts pes es packet: %s' % e)
+
+
+MPEG_TS_PSI_TABLES = {'pat': 0, 'cat': 1, 'pmt': 2}
+
+
+def yield_mpeg_ts_psi_sections(data, table_name):
+  """Parses mpeg-ts program-specific information."""
+  # https://en.wikipedia.org/wiki/Program-specific_information#Table_Sections
+  # https://en.wikipedia.org/wiki/Program-specific_information#PAT_(Program_association_specific_data)
+  if not isinstance(data, (str, buffer)):
+    raise TypeError
+  tn, table_id = table_name, MPEG_TS_PSI_TABLES[table_name]
+  i = 0
+  if i >= len(data):
+    raise ValueError('EOF in mpeg-ts %s pointer_field.' % tn)
+  i += 1 + ord(data[i])
+  if i > len(data):
+    raise ValueError('EOF in mpeg-ts %s pointer_filler_bytes.' % tn)
+  while i < len(data):
+    if data[i] == '\xff':
+      if data[i:].rstrip('\xff'):
+        raise ValueError('Bad mpeg-ts %s suffix stuffing.' % tn)
+      break
+    if ord(data[i]) != table_id:
+      raise ValueError('Bad mpeg-ts %s table_id: %d' % (tn, ord(data[i])))
+    i += 1
+    if i + 2 > len(data):
+      raise ValueError('EOF in mpeg-ts %s section_size.' % tn)
+    h, = struct.unpack('>H', data[i : i + 2])
+    i += 2
+    if not h & 0x8000:
+      raise ValueError('Bad mpeg-ts %s section_syntax_indicator.' % tn)
+    if h & 0x4000:
+      raise ValueError('Bad mpeg-ts %s private_bit.' % tn)
+    if (h & 0x3000) != 0x3000:
+      raise ValueError('Bad mpeg-ts %s reserved1.' % tn)
+    if h & 0xc00:
+      raise ValueError('Bad mpeg-ts %s section_size_unused.' % tn)
+    j = i
+    i += h & 0x3ff
+    if i - j > 1021:
+      raise ValueError('mpeg-ts %s section too long.' % tn)
+    if i > len(data):
+      raise ValueError('EOF in mpeg-ts %s section.' % tn)
+    i -= 4
+    if i < j:
+      raise ValueError('mpeg-ts %s section too short (no room for CRC32).' % tn)
+    if j + 2 > i:
+      raise ValueError('EOF in mpeg-ts %s section transport_stream_identifier.' % tn)
+    identifier, = struct.unpack('>H', data[j : j + 2])
+    j += 2
+    if j >= i:
+      raise ValueError('EOF in mpeg-ts %s section version byte.' % tn)
+    h = ord(data[j])
+    j += 1
+    if (h & 0xc0) != 0xc0:
+      raise ValueError('Bad mpeg-ts %s section reserved2.' % tn)
+    version = (h >> 1) & 31
+    if version not in (0, 1):
+      raise ValueError('Bad mpeg-ts %s section version: %d' % version)
+    if not h & 1:
+      raise ValueError('Bad mpeg-ts %s section current_indicator.' % tn)
+    if j >= i:
+      raise ValueError('EOF in mpeg-ts %s section section_number.' % tn)
+    section_number = ord(data[j])
+    j += 1
+    if j >= i:
+      raise ValueError('EOF in mpeg-ts %s section last_section_number.' % tn)
+    last_section_number = ord(data[j])
+    j += 1
+    yield (j, i, identifier, section_number, last_section_number)
+    i += 4  # Skip CRC32.
+
+
+def parse_mpeg_ts_pat(data):
+  """Returns a list of (pmt_pid, program_num) pairs."""
+  result = []
+  for items in yield_mpeg_ts_psi_sections(data, 'pat'):
+    j, i = items[:2]
+    while j < i:
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pat entry program_num.')
+      program_num, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pat entry pmt_pid.')
+      h, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if (h & 0xe000) != 0xe000:
+        raise ValueError('Bad mpeg-ts pat entry reserved3.')
+      pmt_pid = h & 0x1fff
+      if pmt_pid in (0, 0x1fff):
+        raise ValueError('Bad mpeg-ts pat entry pmt_pid: 0x%x' % pmt_pid)
+      if program_num != 0:  # NIT (table_name='nit') has program_num == 0.
+        result.append((pmt_pid, program_num))
+  if not result:
+    raise ValueError('Empty mpeg-ts pat.')
+  return result
+
+
+
+def parse_mpeg_ts_pmt(data, expected_program_num):
+  """Returns a list of (es_pid, stream_type) pairs."""
+  result = []
+  for items in yield_mpeg_ts_psi_sections(data, 'pmt'):
+    j, i, identifier = items[:3]
+    if identifier != expected_program_num:
+      raise ValueError('Bad mpeg-ts pmt section program_num.')
+    if j + 2 > i:
+      raise ValueError('EOF in mpeg-ts pmt entry pcr_pid.')
+    h, = struct.unpack('>H', data[j : j + 2])
+    j += 2
+    pcr_pid = h & 0x1fff
+    if pcr_pid == 0:
+      raise ValueError('Bad mpeg-ts pmt entry pcr_pid.')
+    if j + 2 > i:
+      raise ValueError('EOF in mpeg-ts pmt entry program_descriptor_size.')
+    h, = struct.unpack('>H', data[j : j + 2])
+    j += 2
+    if (h & 0xf000) != 0xf000:
+      raise ValueError('Bad mpeg-ts pmt entry reserved4.')
+    if h & 0xc00:
+      raise ValueError('Bad mpeg-ts pmt entry program_descriptor_size_unused.')
+    j += h & 0x3ff
+    if j > i:
+      raise ValueError('EOF in mpeg-ts pmt entry program_descriptor.')
+    if j >= i:
+      raise ValueError('No streams in mpeg-ts pmt entry.')
+    while j < i:
+      if j >= i:
+        raise ValueError('EOF in mpeg-ts pmt stream_info stream_type.')
+      stream_type = ord(data[j])
+      # https://en.wikipedia.org/wiki/Program-specific_information#Elementary_stream_types
+      if stream_type in (0, 0x22, 0x23, 0x25):
+        raise ValueError('Bad mpeg-ts pmt stream_info stream_type: 0x%x' % stream_type)
+      j += 1
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pmt stream_info es_pid.')
+      h, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if (h & 0xe000) != 0xe000:
+        raise ValueError('Bad mpeg-ts pmt stream_info reserved5.')
+      es_pid = h & 0x1fff
+      if es_pid in (0, 0x1fff):
+        raise ValueError('Bad mpeg-ts pmt stream_info es_pid: 0x%x' % es_pid)
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pmt stream_info info_size.')
+      h, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if (h & 0xf000) != 0xf000:
+        raise ValueError('Bad mpeg-ts pmt stream_info reserved6.')
+      if h & 0xc00:
+        raise ValueError('Bad mpeg-ts pmt stream_info es_descriptor_size_unused.')
+      j += h & 0x3ff
+      if j > i:
+        raise ValueError('EOF in mpeg-ts pmt stream_info es_descriptor.')
+      result.append((es_pid, stream_type))
+  if not result:
+    raise ValueError('Empty mpeg-ts pmt.')
+  return result
+
+
+def is_mpeg_ts(header):
+  # https://en.wikipedia.org/wiki/MPEG_transport_stream
+  # https://erg.abdn.ac.uk/future-net/digital-video/mpeg2-trans.html
+  # TODO(pts): Use any of these to get more info.
+  # https://github.com/topics/mpeg-ts
+  # https://github.com/asticode/go-astits
+  # https://github.com/drillbits/go-ts
+  # https://github.com/small-teton/MpegTsAnalyzer
+  # https://github.com/mzinin/ts_splitter
+  is_bdav = header.startswith('\0\0')
+  i = (0, 4)[is_bdav]
+  if len(header) < i + 4:
+    return False
+  had_pat = False
+  for pc in xrange(5):  # Number of packets to scan.
+    if len(header) < i + 4:
+      return True
+    if header[i] != '\x47':
+      return False
+    b, = struct.unpack('>L', header[i : i + 4])
+    tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
+    pid = (b >> 8) & 0x1fff  # Packet id.
+    tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
+    #print (tei, cc, tsc, pid)
+    if tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0:  # pat.
+      had_pat = True
+      # TODO(pts): Call parse_mpeg_ts_pat, ignore 'EOF '.
+    elif tei == 0 and cc in (0, 1) and tsc == 0 and 0x10 <= pid <= 0x20:
+      # pid=0x11 is
+      # https://en.wikipedia.org/wiki/Service_Description_Table
+      pass  # DVB metadata.
+    elif tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0x1fff: # Null.
+      pass
+    elif (tei == 0 and cc in (0, 1) and tsc == 0 and 0x20 <= pid < 0x1fff and
+          had_pat):
+      break
+    else:
+      return False
+    i += (188, 192)[is_bdav]
+  return True
+
+
+def analyze_mpeg_ts(fread, info, fskip):
+  prefix = fread(4)
+  if len(prefix) < 4:
+    raise ValueError('Too short for mpeg-ts.')
+  ts_packet_count = ts_pusi_count = ts_payload_count = 0
+  if prefix.startswith('\x47'):
+    is_bdav = False
+    info['subformat'] = 'ts'
+  elif prefix.startswith('\0\0'):
+    is_bdav = True
+    info['subformat'] = 'bdav'
+  else:
+    raise ValueError('mpeg-ts signature not found.')
+  ts_packet_first_limit = 5
+  first_few_packets = []
+  # Maps from pmt_pid to program_num. Empty if pat payload not found yet.
+  programs = {}
+  # Maps from es_pid to [stream_type, basic_track_info, track_info, buffered_data].
+  es_streams = {}
+  buffered_pat_data = []
+  buffered_pmt_data_by_pid = {}
+  es_streams_by_type = {'audio': 0, 'video': 0}
+  es_payloads_by_type = {'audio': 0, 'video': 0}
+  # info['format'] = 'mpeg-ts'  # Not yet, later.
+  info['tracks'] = []
+  eof_msg = ''
+  ts_packet_count_limit = 6000
+  expected_es_streams = 0
+  while 1:
+    if ts_packet_count >= ts_packet_count_limit:
+      break
+    ts_packet_count += 1
+    if is_bdav:
+      if len(prefix) != 4:
+        prefix += fread(4 - len(prefix))
+        if len(prefix) < 4:
+          if prefix:
+            eof_msg = 'EOF in mpeg-ts packet header.'
+          else:
+            eof_msg = 'EOF in mpeg-ts bdav stream.'
+          break
+      prefix = ''
+    data = prefix + fread(188 - len(prefix))
+    prefix = ''
+    if len(data) < 188:
+      if data:
+        eof_msg = 'EOF in mpeg-ts packet.'
+      else:
+        eof_msg = 'EOF in mpeg-ts stream.'
+      break
+    if data[0] != '\x47':
+      raise ValueError('Bad sync byte in mpeg-ts packet: 0x%02x' % ord(data[0]))
+    if first_few_packets is not None and ts_packet_count <= ts_packet_first_limit:
+      first_few_packets.append(data)
+      if not is_mpeg_ts(''.join(first_few_packets)):
+        raise ValueError('Bad mpeg-ps header until packet %d.' % ts_packet_count)
+      if ts_packet_count == ts_packet_first_limit:
+        first_few_packets = None  # Save memory.
+        info['format'] = 'mpeg-ts'
+    h, = struct.unpack('>L', data[:4])
+    tei, pusi, tp = (h >> 23) & 1, (h >> 22) & 1, (h >> 21) & 1
+    pid = (h >> 8) & 0x1fff  # Packet id.
+    tsc, afc, cc = (h >> 6) & 3, (h >> 4) & 3, h & 15
+    if tei:  # Ignore packet with errors.
+      continue
+    if pid == 0x1fff:  # Ignore null packet.
+      continue
+    if pusi:  # New payload packet starts in this ts packet.
+      ts_pusi_count += 1
+    if afc == 3:
+      # End of the adaptation field is stuffed with '\xff' just at the end
+      # of the payload unit (PES packet).
+      payload_ofs = 5 + ord(data[4])
+    elif afc == 1:
+      payload_ofs = 4
+    elif afc == 2:
+      continue  # No payload.
+    else:
+      raise ValueError('Invalid afc value 0.')
+    if len(data) < payload_ofs:
+      raise ValueError('mpeg-ts payload too short.')
+    ts_payload_count += 1
+    #print 'packet pusi=%d pid=0x%x size=%d' % (pusi, pid, len(data) - payload_ofs)
+    if pid == 0:
+      if not programs and (pusi or buffered_pat_data) and len(data) > payload_ofs:
+        if pusi:
+          del buffered_pat_data[:]
+          payload = buffer(data, payload_ofs)
+        else:
+          buffered_pat_data.append(data[payload_ofs:])
+          payload = ''.join(buffered_pat_data)
+          if len(payload) > 1200:
+            raise ValueError('mpeg-ts pat payload too long.')
+        try:
+          programs.update(parse_mpeg_ts_pat(payload))
+        except ValueError, e:
+          if not str(e).startswith('EOF '):
+            raise
+          if not buffered_pat_data:
+            buffered_pat_data.append(payload[:])
+        payload = None  # Save memory.
+        if programs:
+          for pmt_pid in programs:
+            buffered_pmt_data_by_pid[pmt_pid] = []
+    elif pid in programs:
+      if programs[pid] > 0 and (pusi or buffered_pmt_data_by_pid[pid]) and len(data) > payload_ofs:
+        buffered_data = buffered_pmt_data_by_pid[pid]
+        if pusi:
+          del buffered_data[:]
+          payload = buffer(data, payload_ofs)
+        else:
+          buffered_data.append(data[payload_ofs:])
+          payload = ''.join(buffered_data)
+          if len(payload) > 1800:
+            raise ValueError('mpeg-ts pmt payload too long.')
+        try:
+          parsed_pmt = parse_mpeg_ts_pmt(payload, programs[pid])
+        except ValueError, e:
+          if not str(e).startswith('EOF '):
+            raise
+          if not buffered_data:
+            buffered_data.append(payload[:])
+          parsed_pmt = None
+        payload = None  # Save memory.
+        if parsed_pmt:
+          info['format'] = 'mpeg-ts'
+          for es_pid, stream_type in parsed_pmt:
+            if es_pid in es_streams:
+              raise ValueError('Duplicate mpeg-ts pmt es_pid: 0x%x' % es_pid)
+            if es_pid in programs:
+              raise ValueError('mpeg-ts pmg es_pid is also a pmt_pid: 0x%x' % es_pid)
+            track_info = get_mpeg_ts_es_track_info('', stream_type)
+            if track_info is not None:  # Recognized audio or video es stream.
+              es_streams_by_type[track_info['type']] += 1
+              es_streams[es_pid] = [stream_type, track_info, None, []]
+              ts_packet_count_limit += 1000
+              expected_es_streams += 1
+          programs[pid] = -1
+          parsed_pmt = None  # Save memory.
+    elif pid in es_streams:
+      es_stream = es_streams[pid]
+      if pusi:
+        es_payloads_by_type[es_stream[1]['type']] += 1
+      if es_stream[2] is None and (pusi or es_stream[3]) and len(data) > payload_ofs:
+        buffered_data = es_stream[3]
+        if pusi:
+          del buffered_data[:]
+          payload = buffer(data, payload_ofs)
+        else:
+          buffered_data.append(data[payload_ofs:])
+          payload = ''.join(buffered_data)
+        track_info = False
+        try:
+          track_info = get_mpeg_ts_pes_track_info(payload[:], es_stream[0])
+        except ValueError, e:
+          if not str(e).startswith('EOF ') or len(payload) > 1000:
+            raise
+          if not buffered_data:
+            buffered_data.append(payload[:])
+        payload = None  # Save memory.
+        assert track_info is not None, (
+            'Unexpected unknown stream_type: 0x%02x' % stream_type)
+        if track_info:
+          es_stream[2] = track_info
+          type_str = es_stream[1]['type']
+          info['tracks'].append(track_info)
+          expected_es_streams -= 1
+          if not expected_es_streams:
+            break  # Stop scanning when all es streams have been found.
+    if not programs and ts_payload_count >= 3000:
+      raise ValueError('Missing mpeg-ts pat payload.')
+    if not es_streams and ts_payload_count >= 3500:
+      raise ValueError('Missing mpeg-ts pmt payload.')
+  if (first_few_packets is not None and
+      not is_mpeg_ts(''.join(first_few_packets))):
+    raise ValueError('Bad mpeg-ps header.')
+  info['hdr_ts_packet_count'] = ts_packet_count
+  info['hdr_ts_payload_count'] = ts_payload_count
+  info['hdr_ts_pusi_count'] = ts_pusi_count
+  info['hdr_vstreams'] = es_streams_by_type['video']
+  info['hdr_astreams'] = es_streams_by_type['audio']
+  info['hdr_vframes'] = es_payloads_by_type['video']
+  info['hdr_aframes'] = es_payloads_by_type['audio']
+  if not programs:
+    raise ValueError('Missing mpeg-ts pat payload.')
+  if not es_streams:
+    raise ValueError('Missing mpeg-ts pmt with streams.')
+  if expected_es_streams:
+    raise ValueError('Missing some mpeg-ts pes payloads (tracks).')
+  else:
+    assert not eof_msg, 'mpeg-ts EOF reached after all pes payloads were detected.'
+  if eof_msg:
+    raise ValueError(eof_msg)
 
 
 # ---
@@ -2154,66 +2793,6 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
   return frame_count > 1
 
 
-def get_jpeg_dimensions(fread):
-  """Returns (width, height) of a JPEG file.
-
-  Args:
-    f: An object supporting the .read(size) method. Should be seeked to the
-        beginning of the file.
-    header: The first few bytes already read from fread.
-  Returns:
-    (width, height) pair of integers.
-  Raises:
-    ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
-    IOError: If raised by fread(size).
-  """
-  # Implementation based on pts-qiv
-  #
-  # A typical JPEG file has markers in these order:
-  #   d8 e0_JFIF e1 e1 e2 db db fe fe c0 c4 c4 c4 c4 da d9.
-  #   The first fe marker (COM, comment) was near offset 30000.
-  # A typical JPEG file after filtering through jpegtran:
-  #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
-  #   The first fe marker (COM, comment) was at offset 20.
-
-  def read_all(size):
-    data = fread(size)
-    if len(data) != size:
-      raise ValueError(
-          'Short read in JPEG: wanted=%d got=%d' % (size, len(data)))
-    return data
-
-  data = fread(4)
-  if len(data) < 4 or not data.startswith('\xff\xd8\xff'):
-    raise ValueError('Not a JPEG file.')
-  m = ord(data[3])
-  while 1:
-    while m == 0xff:  # Padding.
-      m = ord(read_all(1))
-    if m in (0xd8, 0xd9, 0xda):
-      # 0xd8: SOI unexpected.
-      # 0xd9: EOI unexpected before SOF.
-      # 0xda: SOS unexpected before SOF.
-      raise ValueError('Unexpected marker: 0x%02x' % m)
-    ss, = struct.unpack('>H', read_all(2))
-    if ss < 2:
-      raise ValueError('Segment too short.')
-    ss -= 2
-    if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
-      if ss < 5:
-        raise ValueError('SOF segment too short.')
-      height, width = struct.unpack('>xHH', read_all(5))
-      return width, height
-    read_all(ss)
-
-    # Read next marker to m.
-    m = read_all(2)
-    if m[0] != '\xff':
-      raise ValueError('Marker expected.')
-    m = ord(m[1])
-  raise AssertionError('Internal JPEG parser error.')
-
-
 def get_brn_dimensions(fread):
   """Returns (width, height) of a BRN file.
 
@@ -2282,53 +2861,6 @@ def get_brn_dimensions(fread):
     return width, height
   else:
     raise ValueError('Dimensions not found in BRN.')
-
-
-def is_mpeg_ts(header):
-  # https://en.wikipedia.org/wiki/MPEG_transport_stream
-  # https://erg.abdn.ac.uk/future-net/digital-video/mpeg2-trans.html
-  # TODO(pts): Use any of these to get more info.
-  # https://github.com/topics/mpeg-ts
-  # https://github.com/asticode/go-astits
-  # https://github.com/drillbits/go-ts
-  # https://github.com/small-teton/MpegTsAnalyzer
-  # https://github.com/mzinin/ts_splitter
-  is_m2ts = header.startswith('\0\0')  # Or BDAV.
-  i = (0, 4)[is_m2ts]
-  if len(header) < i + 4:
-    return False
-  had_pat = False
-  for pc in xrange(5):  # Number of packets to scan.
-    if len(header) < i + 4:
-      return True
-    if header[i] != '\x47':
-      return False
-    b, = struct.unpack('>L', header[i : i + 4])
-    tei = (b >> 23) & 1
-    pusi = (b >> 22) & 1
-    tp = (b >> 21) & 1
-    packet_id = (b >> 8) & 0x1fff  # 13-bit.
-    tsc = (b >> 6) & 3
-    afc = (b >> 4) & 3
-    cc = b & 15
-    #print (tei, cc, tsc, packet_id)
-    # TODO(pts): If packet_id == 8191, then it's the null packet, and find
-    # the next packet.
-    if tei == 0 and cc in (0, 1) and tsc == 0 and packet_id == 0:  # PAT.
-      had_pat = True
-    elif tei == 0 and cc in (0, 1) and tsc == 0 and 0x10 <= packet_id <= 0x20:
-      # packet_id=0x11 is
-      # https://en.wikipedia.org/wiki/Service_Description_Table
-      pass  # DVB metadata.
-    elif tei == 0 and cc in (0, 1) and tsc == 0 and packet_id == 0x1fff: # Null.
-      pass
-    elif (tei == 0 and cc in (0, 1) and tsc == 0 and 0x20 <= packet_id < 0x1fff and
-          had_pat):
-      break
-    else:
-      return False
-    i += (188, 192)[is_m2ts]
-  return True
 
 
 def analyze_wav(fread, info, fskip):
@@ -2896,6 +3428,8 @@ def analyze(f, info=None, file_size_for_seek=None):
     analyze_avi(fread, info, fskip)
   elif format == 'mpeg-ps':
     analyze_mpeg_ps(fread, info, fskip)
+  elif format == 'mpeg-ts':
+    analyze_mpeg_ts(fread, info, fskip)
   elif format == 'mpeg-video':
     analyze_mpeg_video(fread, info, fskip)
   elif format == 'mpeg-adts':
