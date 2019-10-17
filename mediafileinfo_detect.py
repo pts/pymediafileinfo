@@ -263,7 +263,7 @@ MKV_DOCTYPES = {'matroska': 'mkv', 'webm': 'webm'}
 
 # https://www.matroska.org/technical/specs/codecid/index.html
 MKV_CODEC_IDS = {
-    'V_UNCOMPRESSED': 'raw',
+    'V_UNCOMPRESSED': 'pcm',
     #'V_MS/VFW/$(FOURCC)',  # Microsoft Windows, $(FOURCC) subst.
     #'V_MPEG4/ISO/$(TYPE)',   # $(TYPE) substituted.
     #'V_REAL/$(TYPE)',   # $(TYPE) substituted.
