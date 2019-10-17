@@ -1573,6 +1573,7 @@ def get_mpeg_adts_track_info(header):
   track_info = {'type': 'audio'}
   if header[0] == '\xff' and header[1] in '\xf0\xf1\xf8\xf9':
     # https://wiki.multimedia.cx/index.php/ADTS
+    # AAC is also known as MPEG-4 Part 3 audio, MPEG-2 Part 7 audio.
     track_info['codec'] = 'aac'
     track_info['subformat'] = 'mpeg-4'
     sfi = (ord(header[2]) >> 2) & 15
@@ -2276,6 +2277,7 @@ def get_brn_dimensions(fread):
 
 def is_mpeg_ts(header):
   # https://en.wikipedia.org/wiki/MPEG_transport_stream
+  # https://erg.abdn.ac.uk/future-net/digital-video/mpeg2-trans.html
   # TODO(pts): Use any of these to get more info.
   # https://github.com/topics/mpeg-ts
   # https://github.com/asticode/go-astits
@@ -2474,8 +2476,8 @@ FORMAT_ITEMS = (
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-    # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
-    # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
+    # TODO(pts): 'mpeg-pes' has: '\0\0\1', [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
+    # TODO(pts): Is there anything else not covered by mpeg-video, mpeg-ps, h264 and h265?
     ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42',  '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
