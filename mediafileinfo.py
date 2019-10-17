@@ -62,138 +62,6 @@ def mediafileinfo_detect():
     # http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
     #
 
-    def parse_h264_sps(
-        data, expected, expected_sps_id,
-        _hextable='0123456789abcdef',
-        # TODO(pts): Precompute this, don't run it each time analyze_flv runs.
-        _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
-        ):
-      # Based on function read_seq_parameter_set_rbsp in
-      # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
-      # , except for the very first byte.
-      #
-      # The formula for width and height is based on:
-      # https://stackoverflow.com/a/31986720/97248
-      if len(data) < 5:
-        raise ValueError('flv h264 avcc sps too short.')
-      if data[0] != '\x67':  # nalu_type=7 nalu_reftype=3.
-        raise ValueError('Bad flv h264 avcc sps type.')
-      if not data[1 : 4].startswith(expected):
-        raise ValueError('Unexpected start of sps.')
-      if len(data) > 255:  # Typically just 22 bytes.
-        raise ValueError('flv h264 avcc sps too long.')
-      io = {}
-      io['chroma_format'] = 1
-      io['profile'] = ord(data[1])
-      io['compatibility'] = ord(data[2])
-      io['level'] = ord(data[3])
-      io['residual_color_transform_flag'] = 0
-      # TODO(pts): Maybe bit shifting is faster.
-      data = iter(''.join(  # Convert to binary.
-          _hex_to_bits[_hextable.find(c)]
-          for c in str(buffer(data, 4)).encode('hex')))
-      def read_1():
-        return int(data.next() == '1')
-      def read_n(n):
-        r = 0
-        for _ in xrange(n):
-          r = r << 1 | (data.next() == '1')
-        return r
-      def read_ue():  # Unsigned varint.
-        r = n = 0
-        while data.next() == '0' and n < 32:
-          n += 1
-        for _ in xrange(n):
-          r = r << 1 | (data.next() == '1')
-        return r + (1 << n) - 1
-      def read_se():  # Signed varint.
-        r = read_ue()
-        if r & 1:
-          return (r + 1) >> 1;
-        else:
-          return -(r >> 1)
-      def read_scaling_list(size):  # Return value ingored.
-        # Untested, based on h264_scale.c.
-        last_scale, next_scale = 8, 8
-        for j in xrange(size):
-          if next_scale:
-            next_scale = (last_scale + read_se()) & 255
-          if next_scale:
-            last_scale = next_scale
-      try:
-        io['sps_id'] = read_ue()
-        if io['sps_id'] != expected_sps_id:
-          raise ValueError('Unexpected flv h264 avcc sps id: expected=%d, got=%d' %
-                           (expecteD_sps_id, io['sps_id']))
-        if io['profile'] in (
-            100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
-          # Untested.
-          io['chroma_format'] = read_ue()
-          if io['chroma_format'] == 3:
-            io['residual_colour_transform_flag'] = read_1()
-          io['bit_depth_luma_minus8'] = read_ue()
-          io['bit_depth_chroma_minus8'] = read_ue()
-          io['qpprime_y_zero_transform_bypass_flag'] = read_1()
-          io['seq_scaling_matrix_present_flag'] = read_1()
-          if io['seq_scaling_matrix_present_flag']:
-            for si in xrange(8):
-              if read_1():
-                read_scaling_list((64, 16)[i < 6])
-        io['log2_max_frame_num'] = 4 + read_ue()
-        io['pic_order_cnt_type'] = read_ue()
-        if io['pic_order_cnt_type'] == 0:
-          io['log2_max_pic_order_cnt'] = 4 + read_ue()
-        elif io['pic_order_cnt_type'] == 1:
-          io['log2_max_pic_order_cnt'] = 0
-          io['delta_pic_order_always_zero_flag'] = read_1()
-          io['offset_for_non_ref_pic'] = read_se()
-          io['offset_for_top_to_bottom_field'] = read_se()
-          for _ in read_ue():
-            read_se()
-        elif io['pic_order_cnt_type'] == 2:
-          io['log2_max_pic_order_cnt'] = 0
-        else:
-          raise ValueError('Unknown flv h264 avcc sps pic_order_cnt_type: %d' %
-                           io['pic_order_cnt_type'])
-        io['num_ref_frames'] = read_ue()
-        io['gaps_in_frame_num_value_allowed_flag'] = read_1()
-        io['width_in_mbs'] = read_ue() + 1
-        io['height_in_map_units'] = read_ue() + 1
-        io['frame_mbs_only_flag'] = read_1()
-        if not io['frame_mbs_only_flag']:
-          io['mb_adaptive_frame_field_flag'] = read_1()
-        io['direct_8x8_inference_flag'] = read_1()
-        io['frame_cropping_flag'] = read_1()
-        if io['frame_cropping_flag']:
-          io['crop_left'] = read_ue()
-          io['crop_right'] = read_ue()
-          io['crop_top'] = read_ue()
-          io['crop_bottom'] = read_ue()
-        else:
-          io['crop_left'] = io['crop_right'] = 0
-          io['crop_top'] = io['crop_bottom'] = 0
-        # Stop parsing here, we are not interested in the VUI parameters which
-        # follow.
-
-        if io['chroma_format'] == 0:
-          io['color_mode'], io['sub_width_c'], io['sub_height_c'] = 'monochrome', 0, 0
-        elif io['chroma_format'] == 1:
-          io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:0', 2, 2
-        elif io['chroma_format'] == 2:
-          io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:2', 2, 1
-        elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 0:
-          io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 1, 1
-        elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 1:
-          io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 0, 0
-        else:
-          raise ValueError('Unknown flv h264 sps chroma_format: %d' % io['chroma_format'])
-        io['height_in_mbs'] = (2 - io['frame_mbs_only_flag']) * io['height_in_map_units']
-        io['width'] =  (io['width_in_mbs']  << 4) - io['sub_width_c']  * (io['crop_left'] + io['crop_right'])
-        io['height'] = (io['height_in_mbs'] << 4) - io['sub_height_c'] * (2 - io['frame_mbs_only_flag']) * (io['crop_top'] + io['crop_bottom'])
-        return io  # h264_sps_info.
-      except StopIteration:
-        raise ValueError('EOF in flv h264 avcc sps.')
-
     data = fread(13)
     if len(data) < 13:
       raise ValueError('Too short for flv.')
@@ -377,13 +245,17 @@ def mediafileinfo_detect():
             sps_count &= 31  # Also: lsm &= 3.
             if sps_count != 1:
               raise ValueError('Expected 1 flv h264 avcc sps, got %d' % sps_count)
-            if len(data) < 13:
+            if len(data) < 14:
               raise ValueError('EOF in flv h264 avcc sps size.')
             sps_size, = struct.unpack('>H', data[11 : 13])
             if 13 + sps_size > len(data):
               raise ValueError('EOF in flv h264 avcc sps.')
+            if data[13] != '\x67':
+              raise ValueError('Bad flv h264 avcc sps type.')
+            if data[14 : 17] != expected:
+              raise ValueError('Unexpected start of flv h264 sps.')
             h264_sps_info = parse_h264_sps(
-                buffer(data, 13, sps_size), expected, 0)
+                buffer(data, 14, sps_size - 1), expected_sps_id=0)
             set_video_dimens(video_track_info,
                              h264_sps_info['width'], h264_sps_info['height'])
       elif xtype in (15, 18):
@@ -426,7 +298,7 @@ def mediafileinfo_detect():
 
   # https://www.matroska.org/technical/specs/codecid/index.html
   MKV_CODEC_IDS = {
-      'V_UNCOMPRESSED': 'raw',
+      'V_UNCOMPRESSED': 'pcm',
       #'V_MS/VFW/$(FOURCC)',  # Microsoft Windows, $(FOURCC) subst.
       #'V_MPEG4/ISO/$(TYPE)',   # $(TYPE) substituted.
       #'V_REAL/$(TYPE)',   # $(TYPE) substituted.
@@ -1455,6 +1327,278 @@ def mediafileinfo_detect():
     })
 
 
+  # --- H.264.
+
+
+  def has_bad_emulation_prevention(data):
+    """Returns true iff \0\0\3 is followed by anything else than \0 or \1 or \2 ."""
+    i = 0
+    while 1:
+      i = data.find('\0\0\3', i) + 3
+      if i < 3 or i >= len(data):
+        return False
+      if data[i] not in '\0\1\2\3':
+        return True
+
+
+  def count_is_h264(header):
+    """Returns confidence (100 * size) or 0."""
+    # Allowed prefix hex regexp: ((00)?00000109(10|30|50|70|90|b0|d0|f0))?(00)?000001(27|47|67)
+    #
+    # We check that forbidden_zero_bit is 0, nal_refc_idc is 0 for AUD and 1,
+    # 2 or 3 for SPS and PPS NAL unit types.
+    if has_bad_emulation_prevention(header):
+      return False
+    i = 4 * header.startswith('\0\0\1\x09') or 5 * header.startswith('\0\0\0\1\x09')
+    if i:
+      if i >= len(header) or header[i] not in '\x10\x30\x50\x70\x90\xb0\xd0\xf0':
+        return False
+      i += 1
+    if header[i : i + 3] == '\0\0\0':
+      i += 1
+      if header[i : i + 3] == '\0\0\0':
+        i += 1
+    if header[i : i + 3] != '\0\0\1':
+      return False
+    i += 3
+    if i >= len(header) or header[i] not in '\x27\x47\x67':
+      return False
+    i += 1
+    if i >= len(header):
+      return False
+    return i * 100
+
+
+  def parse_h264_sps(
+      data, expected_sps_id=0,
+      _hextable='0123456789abcdef',
+      _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
+      ):
+    """Parses a H.264 sequence parameter set (SPS) NAL unit data."""
+    # Based on function read_seq_parameter_set_rbsp in
+    # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
+    # , except for the very first byte.
+    #
+    # The formula for width and height is based on:
+    # https://stackoverflow.com/a/31986720
+    #
+    # TODO(pts): Estimate how many bytes are used (looks like data[:10], data[:22]).
+    if len(data) < 4:
+      raise ValueError('h264 avcc sps too short.')
+    if len(data) > 255:  # Typically just 22 bytes.
+      raise ValueError('h264 avcc sps too long.')
+    io = {}
+    io['chroma_format'] = 1
+    io['profile'] = ord(data[0])
+    io['compatibility'] = ord(data[1])
+    io['level'] = ord(data[2])
+    io['residual_color_transform_flag'] = 0
+    # TODO(pts): Maybe bit shifting is faster.
+    data = iter(''.join(  # Convert to binary.
+        _hex_to_bits[_hextable.find(c)]
+        for c in str(buffer(data, 3)).encode('hex')))
+    def read_1():
+      return int(data.next() == '1')
+    def read_n(n):
+      r = 0
+      for _ in xrange(n):
+        r = r << 1 | (data.next() == '1')
+      return r
+    def read_ue():  # Unsigned varint.
+      r = n = 0
+      while data.next() == '0' and n < 32:
+        n += 1
+      for _ in xrange(n):
+        r = r << 1 | (data.next() == '1')
+      return r + (1 << n) - 1
+    def read_se():  # Signed varint.
+      r = read_ue()
+      if r & 1:
+        return (r + 1) >> 1;
+      else:
+        return -(r >> 1)
+    def read_scaling_list(size):  # Return value ingored.
+      # Untested, based on h264_scale.c.
+      last_scale, next_scale = 8, 8
+      for j in xrange(size):
+        if next_scale:
+          next_scale = (last_scale + read_se()) & 255
+        if next_scale:
+          last_scale = next_scale
+    try:
+      io['sps_id'] = read_ue()
+      if expected_sps_id is not None and io['sps_id'] != expected_sps_id:
+        raise ValueError('Unexpected flv h264 avcc sps id: expected=%d, got=%d' %
+                         (expected_sps_id, io['sps_id']))
+      if io['profile'] in (
+          100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
+        # Untested.
+        io['chroma_format'] = read_ue()
+        if io['chroma_format'] == 3:
+          io['residual_colour_transform_flag'] = read_1()
+        io['bit_depth_luma_minus8'] = read_ue()
+        io['bit_depth_chroma_minus8'] = read_ue()
+        io['qpprime_y_zero_transform_bypass_flag'] = read_1()
+        io['seq_scaling_matrix_present_flag'] = read_1()
+        if io['seq_scaling_matrix_present_flag']:
+          for si in xrange(8):
+            if read_1():
+              read_scaling_list((64, 16)[i < 6])
+      io['log2_max_frame_num'] = 4 + read_ue()
+      io['pic_order_cnt_type'] = read_ue()
+      if io['pic_order_cnt_type'] == 0:
+        io['log2_max_pic_order_cnt'] = 4 + read_ue()
+      elif io['pic_order_cnt_type'] == 1:
+        io['log2_max_pic_order_cnt'] = 0
+        io['delta_pic_order_always_zero_flag'] = read_1()
+        io['offset_for_non_ref_pic'] = read_se()
+        io['offset_for_top_to_bottom_field'] = read_se()
+        for _ in read_ue():
+          read_se()
+      elif io['pic_order_cnt_type'] == 2:
+        io['log2_max_pic_order_cnt'] = 0
+      else:
+        raise ValueError('Unknown h264 avcc sps pic_order_cnt_type: %d' %
+                         io['pic_order_cnt_type'])
+      io['num_ref_frames'] = read_ue()
+      io['gaps_in_frame_num_value_allowed_flag'] = read_1()
+      io['width_in_mbs'] = read_ue() + 1
+      io['height_in_map_units'] = read_ue() + 1
+      io['frame_mbs_only_flag'] = read_1()
+      if not io['frame_mbs_only_flag']:
+        io['mb_adaptive_frame_field_flag'] = read_1()
+      io['direct_8x8_inference_flag'] = read_1()
+      io['frame_cropping_flag'] = read_1()
+      if io['frame_cropping_flag']:
+        io['crop_left'] = read_ue()
+        io['crop_right'] = read_ue()
+        io['crop_top'] = read_ue()
+        io['crop_bottom'] = read_ue()
+      else:
+        io['crop_left'] = io['crop_right'] = 0
+        io['crop_top'] = io['crop_bottom'] = 0
+      # Stop parsing here, we are not interested in the VUI parameters which
+      # follow.
+
+      if io['chroma_format'] == 0:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = 'monochrome', 0, 0
+      elif io['chroma_format'] == 1:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:0', 2, 2
+      elif io['chroma_format'] == 2:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:2:2', 2, 1
+      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 0:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 1, 1
+      elif io['chroma_format'] == 3 and io['residual_color_transform_flag'] == 1:
+        io['color_mode'], io['sub_width_c'], io['sub_height_c'] = '4:4:4', 0, 0
+      else:
+        raise ValueError('Unknown h264 sps chroma_format: %d' % io['chroma_format'])
+      io['height_in_mbs'] = (2 - io['frame_mbs_only_flag']) * io['height_in_map_units']
+      io['width'] =  (io['width_in_mbs']  << 4) - io['sub_width_c']  * (io['crop_left'] + io['crop_right'])
+      io['height'] = (io['height_in_mbs'] << 4) - io['sub_height_c'] * (2 - io['frame_mbs_only_flag']) * (io['crop_top'] + io['crop_bottom'])
+      return io  # h264_sps_info.
+    except StopIteration:
+      raise ValueError('EOF in h264 avcc sps.')
+
+
+  def analyze_h264(fread, info, fskip):
+    # H.264 is also known as MPEG-4 AVC.
+    #
+    # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.264-201610-S!!PDF-E&type=items
+    # http://gentlelogic.blogspot.com/2011/11/exploring-h264-part-2-h264-bitstream.html
+    # https://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/
+    header = fread(13)
+    i = count_is_h264(header) // 100
+    if not i:
+      raise ValueError('h264 signature not found.')
+    assert i <= len(header), 'h264 preread header too short.'
+    header = header[i:]
+    info['tracks'] = [{'type': 'video', 'codec': 'h264'}]
+    if len(header) < 40:  # Maybe 32 bytes are also enough.
+      header += fread(40 - len(header))
+    if has_bad_emulation_prevention(header):
+      raise ValueError('Bad emulation prevention in h264.')
+    i = header.find('\0\0\1')
+    if i >= 0:
+      header = header[:i]  # Keep until end of SPS NAL unit.
+    # Remove emulation_prevention_three_byte()s.
+    header = header.replace('\0\0\3', '\0\0')
+    h264_sps_info = parse_h264_sps(header)
+    set_video_dimens(info['tracks'][0],
+                     h264_sps_info['width'], h264_sps_info['height'])
+
+
+  # --- H.265.
+
+
+  def count_is_h265(header):
+    # Allowed prefix hex regexp: ((00)?0000014601(10|30|50))?(00)?000001(40|42)01
+    #
+    # We check that forbidden_zero_bit is 0, nuh_layer_id is 1,
+    # nuh_temporal_id_plus1 == 1. According to the H.265 spec, these are true
+    # for AUD, VPS and SPS NAL unit types.
+    if has_bad_emulation_prevention(header):
+      return False
+    i = 5 * header.startswith('\0\0\1\x46\1') or 6 * header.startswith('\0\0\0\1\x46\1')
+    if i:
+      if i >= len(header) or header[i] not in '\x10\x30\x50':
+        return False
+      i += 1
+    if header[i : i + 3] == '\0\0\0':
+      i += 1
+      if header[i : i + 3] == '\0\0\0':
+        i += 1
+    if header[i : i + 3] != '\0\0\1':
+      return False
+    i += 3
+    if header[i : i + 2] not in ('\x40\1', '\x42\1'):
+      return False
+    i += 2
+    if i >= len(header):
+      return False
+    return i * 100
+
+
+  def analyze_h265(fread, info, fskip):
+    # H.265 is also known as MPEG-4 HEVC.
+    #
+    # https://www.itu.int/rec/dologin.asp?lang=e&id=T-REC-H.265-201504-S!!PDF-E&type=items
+    # https://www.codeproject.com/Tips/896030/The-Structure-of-HEVC-Video
+    header = fread(15)
+    i = count_is_h265(header) // 100
+    if not i:
+      raise ValueError('h265 signature not found.')
+    assert i <= len(header), 'h265 preread header too short.'
+    info['tracks'] = [{'type': 'video', 'codec': 'h265'}]
+    if len(header) - i < 160:  # TODO(pts): Is this enough?
+      header += fread(160 - (len(header) - i))
+    if has_bad_emulation_prevention(header):
+      raise ValueError('Bad emulation prevention in h265.')
+    if header[i - 2] == '\x40':  # Ignore video parameter set (VPS).
+      i = header.find('\0\0\1', i)
+      if i < 0:
+        raise ValueError('EOF in h265 vps.')
+      i += 5
+    if header[i - 2: i] != '\x42\1':
+      raise ValueError('Expected h265 sps, got nalu_type=%d' %
+                       ((ord(header[i - 2]) >> 1) & 63))
+    i = header.find('\0\0\1')
+    if i >= 0:
+      header = header[:i]  # Keep until end of SPS NAL unit.
+    # Remove emulation_prevention_three_byte()s.
+    header = header.replace('\0\0\3', '\0\0')
+    # TODO(pts): Add getting width and height from sps:pic_width_in_luma_samples.
+    # h265_sps_info = parse_h265_sps(header)
+    # set_video_dimens(info['tracks'][0],
+    #                  h265_sps_info['width'], h265_sps_info['height'])
+    # TODO(pts): The conformance cropping window contains the luma samples with horizontal picture coordinates from
+    #        SubWidthC * conf_win_left_offset to pic_width_in_luma_samples ... ( SubWidthC * conf_win_right_offset + 1 ) and
+    #        vertical picture coordinates from SubHeightC * conf_win_top_offset to
+    #        pic_height_in_luma_samples ... ( SubHeightC * conf_win_bottom_offset + 1 ), inclusive.
+    #        The value of SubWidthC * ( conf_win_left_offset + conf_win_right_offset ) shall be less than
+    #        pic_width_in_luma_samples, and the value of SubHeightC * ( conf_win_top_offset + conf_win_bottom_offset ) shall be
+    #        less than pic_height_in_luma_samples.
+
+
   # --- Audio streams in MPEG.
 
 
@@ -1462,39 +1606,58 @@ def mediafileinfo_detect():
     # Works with: isinstance(header, (str, buffer)).
     return (len(header) >= 4 and
             header[0] == '\xff' and
-            header[1] in '\xe2\xe3\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
-            ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12)
+            (header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' '\xf0\xf1\xf8\xf9' and
+             ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
+            (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13))
 
 
-  def get_mpeg_adts_track_info(header):
+  def get_mpeg_adts_track_info(header, expect_aac=None):
     # https://en.wikipedia.org/wiki/Elementary_stream
     if len(header) < 4:
       raise ValueError('Too short for mpeg-adts.')
     track_info = {'type': 'audio'}
-    sfi = (ord(header[2]) >> 2) & 3
-    if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
-        (ord(header[1]) & 6) == 2):
-      track_info['subformat'] = 'mpeg-25'  # 2.5.
-      track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
-    elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
-      if (ord(header[1]) >> 4) & 1:
-        track_info['subformat'] = 'mpeg-1'
-        track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
-      else:
-        track_info['subformat'] = 'mpeg-2'
-        track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
+    is_aac = header[0] == '\xff' and header[1] in '\xf0\xf1\xf8\xf9'
+    if expect_aac or (expect_aac is None and is_aac):
+      # https://wiki.multimedia.cx/index.php/ADTS
+      # AAC is also known as MPEG-4 Part 3 audio, MPEG-2 Part 7 audio.
+      if not is_aac:
+        raise ValueError('mpeg-adts aac signature not found.')
+      track_info['codec'] = 'aac'
+      track_info['subformat'] = 'mpeg-4'
+      sfi = (ord(header[2]) >> 2) & 15
+      if sfi > 12:
+        raise ValueError('Invalid mpeg-adts AAC sampling frequency index: %d' % sfi)
+      track_info['sample_rate'] = (96000, 88200, 6400, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0)[sfi]
+      if ord(header[2]) >> 6:
+        raise ValueError('Unexpected mpeg-adts AAC private bit.')
+      cc = ord(header[2]) >> 7 << 2 | ord(header[3]) >> 6
+      if cc:
+        track_info['channel_count'] = cc + (cc == 7)
     else:
-      raise ValueError('mpeg-adts signature not found.')
-    layer = 4 - ((ord(header[1]) >> 1) & 3)
-    if layer == 4:
-      raise ValueError('Invalid layer.')
-    if ord(header[2]) >> 4 in (0, 15):
-      raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
-    if sfi == 3:
-      raise ValueError('Invalid sampling frequency index 3.')
-    track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+      sfi = (ord(header[2]) >> 2) & 3
+      if (header.startswith('\xff\xe2') or header.startswith('\xff\xe3')) and (
+          (ord(header[1]) & 6) == 2):
+        track_info['subformat'] = 'mpeg-25'  # 2.5.
+        track_info['sample_rate'] = (11025, 12000, 8000, 0)[sfi]
+      elif header.startswith('\xff') and ord(header[1]) >> 4 == 0xf:
+        if (ord(header[1]) >> 4) & 1:
+          track_info['subformat'] = 'mpeg-1'
+          track_info['sample_rate'] = (44100, 48000, 32000, 0)[sfi]
+        else:
+          track_info['subformat'] = 'mpeg-2'
+          track_info['sample_rate'] = (22050, 24000, 16000, 0)[sfi]
+      else:
+        raise ValueError('mpeg-adts signature not found.')
+      layer = 4 - ((ord(header[1]) >> 1) & 3)
+      if layer == 4:
+        raise ValueError('Invalid layer.')
+      if ord(header[2]) >> 4 in (0, 15):
+        raise ValueError('Invalid bit rate index %d.' % ord(header[2]) >> 4)
+      if sfi == 3:
+        raise ValueError('Invalid sampling frequency index 3.')
+      track_info['codec'] = ('', 'mp1', 'mp2', 'mp3')[layer]
+      track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
     track_info['sample_size'] = 16
-    track_info['channel_count'] = 1 + ((ord(header[3]) & 0xc0) != 0xc0)
     return track_info
 
 
@@ -1524,7 +1687,7 @@ def mediafileinfo_detect():
     arate = (48000, 44100, 32000, 0)[ord(header[4]) >> 6]  # fscod.
     if arate == 0:
       raise ValueError('Invalid arate for ac3.')
-    anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[5]) & 7]  # acmod.
+    anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[6]) >> 5]  # acmod.
     track_info = {'type': 'audio'}
     track_info['codec'] = 'ac3'
     track_info['sample_size'] = 16
@@ -1603,18 +1766,56 @@ def mediafileinfo_detect():
   # --- Video streams in MPEG.
 
 
-  def get_mpeg_video_track_info(header):
-    if len(header) < 7:
+  def get_mpeg_video_track_info(header, expect_mpeg4=None):
+    is_mpeg4 = (
+        header.startswith('\0\0\1\xb5') or
+        (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5'))
+    if expect_mpeg4 or (expect_mpeg4 is None and is_mpeg4):
+      if not is_mpeg4:
+        raise ValueError('mpeg-video mpeg-4 signature not found.')
+      # https://en.wikipedia.org/wiki/MPEG-4_Part_2
+      # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of
+      # H.263, DivX.
+      # '\0\0\1\xb0' is the profile header, with a single-byte value.
+      # https://www.google.com/search?q="video_object_layer_verid"
+      # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
+      # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
+      # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
+      # extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
+      i = 4 + 5 * header.startswith('\0\0\1\xb0')
+      track_info = {'type': 'video', 'codec': 'mpeg-4'}
+      # TODO(pts): Analyze mpeg-4, get media parameters (width, height).
+      return track_info
+    if len(header) < 9:
       raise ValueError('Too short for mpeg-video.')
     # MPEG video sequence header start code.
     if not header.startswith('\0\0\1\xb3'):
       raise ValueError('mpeg-video signature not found.')
     wdht, = struct.unpack('>L', header[3 : 7])
-    track_info = {'type': 'video'}
-    track_info['codec'] = 'mpeg'  # TODO(pts): MPEG-1 or MPEG-2?
+    track_info = {'type': 'video', 'codec': 'mpeg'}
     # TODO(pts): Verify that width and height are positive.
     track_info['width'] = (wdht >> 12) & 0xfff
     track_info['height'] = wdht & 0xfff
+    if len(header) >= 16 and not ord(header[11]) & 3:
+      i = 12
+    elif len(header) >= 144 and ord(header[11]) & 2 and ord(header[75]) & 1:
+      i = 140
+    elif len(header) >= 80 and (
+        (ord(header[11]) & 2 and not ord(header[75]) & 1) or
+        (not ord(header[11]) & 2 and ord(header[11]) & 1)):
+      i = 76
+    else:
+      i = None
+    if i:
+      start_data = header[i : i + 4]
+      if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):
+        track_info['codec'] = 'mpeg-1'
+      elif start_data in ('\0\0\1\xb5'):  # MPEG-2 sequence extension.
+        track_info['codec'] = 'mpeg-2'
+      elif not start_data.startswith('\0\0\1'):
+        raise ValueError('mpeg-video start expected.')
+      else:
+        raise ValueError('Unexpected mpeg-video start code: 0x%02x' % ord(start_data[3]))
     return track_info
 
 
@@ -1629,7 +1830,14 @@ def mediafileinfo_detect():
     def get_track_info(self):
       buf = self._buf
       # MPEG video sequence header start code.
-      if buf.startswith('\0\0\1\xb3') and len(buf) >= 7:
+      if (buf.startswith('\0\0\1\xb3') and
+          (len(buf) >= 144 or
+           (len(buf) >= 80 and
+            (ord(buf[11]) & 2 and not ord(buf[75]) & 1) or
+            (not ord(buf[11]) & 2 and ord(buf[11]) & 1)) or
+           (len(buf) >= 16 and not ord(buf[11]) & 3)) or
+          buf.startswith('\0\0\1\xb5') or
+          (buf.startswith('\0\0\1\xb0') and buf[5 : 9] == '\0\0\1\xb5')):
         track_info = get_mpeg_video_track_info(buf)
         track_info['header_ofs'] = self._header_ofs
         return track_info
@@ -1642,25 +1850,31 @@ def mediafileinfo_detect():
       if data:
         buf = self._buf
         # MPEG video sequence header start code. We need 7 bytes of header.
-        if buf.startswith('\0\0\1\xb3'):  # Found before signature.
-          if len(buf) < 7:
-            self._buf = buf + data[:7 - len(buf)]
-        elif buf.endswith('\0\0\1') and data[0] == '\xb3':
+        if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb0\xb5':  # Found before signature.
+          if len(buf) < 144:
+            self._buf = buf + data[:144 - len(buf)]
+        elif buf.endswith('\0\0\1') and data[0] in '\xb3\xb0\xb5':
           self._header_ofs += len(buf) - 3
           self._buf = buf[-3:] + data[:16]  # Found signature.
-        elif buf.endswith('\0\1') and data[:2] == '\1\xb3':
+        elif buf.endswith('\0\1') and data[:2] in ('\1\xb3', '\1\xb0', '\1\xb5'):
           self._header_ofs += len(buf) - 2
           self._buf = buf[-2:] + data[:16]  # Found signature.
-        elif buf.endswith('\0') and data[:3] == '\0\1\xb3':
+        elif buf.endswith('\0') and data[:3] == ('\0\1\xb3', '\0\1\xb0', '\0\1\xb5'):
           self._header_ofs += len(buf) - 1
           self._buf = buf[-1] + data[:16]  # Found signature.
         else:
           self._header_ofs += len(buf)
           data = data[:]  # Convert buffer to str.
-          i = data.find('\0\0\1\xb3')
+          i = i1 = data.find('\0\0\1\xb3')
+          i2 = data.find('\0\0\1\xb0')
+          i3 = data.find('\0\0\1\xb5')
+          if i < 0 or (i2 >= 0 and i2 < i):
+            i = i2
+          if i < 0 or (i3 >= 0 and i3 < i):
+            i = i3
           if i >= 0:
             self._header_ofs += i
-            self._buf = data[i : i + 7]  # Found signature.
+            self._buf = data[i : i + 144]  # Found signature.
           elif len(data) >= 3:
             self._header_ofs += len(data) - 3
             self._buf = data[-3:]  # Not found.
@@ -1670,7 +1884,8 @@ def mediafileinfo_detect():
 
   def analyze_mpeg_video(fread, info, fskip):
     # https://en.wikipedia.org/wiki/Elementary_stream
-    header = fread(7)
+    # http://www.cs.columbia.edu/~delbert/docs/Dueck%20--%20MPEG-2%20Video%20Transcoding.pdf
+    header = fread(144)
     info['format'] = 'mpeg-video'
     info['tracks'] = [get_mpeg_video_track_info(header)]
 
@@ -1723,7 +1938,7 @@ def mediafileinfo_detect():
       size = 12
     else:
       raise ValueError('Invalid mpeg-ps subformat 0x%02x.' % ord(header[4]))
-    assert size >= len(header)
+    assert size >= len(header), 'mpeg-ps size too large.'
     if not fskip(size - len(header)):
       raise ValueError('EOF in mpeg-ps header.')
 
@@ -1762,7 +1977,7 @@ def mediafileinfo_detect():
           size = 8
         else:
           raise ValueError('Invalid mpeg-ps pack subformat 0x%02x.' % ord(data[0]))
-        assert size >= len(data)
+        assert size >= len(data), 'mpeg-ps pack size too large.'
         if not fskip(size - len(data)):
           break  # raise ValueError('EOF in mpeg-ps pack header.')
         expect_system_header = True
@@ -1776,17 +1991,20 @@ def mediafileinfo_detect():
         data = fread(2)
         if len(data) < 2:
           break  # raise ValueError('EOF in mpeg-ps system header size.')
-        size = struct.unpack('>H', data)[0]
+        size, = struct.unpack('>H', data)
         if not fskip(size):
           break  # raise ValueError('EOF in mpeg-ps system header.')
-      elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):
+      elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):  # PES packet.
         packet_count += 1
         if packet_count > 1500:
           break
         data = fread(2)
         if len(data) < 2:
           break  # raise ValueError('EOF in mpeg-ps packet size.')
-        size = struct.unpack('>H', data)[0]
+        size, = struct.unpack('>H', data)
+        if size == 0:
+          # TODO(pts): Can we figure out the size?
+          raise ValueError('Bad size 0 in PES packet.')
         data = fread(size)
         if len(data) < size:
           break  # raise ValueError('EOF in mpeg-ps packet.')
@@ -1855,6 +2073,642 @@ def mediafileinfo_detect():
     info['hdr_packet_count'] = packet_count
     info['hdr_av_packet_count'] = av_packet_count
     info['hdr_skip_count'] = skip_count
+
+
+  # --- mpeg-ts (MPEG TS).
+
+
+  def get_jpeg_dimensions(fread):
+    """Returns (width, height) of a JPEG file.
+
+    Args:
+      f: An object supporting the .read(size) method. Should be seeked to the
+          beginning of the file.
+      header: The first few bytes already read from fread.
+    Returns:
+      (width, height) pair of integers.
+    Raises:
+      ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
+      IOError: If raised by fread(size).
+    """
+    # Implementation based on pts-qiv
+    #
+    # A typical JPEG file has markers in these order:
+    #   d8 e0_JFIF e1 e1 e2 db db fe fe c0 c4 c4 c4 c4 da d9.
+    #   The first fe marker (COM, comment) was near offset 30000.
+    # A typical JPEG file after filtering through jpegtran:
+    #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
+    #   The first fe marker (COM, comment) was at offset 20.
+
+    def read_all(size):
+      data = fread(size)
+      if len(data) != size:
+        raise ValueError(
+            'EOF in jpeg: wanted=%d got=%d' % (size, len(data)))
+      return data
+
+    data = fread(4)
+    if len(data) < 4:
+      raise ValueError('Too short for jpeg.')
+    if not data.startswith('\xff\xd8\xff'):
+      raise ValueError('jpeg signature not found.')
+    m = ord(data[3])
+    while 1:
+      while m == 0xff:  # Padding.
+        m = ord(read_all(1))
+      if m in (0xd8, 0xd9, 0xda):
+        # 0xd8: SOI unexpected.
+        # 0xd9: EOI unexpected before SOF.
+        # 0xda: SOS unexpected before SOF.
+        raise ValueError('Unexpected marker: 0x%02x' % m)
+      ss, = struct.unpack('>H', read_all(2))
+      if ss < 2:
+        raise ValueError('Segment too short.')
+      ss -= 2
+      if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
+        if ss < 5:
+          raise ValueError('SOF segment too short.')
+        height, width = struct.unpack('>xHH', read_all(5))
+        return width, height
+      read_all(ss)
+
+      # Read next marker to m.
+      m = read_all(2)
+      if m[0] != '\xff':
+        raise ValueError('Marker expected.')
+      m = ord(m[1])
+    raise AssertionError('Internal JPEG parser error.')
+
+
+  def get_string_fread(header):
+    i_ary = [0]
+
+    def fread(n):
+      result = header[i_ary[0] : i_ary[0] + n]
+      i_ary[0] += len(result)
+      return result
+
+    return fread
+
+
+  def get_track_info_from_analyze_func(header, analyze_func, track_info=None):
+    if not isinstance(header, (str, buffer)):
+      raise TypeError
+    info = {}
+
+    if header:
+      i_ary = [0]
+
+      def fread(n):
+        result = header[i_ary[0] : i_ary[0] + n]
+        i_ary[0] += len(result)
+        return result
+
+      def fskip(n):
+        return len(fread(n)) == n
+
+      analyze_func(fread, info, fskip)
+
+    track_info = dict(track_info or ())
+    if isinstance(info.get('tracks'), (list, tuple)) and info['tracks']:
+      track_info.update(info['tracks'][0])
+    elif 'width' in info and 'height' in info and 'codec' in info:
+      track_info = {'type': 'video'}
+      for key in ('width', 'height', 'codec'):
+        track_info[key] = info[key]
+    if track_info.get('codec') in ('jpeg', 'jpeg2000'):
+      track_info['codec'] = 'm' + track_info['codec']  # E.g. 'mjpeg'.
+    return track_info
+
+
+  def get_mpeg_ts_es_track_info(header, stream_type):
+    if not isinstance(header, str):
+      raise TypeError
+    # mpeg-ts elementary stream types:
+    # https://en.wikipedia.org/wiki/Program-specific_information#Elementary_stream_types
+    if stream_type in (0x01, 0x02):
+      # Sometimes the wrong stream_type is used (e.g. 0x02 for mpeg-2).
+      track_info = {'type': 'video', 'codec': 'mpeg-12'}
+      if header:
+        track_info.update(get_mpeg_video_track_info(header, expect_mpeg4=False))
+    elif stream_type == 0x06:
+      # stream_type=0x06 chosen by ffmpeg. The standard says any ``privately defined MPEG-2 packetized data''.
+      if not header:
+        return {'type': 'video', 'codec': 'maybe-mjpeg'}
+      if not header.startswith('\xff\xd8\xff'):
+        return {'type': 'video', 'codec': 'not-mjpeg'}
+      track_info = {'type': 'video', 'codec': 'mjpeg'}
+      track_info['width'], track_info['height'] = get_jpeg_dimensions(
+          get_string_fread(header))
+    elif stream_type == 0x10:
+      track_info = {'type': 'video', 'codec': 'mpeg-4'}
+      if header:
+        track_info.update(get_mpeg_video_track_info(header, expect_mpeg4=True))
+    elif stream_type == 0x1b:
+      track_info = get_track_info_from_analyze_func(
+          header, analyze_h264, {'type': 'video', 'codec': 'h264'})
+    elif stream_type == 0x21:
+      # TODO(pts): What is the actual format here? Is it jp2? How can we get width and height?
+      return {'type': 'video', 'codec': 'mjpeg2000'}
+    elif stream_type == 0x24:
+      return get_track_info_from_analyze_func(
+          header, analyze_h265, {'type': 'video', 'codec': 'h265'})
+    elif stream_type == 0x52:
+      return {'type': 'video', 'codec': 'chinese-video'}
+    elif stream_type == 0xd1:
+      return {'type': 'video', 'codec': 'bbc-dirac'}
+    elif stream_type == 0xea:
+      return {'type': 'video', 'codec': 'vc1'}
+    elif stream_type in (0x03, 0x04):
+      track_info = {'type': 'audio', 'codec': 'mp123'}
+      if header:
+        track_info.update(get_mpeg_adts_track_info(header, expect_aac=False))
+    elif stream_type == 0x0f:
+      track_info = {'type': 'audio', 'codec': 'aac'}
+      if header:
+        track_info.update(get_mpeg_adts_track_info(header, expect_aac=True))
+    elif stream_type == 0x11:
+      return {'type': 'audio', 'codec': 'loas'}
+    elif stream_type == 0x1c:
+      # TODO(pts): Is this LPCM (uncompressed) audio? If yes, get
+      # audio paramaters.
+      return {'type': 'audio', 'codec': 'pcm'}
+    elif stream_type == 0x81:
+      track_info = {'type': 'audio', 'codec': 'ac3'}
+      if header:
+        track_info.update(get_ac3_track_info(header))
+    elif stream_type in (0x82, 0x85):
+      if not (header.startswith('\x7f\xfe\x80\x01') or
+              header.startswith('\xfe\x7f\x01\x80')):
+        # Can be SCTE subtitle.
+        return {'type': 'audio', 'codec': 'not-dts'}
+      # TODO(pts): Get audio parameters.
+      return {'type': 'audio', 'codec': 'dts'}
+    elif stream_type == 0x83:
+      return {'type': 'audio', 'codec': 'truehd'}  # Dolby.
+    elif stream_type == 0x84:
+      return {'type': 'audio', 'codec': 'digital-plus'}  # Dolby.
+    else:
+      return None  # Unknown stream type.
+    return track_info
+
+
+  def get_mpeg_ts_pes_track_info(header, stream_type):
+    if not isinstance(header, str):
+      raise TypeError
+    if len(header) < 6:
+      raise ValueError('EOF in mpeg-ts pes payload signature.')
+    if not header.startswith('\0\0\1'):
+      raise ValueError('Bad mpeg-ts pes payload signature.')
+    sid = ord(header[3])
+    if not (0xc0 <= sid < 0xf0 or sid == 0xbd or sid == 0xfd):
+      # TODO(pts): Should we be more permissive and accept anything?
+      raise ValueError('Bad mpeg-ts pes sid: 0x%02x' % sid)
+    size, = struct.unpack('>H', header[4 : 6])
+    j = 6
+    if size:
+      i = j + size
+    else:
+      i = len(header)
+    while j < len(header) and j <= 16 and header[j] == '\xff':
+      j += 1
+    if j >= len(header):
+      raise ValueError('EOF in mpeg-ts pes payload pes header.')
+    if ord(header[j]) >> 6 == 2:
+      if len(header) < j + 3:
+        raise ValueError('EOF in mpeg-ps packet type 2 data.')
+      j += 3 + ord(header[j + 2])
+    else:
+      if ord(header[j]) >> 6 == 1:
+        j += 2
+        if j >= len(header):
+          raise ValueError('EOF in mpeg-ps packet type 1 header.')
+      if (ord(header[j]) & 0xf0) == 0x20:
+        j += 5
+      elif (ord(header[j]) & 0xf0) == 0x30:
+        j += 10
+      elif ord(header[j]) == 0x0f:
+        j += 1
+    if j > i:
+      raise ValueError('EOF in mpeg-ts pes payload sized pes header.')
+    if j >= i or j >= len(header):
+      # We need to check this, because get_mpeg_ts_es_track_info special-cases
+      # an empty header.
+      raise ValueError('EOF after mpeg-ts pes payload pes header: empty es packet.')
+    if size and i <= len(header):
+      # TODO(pts): Avoid copying, use buffer.
+      return get_mpeg_ts_es_track_info(header[j : i], stream_type)
+    try:
+      return get_mpeg_ts_es_track_info(header[j : i], stream_type)
+    except ValueError, e:
+      if not str(e).startswith('Too short for '):
+        raise
+      raise ValueError('EOF in mpeg-ts pes es packet: %s' % e)
+
+
+  MPEG_TS_PSI_TABLES = {'pat': 0, 'cat': 1, 'pmt': 2}
+
+
+  def yield_mpeg_ts_psi_sections(data, table_name):
+    """Parses mpeg-ts program-specific information."""
+    # https://en.wikipedia.org/wiki/Program-specific_information#Table_Sections
+    # https://en.wikipedia.org/wiki/Program-specific_information#PAT_(Program_association_specific_data)
+    if not isinstance(data, (str, buffer)):
+      raise TypeError
+    tn, table_id = table_name, MPEG_TS_PSI_TABLES[table_name]
+    i = 0
+    if i >= len(data):
+      raise ValueError('EOF in mpeg-ts %s pointer_field.' % tn)
+    i += 1 + ord(data[i])
+    if i > len(data):
+      raise ValueError('EOF in mpeg-ts %s pointer_filler_bytes.' % tn)
+    while i < len(data):
+      if data[i] == '\xff':
+        if data[i:].rstrip('\xff'):
+          raise ValueError('Bad mpeg-ts %s suffix stuffing.' % tn)
+        break
+      if ord(data[i]) != table_id:
+        raise ValueError('Bad mpeg-ts %s table_id: %d' % (tn, ord(data[i])))
+      i += 1
+      if i + 2 > len(data):
+        raise ValueError('EOF in mpeg-ts %s section_size.' % tn)
+      h, = struct.unpack('>H', data[i : i + 2])
+      i += 2
+      if not h & 0x8000:
+        raise ValueError('Bad mpeg-ts %s section_syntax_indicator.' % tn)
+      if h & 0x4000:
+        raise ValueError('Bad mpeg-ts %s private_bit.' % tn)
+      if (h & 0x3000) != 0x3000:
+        raise ValueError('Bad mpeg-ts %s reserved1.' % tn)
+      if h & 0xc00:
+        raise ValueError('Bad mpeg-ts %s section_size_unused.' % tn)
+      j = i
+      i += h & 0x3ff
+      if i - j > 1021:
+        raise ValueError('mpeg-ts %s section too long.' % tn)
+      if i > len(data):
+        raise ValueError('EOF in mpeg-ts %s section.' % tn)
+      i -= 4
+      if i < j:
+        raise ValueError('mpeg-ts %s section too short (no room for CRC32).' % tn)
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts %s section transport_stream_identifier.' % tn)
+      identifier, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if j >= i:
+        raise ValueError('EOF in mpeg-ts %s section version byte.' % tn)
+      h = ord(data[j])
+      j += 1
+      if (h & 0xc0) != 0xc0:
+        raise ValueError('Bad mpeg-ts %s section reserved2.' % tn)
+      version = (h >> 1) & 31
+      if version not in (0, 1):
+        raise ValueError('Bad mpeg-ts %s section version: %d' % version)
+      if not h & 1:
+        raise ValueError('Bad mpeg-ts %s section current_indicator.' % tn)
+      if j >= i:
+        raise ValueError('EOF in mpeg-ts %s section section_number.' % tn)
+      section_number = ord(data[j])
+      j += 1
+      if j >= i:
+        raise ValueError('EOF in mpeg-ts %s section last_section_number.' % tn)
+      last_section_number = ord(data[j])
+      j += 1
+      yield (j, i, identifier, section_number, last_section_number)
+      i += 4  # Skip CRC32.
+
+
+  def parse_mpeg_ts_pat(data):
+    """Returns a list of (pmt_pid, program_num) pairs."""
+    result = []
+    for items in yield_mpeg_ts_psi_sections(data, 'pat'):
+      j, i = items[:2]
+      while j < i:
+        if j + 2 > i:
+          raise ValueError('EOF in mpeg-ts pat entry program_num.')
+        program_num, = struct.unpack('>H', data[j : j + 2])
+        j += 2
+        if j + 2 > i:
+          raise ValueError('EOF in mpeg-ts pat entry pmt_pid.')
+        h, = struct.unpack('>H', data[j : j + 2])
+        j += 2
+        if (h & 0xe000) != 0xe000:
+          raise ValueError('Bad mpeg-ts pat entry reserved3.')
+        pmt_pid = h & 0x1fff
+        if pmt_pid in (0, 0x1fff):
+          raise ValueError('Bad mpeg-ts pat entry pmt_pid: 0x%x' % pmt_pid)
+        if program_num != 0:  # NIT (table_name='nit') has program_num == 0.
+          result.append((pmt_pid, program_num))
+    if not result:
+      raise ValueError('Empty mpeg-ts pat.')
+    return result
+
+
+
+  def parse_mpeg_ts_pmt(data, expected_program_num):
+    """Returns a list of (es_pid, stream_type) pairs."""
+    result = []
+    for items in yield_mpeg_ts_psi_sections(data, 'pmt'):
+      j, i, identifier = items[:3]
+      if identifier != expected_program_num:
+        raise ValueError('Bad mpeg-ts pmt section program_num.')
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pmt entry pcr_pid.')
+      h, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      pcr_pid = h & 0x1fff
+      if pcr_pid == 0:
+        raise ValueError('Bad mpeg-ts pmt entry pcr_pid.')
+      if j + 2 > i:
+        raise ValueError('EOF in mpeg-ts pmt entry program_descriptor_size.')
+      h, = struct.unpack('>H', data[j : j + 2])
+      j += 2
+      if (h & 0xf000) != 0xf000:
+        raise ValueError('Bad mpeg-ts pmt entry reserved4.')
+      if h & 0xc00:
+        raise ValueError('Bad mpeg-ts pmt entry program_descriptor_size_unused.')
+      j += h & 0x3ff
+      if j > i:
+        raise ValueError('EOF in mpeg-ts pmt entry program_descriptor.')
+      if j >= i:
+        raise ValueError('No streams in mpeg-ts pmt entry.')
+      while j < i:
+        if j >= i:
+          raise ValueError('EOF in mpeg-ts pmt stream_info stream_type.')
+        stream_type = ord(data[j])
+        # https://en.wikipedia.org/wiki/Program-specific_information#Elementary_stream_types
+        if stream_type in (0, 0x22, 0x23, 0x25):
+          raise ValueError('Bad mpeg-ts pmt stream_info stream_type: 0x%x' % stream_type)
+        j += 1
+        if j + 2 > i:
+          raise ValueError('EOF in mpeg-ts pmt stream_info es_pid.')
+        h, = struct.unpack('>H', data[j : j + 2])
+        j += 2
+        if (h & 0xe000) != 0xe000:
+          raise ValueError('Bad mpeg-ts pmt stream_info reserved5.')
+        es_pid = h & 0x1fff
+        if es_pid in (0, 0x1fff):
+          raise ValueError('Bad mpeg-ts pmt stream_info es_pid: 0x%x' % es_pid)
+        if j + 2 > i:
+          raise ValueError('EOF in mpeg-ts pmt stream_info info_size.')
+        h, = struct.unpack('>H', data[j : j + 2])
+        j += 2
+        if (h & 0xf000) != 0xf000:
+          raise ValueError('Bad mpeg-ts pmt stream_info reserved6.')
+        if h & 0xc00:
+          raise ValueError('Bad mpeg-ts pmt stream_info es_descriptor_size_unused.')
+        j += h & 0x3ff
+        if j > i:
+          raise ValueError('EOF in mpeg-ts pmt stream_info es_descriptor.')
+        result.append((es_pid, stream_type))
+    if not result:
+      raise ValueError('Empty mpeg-ts pmt.')
+    return result
+
+
+  def is_mpeg_ts(header):
+    # https://en.wikipedia.org/wiki/MPEG_transport_stream
+    # https://erg.abdn.ac.uk/future-net/digital-video/mpeg2-trans.html
+    # TODO(pts): Use any of these to get more info.
+    # https://github.com/topics/mpeg-ts
+    # https://github.com/asticode/go-astits
+    # https://github.com/drillbits/go-ts
+    # https://github.com/small-teton/MpegTsAnalyzer
+    # https://github.com/mzinin/ts_splitter
+    is_bdav = header.startswith('\0\0')
+    i = (0, 4)[is_bdav]
+    if len(header) < i + 4:
+      return False
+    had_pat = False
+    for pc in xrange(5):  # Number of packets to scan.
+      if len(header) < i + 4:
+        return True
+      if header[i] != '\x47':
+        return False
+      b, = struct.unpack('>L', header[i : i + 4])
+      tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
+      pid = (b >> 8) & 0x1fff  # Packet id.
+      tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
+      #print (tei, cc, tsc, pid)
+      if tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0:  # pat.
+        had_pat = True
+        # TODO(pts): Call parse_mpeg_ts_pat, ignore 'EOF '.
+      elif tei == 0 and cc in (0, 1) and tsc == 0 and 0x10 <= pid <= 0x20:
+        # pid=0x11 is
+        # https://en.wikipedia.org/wiki/Service_Description_Table
+        pass  # DVB metadata.
+      elif tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0x1fff: # Null.
+        pass
+      elif (tei == 0 and cc in (0, 1) and tsc == 0 and 0x20 <= pid < 0x1fff and
+            had_pat):
+        break
+      else:
+        return False
+      i += (188, 192)[is_bdav]
+    return True
+
+
+  def analyze_mpeg_ts(fread, info, fskip):
+    prefix = fread(4)
+    if len(prefix) < 4:
+      raise ValueError('Too short for mpeg-ts.')
+    ts_packet_count = ts_pusi_count = ts_payload_count = 0
+    if prefix.startswith('\x47'):
+      is_bdav = False
+      info['subformat'] = 'ts'
+    elif prefix.startswith('\0\0'):
+      is_bdav = True
+      info['subformat'] = 'bdav'
+    else:
+      raise ValueError('mpeg-ts signature not found.')
+    ts_packet_first_limit = 5
+    first_few_packets = []
+    # Maps from pmt_pid to program_num. Empty if pat payload not found yet.
+    programs = {}
+    # Maps from es_pid to [stream_type, basic_track_info, track_info, buffered_data].
+    es_streams = {}
+    buffered_pat_data = []
+    buffered_pmt_data_by_pid = {}
+    es_streams_by_type = {'audio': 0, 'video': 0}
+    es_payloads_by_type = {'audio': 0, 'video': 0}
+    # info['format'] = 'mpeg-ts'  # Not yet, later.
+    info['tracks'] = []
+    eof_msg = ''
+    ts_packet_count_limit = 6000
+    expected_es_streams = 0
+    while 1:
+      if ts_packet_count >= ts_packet_count_limit:
+        break
+      ts_packet_count += 1
+      if is_bdav:
+        if len(prefix) != 4:
+          prefix += fread(4 - len(prefix))
+          if len(prefix) < 4:
+            if prefix:
+              eof_msg = 'EOF in mpeg-ts packet header.'
+            else:
+              eof_msg = 'EOF in mpeg-ts bdav stream.'
+            break
+        prefix = ''
+      data = prefix + fread(188 - len(prefix))
+      prefix = ''
+      if len(data) < 188:
+        if data:
+          eof_msg = 'EOF in mpeg-ts packet.'
+        else:
+          eof_msg = 'EOF in mpeg-ts stream.'
+        break
+      if data[0] != '\x47':
+        raise ValueError('Bad sync byte in mpeg-ts packet: 0x%02x' % ord(data[0]))
+      if first_few_packets is not None and ts_packet_count <= ts_packet_first_limit:
+        first_few_packets.append(data)
+        if not is_mpeg_ts(''.join(first_few_packets)):
+          raise ValueError('Bad mpeg-ps header until packet %d.' % ts_packet_count)
+        if ts_packet_count == ts_packet_first_limit:
+          first_few_packets = None  # Save memory.
+          info['format'] = 'mpeg-ts'
+      h, = struct.unpack('>L', data[:4])
+      tei, pusi, tp = (h >> 23) & 1, (h >> 22) & 1, (h >> 21) & 1
+      pid = (h >> 8) & 0x1fff  # Packet id.
+      tsc, afc, cc = (h >> 6) & 3, (h >> 4) & 3, h & 15
+      if tei:  # Ignore packet with errors.
+        continue
+      if pid == 0x1fff:  # Ignore null packet.
+        continue
+      if pusi:  # New payload packet starts in this ts packet.
+        ts_pusi_count += 1
+      if afc == 3:
+        # End of the adaptation field is stuffed with '\xff' just at the end
+        # of the payload unit (PES packet).
+        payload_ofs = 5 + ord(data[4])
+      elif afc == 1:
+        payload_ofs = 4
+      elif afc == 2:
+        continue  # No payload.
+      else:
+        raise ValueError('Invalid afc value 0.')
+      if len(data) < payload_ofs:
+        raise ValueError('mpeg-ts payload too short.')
+      ts_payload_count += 1
+      #print 'packet pusi=%d pid=0x%x size=%d' % (pusi, pid, len(data) - payload_ofs)
+      if pid == 0:
+        if not programs and (pusi or buffered_pat_data) and len(data) > payload_ofs:
+          if pusi:
+            del buffered_pat_data[:]
+            payload = buffer(data, payload_ofs)
+          else:
+            buffered_pat_data.append(data[payload_ofs:])
+            payload = ''.join(buffered_pat_data)
+            if len(payload) > 1200:
+              raise ValueError('mpeg-ts pat payload too long.')
+          try:
+            programs.update(parse_mpeg_ts_pat(payload))
+          except ValueError, e:
+            if not str(e).startswith('EOF '):
+              raise
+            if not buffered_pat_data:
+              buffered_pat_data.append(payload[:])
+          payload = None  # Save memory.
+          if programs:
+            for pmt_pid in programs:
+              buffered_pmt_data_by_pid[pmt_pid] = []
+      elif pid in programs:
+        if programs[pid] > 0 and (pusi or buffered_pmt_data_by_pid[pid]) and len(data) > payload_ofs:
+          buffered_data = buffered_pmt_data_by_pid[pid]
+          if pusi:
+            del buffered_data[:]
+            payload = buffer(data, payload_ofs)
+          else:
+            buffered_data.append(data[payload_ofs:])
+            payload = ''.join(buffered_data)
+            if len(payload) > 1800:
+              raise ValueError('mpeg-ts pmt payload too long.')
+          try:
+            parsed_pmt = parse_mpeg_ts_pmt(payload, programs[pid])
+          except ValueError, e:
+            if not str(e).startswith('EOF '):
+              raise
+            if not buffered_data:
+              buffered_data.append(payload[:])
+            parsed_pmt = None
+          payload = None  # Save memory.
+          if parsed_pmt:
+            info['format'] = 'mpeg-ts'
+            for es_pid, stream_type in parsed_pmt:
+              if es_pid in es_streams:
+                raise ValueError('Duplicate mpeg-ts pmt es_pid: 0x%x' % es_pid)
+              if es_pid in programs:
+                raise ValueError('mpeg-ts pmg es_pid is also a pmt_pid: 0x%x' % es_pid)
+              track_info = get_mpeg_ts_es_track_info('', stream_type)
+              if track_info is not None:  # Recognized audio or video es stream.
+                es_streams_by_type[track_info['type']] += 1
+                es_streams[es_pid] = [stream_type, track_info, None, []]
+                ts_packet_count_limit += 1000
+                expected_es_streams += 1
+            programs[pid] = -1
+            parsed_pmt = None  # Save memory.
+      elif pid in es_streams:
+        es_stream = es_streams[pid]
+        if pusi:
+          es_payloads_by_type[es_stream[1]['type']] += 1
+        if es_stream[2] is None and (pusi or es_stream[3]) and len(data) > payload_ofs:
+          buffered_data = es_stream[3]
+          if pusi:
+            del buffered_data[:]
+            payload = buffer(data, payload_ofs)
+          else:
+            buffered_data.append(data[payload_ofs:])
+            payload = ''.join(buffered_data)
+          track_info = False
+          try:
+            track_info = get_mpeg_ts_pes_track_info(payload[:], es_stream[0])
+          except ValueError, e:
+            if str(e).startswith('EOF ') and len(payload) <= 1000:
+              if not buffered_data:
+                buffered_data.append(payload[:])
+            else:
+              track_info = e
+          payload = None  # Save memory.
+          assert track_info is not None, (
+              'Unexpected unknown stream_type: 0x%02x' % stream_type)
+          if track_info:
+            es_stream[2] = track_info
+            type_str = es_stream[1]['type']
+            if isinstance(track_info, Exception):
+              info['tracks'].append(es_stream[1])  # Fallback track_info.
+            else:
+              info['tracks'].append(track_info)
+            expected_es_streams -= 1
+            if not expected_es_streams:
+              break  # Stop scanning when all es streams have been found.
+      if not programs and ts_payload_count >= 3000:
+        raise ValueError('Missing mpeg-ts pat payload.')
+      if not es_streams and ts_payload_count >= 3500:
+        raise ValueError('Missing mpeg-ts pmt payload.')
+    if (first_few_packets is not None and
+        not is_mpeg_ts(''.join(first_few_packets))):
+      raise ValueError('Bad mpeg-ps header.')
+    info['hdr_ts_packet_count'] = ts_packet_count
+    info['hdr_ts_payload_count'] = ts_payload_count
+    info['hdr_ts_pusi_count'] = ts_pusi_count
+    info['hdr_vstreams'] = es_streams_by_type['video']
+    info['hdr_astreams'] = es_streams_by_type['audio']
+    info['hdr_vframes'] = es_payloads_by_type['video']
+    info['hdr_aframes'] = es_payloads_by_type['audio']
+    if not programs:
+      raise ValueError('Missing mpeg-ts pat payload.')
+    if not es_streams:
+      raise ValueError('Missing mpeg-ts pmt with streams.')
+    if expected_es_streams:
+      raise ValueError('Missing some mpeg-ts pes payloads (tracks).')
+    else:
+      assert not eof_msg, 'mpeg-ts EOF reached after all pes payloads were detected.'
+    errors = ['Error for stream_type=0x%02x fallback_track_info=%r: %s' % (es_stream[0], es_stream[1], es_stream[2])
+              for es_stream in es_streams.itervalues() if isinstance(es_stream[2], Exception)]
+    if errors:
+      raise ValueError('Bad mpeg-ts pes payloads: ' + '; '.join(errors))
+    if eof_msg:
+      raise ValueError(eof_msg)
 
 
   # ---
@@ -1983,66 +2837,6 @@ def mediafileinfo_detect():
     return frame_count > 1
 
 
-  def get_jpeg_dimensions(fread):
-    """Returns (width, height) of a JPEG file.
-
-    Args:
-      f: An object supporting the .read(size) method. Should be seeked to the
-          beginning of the file.
-      header: The first few bytes already read from fread.
-    Returns:
-      (width, height) pair of integers.
-    Raises:
-      ValueError: If not a JPEG file or there is a syntax error in the JPEG file.
-      IOError: If raised by fread(size).
-    """
-    # Implementation based on pts-qiv
-    #
-    # A typical JPEG file has markers in these order:
-    #   d8 e0_JFIF e1 e1 e2 db db fe fe c0 c4 c4 c4 c4 da d9.
-    #   The first fe marker (COM, comment) was near offset 30000.
-    # A typical JPEG file after filtering through jpegtran:
-    #   d8 e0_JFIF fe fe db db c0 c4 c4 c4 c4 da d9.
-    #   The first fe marker (COM, comment) was at offset 20.
-
-    def read_all(size):
-      data = fread(size)
-      if len(data) != size:
-        raise ValueError(
-            'Short read in JPEG: wanted=%d got=%d' % (size, len(data)))
-      return data
-
-    data = fread(4)
-    if len(data) < 4 or not data.startswith('\xff\xd8\xff'):
-      raise ValueError('Not a JPEG file.')
-    m = ord(data[3])
-    while 1:
-      while m == 0xff:  # Padding.
-        m = ord(read_all(1))
-      if m in (0xd8, 0xd9, 0xda):
-        # 0xd8: SOI unexpected.
-        # 0xd9: EOI unexpected before SOF.
-        # 0xda: SOS unexpected before SOF.
-        raise ValueError('Unexpected marker: 0x%02x' % m)
-      ss, = struct.unpack('>H', read_all(2))
-      if ss < 2:
-        raise ValueError('Segment too short.')
-      ss -= 2
-      if 0xc0 <= m <= 0xcf and m not in (0xc4, 0xc8, 0xcc):  # SOF0 ... SOF15.
-        if ss < 5:
-          raise ValueError('SOF segment too short.')
-        height, width = struct.unpack('>xHH', read_all(5))
-        return width, height
-      read_all(ss)
-
-      # Read next marker to m.
-      m = read_all(2)
-      if m[0] != '\xff':
-        raise ValueError('Marker expected.')
-      m = ord(m[1])
-    raise AssertionError('Internal JPEG parser error.')
-
-
   def get_brn_dimensions(fread):
     """Returns (width, height) of a BRN file.
 
@@ -2111,46 +2905,6 @@ def mediafileinfo_detect():
       return width, height
     else:
       raise ValueError('Dimensions not found in BRN.')
-
-
-  def is_mpeg_ts(header):
-    # https://en.wikipedia.org/wiki/MPEG_transport_stream
-    is_m2ts = header.startswith('\0\0')  # Or BDAV.
-    i = (0, 4)[is_m2ts]
-    if len(header) < i + 4:
-      return False
-    had_pat = False
-    for pc in xrange(5):  # Number of packets to scan.
-      if len(header) < i + 4:
-        return True
-      if header[i] != '\x47':
-        return False
-      b, = struct.unpack('>L', header[i : i + 4])
-      tei = (b >> 23) & 1
-      pusi = (b >> 22) & 1
-      tp = (b >> 21) & 1
-      packet_id = (b >> 8) & 0x1fff  # 13-bit.
-      tsc = (b >> 6) & 3
-      afc = (b >> 4) & 3
-      cc = b & 15
-      #print (tei, cc, tsc, packet_id)
-      # TODO(pts): If packet_id == 8191, then it's the null packet, and find
-      # the next packet.
-      if tei == 0 and cc == 0 and tsc == 0 and packet_id == 0:  # PAT.
-        had_pat = True
-      elif tei == 0 and cc == 0 and tsc == 0 and 0x10 <= packet_id <= 0x20:
-        # packet_id=0x11 is
-        # https://en.wikipedia.org/wiki/Service_Description_Table
-        pass  # DVB metadata.
-      elif tei == 0 and cc == 0 and tsc == 0 and packet_id == 0x1fff: # Null.
-        pass
-      elif (tei == 0 and cc == 0 and tsc == 0 and 0x20 <= packet_id < 0x1fff and
-            had_pat):
-        break
-      else:
-        return False
-      i += (188, 192)[is_m2ts]
-    return True
 
 
   def analyze_wav(fread, info, fskip):
@@ -2264,6 +3018,11 @@ def mediafileinfo_detect():
   # --- File format detection for many file formats and getting media
   # parameters for some.
 
+
+  def adjust_confidence(base_confidence, confidence):
+    return (confidence, max(1, confidence - base_confidence))
+
+
   MAX_CONFIDENCE = 100000
 
   # TODO(pts): Static analysis: fail on duplicate format name.
@@ -2300,17 +3059,13 @@ def mediafileinfo_detect():
       # Video CD (VCD).
       ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
       ('mpeg-ps', (0, '\0\0\1\xba')),
-      ('mpeg-video', (0, '\0\0\1\xb3')),
-      # TODO(pts): Use any of these to get more info.
-      # https://github.com/topics/mpeg-ts
-      # https://github.com/asticode/go-astits
-      # https://github.com/drillbits/go-ts
-      # https://github.com/small-teton/MpegTsAnalyzer
-      # https://github.com/mzinin/ts_splitter
+      ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
       ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-      # https://github.com/tpn/winsdk-10/blob/38ad81285f0adf5f390e5465967302dd84913ed2/Include/10.0.10240.0/shared/ksmedia.h#L2909
-      # lists MPEG audio packet types here: STATIC_KSDATAFORMAT_TYPE_STANDARD_ELEMENTARY_STREAM
-      ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb0', '\xb5'))),
+      # TODO(pts): 'mpeg-pes' has: '\0\0\1', [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
+      # TODO(pts): Is there anything else not covered by mpeg-video, mpeg-ps, h264 and h265?
+      ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
+      ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
+      ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42',  '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
       ('mng', (0, '\212MNG\r\n\032\n')),
       ('swf', (0, ('FWS', 'CWS'))),
       ('rm', (0, '.RMF\0\0\0')),
@@ -2381,10 +3136,15 @@ def mediafileinfo_detect():
       # ID3v2 is at the start of the file, before the mpeg-adts frames.
       ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
       # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
-      ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff'), 3, lambda header: (is_mpeg_adts(header), 30))),
+      ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff', '\xf0', '\xf1', '\xf8', '\xf9'), 3, lambda header: (is_mpeg_adts(header), 30))),
       ('aac', (0, 'ADIF')),
       ('flac', (0, 'fLaC')),
       ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
+      # TODO(pts): Add analyizing of audio parameters.
+      #     https://en.wikipedia.org/wiki/DTS_(sound_system)
+      #     http://www.ac3filter.net/wiki/DTS
+      #     https://wiki.multimedia.cx/index.php/DTS
+      ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80'))),
 
       # Document media.
 
@@ -2494,7 +3254,7 @@ def mediafileinfo_detect():
           if isinstance(pattern, str):
             hps = max(hps, size + len(pattern))
           elif isinstance(pattern, tuple):
-            assert pattern
+            assert pattern, 'Empty pattern tuple.'
             assert len(set(len(s) for s in pattern)) == 1, (
                 'Non-uniform pattern choice sizes for %s: %r' %
                 (format, pattern))
@@ -2510,7 +3270,7 @@ def mediafileinfo_detect():
 
   # import math; print ["\0"+"".join(chr(int(100. / 8 * math.log(i) / math.log(2))) for i in xrange(1, 1084))]'
   LOG2_SUB = '\0\0\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccdddddddddddddddeeeeeeeeeeeeeeeeffffffffffffffffggggggggggggggggghhhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiijjjjjjjjjjjjjjjjjjjjkkkkkkkkkkkkkkkkkkkkklllllllllllllllllllllllmmmmmmmmmmmmmmmmmmmmmmmmnnnnnnnnnnnnnnnnnnnnnnnnnnoooooooooooooooooooooooooopppppppppppppppppppppppppppppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrsssssssssssssssssssssssssssssssssttttttttttttttttttttttttttttttttttttuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{|||||||||||||||||||||||||||||||||||||||||||||||||||||||}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}~'
-  assert len(LOG2_SUB) == 1084
+  assert len(LOG2_SUB) == 1084, 'Unexpected LOG2_SUB size.'
 
 
   def detect_format(f):
@@ -2527,13 +3287,13 @@ def mediafileinfo_detect():
     fbp = format_db.formats_by_prefix
     for j in xrange(min(len(header), 4), -1, -1):
       for format, spec in fbp[j].get(header[:j], ()):
-        assert isinstance(spec, tuple)
+        assert isinstance(spec, tuple), 'spec must be tuple.'
         confidence = 0
         i = 0
         prev_ofs = 0
         while i < len(spec):
           ofs = spec[i]
-          assert isinstance(ofs, int)
+          assert isinstance(ofs, int), 'ofs must be int.'
           pattern = spec[i + 1]
           if isinstance(pattern, str):
             assert ofs + len(pattern) <= HEADER_SIZE_LIMIT, 'Header too long.'
@@ -2626,30 +3386,7 @@ def mediafileinfo_detect():
       info.setdefault('vcodec', '?')
 
 
-  def analyze(f, info=None, file_size_for_seek=None):
-    """Detects file format, and gets media parameters in file f.
-
-    For videos, info['tracks'] is a list with an item for each video or audio
-    track (info['tracks'][...]['type'] in ('video', 'audio'). Presence and
-    parameters of subtitle tracks are not reported.
-
-    Args:
-      f: File-like object with a .read(n) method and an optional .seek(n) method,
-          should do buffering for speed, and must return exactly n bytes unless
-          at EOF. Seeking will be avoided if possible.
-      info: A dict to update with the info found, or None to create a new one.
-      file_size_for_seek: None or an integer specifying the file size up to which
-          it is OK to seek forward (fskip).
-    Returns:
-      The info dict.
-    """
-    if info is None:
-      info = {}
-    # Set it early, in case of an exception.
-    info.setdefault('format', '?')
-    format, header = detect_format(f)
-    info['format'] = format
-
+  def _analyze_detected_format(f, info, header, file_size_for_seek):
     prebuf = [0, header]
     header = ''
 
@@ -2702,6 +3439,7 @@ def mediafileinfo_detect():
           f.seek(size, 1)
           return f.tell() <= file_size_for_seek
 
+    format = info['format']
     if format == 'flv':
       analyze_flv(fread, info, fskip)
     elif format == 'mkv':
@@ -2712,8 +3450,20 @@ def mediafileinfo_detect():
       analyze_avi(fread, info, fskip)
     elif format == 'mpeg-ps':
       analyze_mpeg_ps(fread, info, fskip)
+    elif format == 'mpeg-ts':
+      analyze_mpeg_ts(fread, info, fskip)
     elif format == 'mpeg-video':
       analyze_mpeg_video(fread, info, fskip)
+    elif format == 'mpeg-adts':
+      # Can change info['format'] = 'mp3'.
+      analyze_mpeg_adts(fread, info, fskip)
+    elif format == 'mp3-id3v2':
+      analyze_id3v2(fread, info, fskip)
+      analyze_mpeg_adts(fread, info, fskip)
+    elif format == 'h264':
+      analyze_h264(fread, info, fskip)
+    elif format == 'h265':
+      analyze_h265(fread, info, fskip)
     elif format == 'wav':
       analyze_wav(fread, info, fskip)
     elif format == 'gif':
@@ -2744,18 +3494,8 @@ def mediafileinfo_detect():
       info['codec'] = 'lzma'
     elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
       analyze_mp4(fread, info, fskip)
-    elif format == 'mpeg-adts':
-      # Can change info['format'] = 'mp3'.
-      analyze_mpeg_adts(fread, info, fskip)
     elif format == 'ac3':
       analyze_ac3(fread, info, fskip)
-    elif format == 'mp3-id3v2':
-      analyze_id3v2(fread, info, fskip)
-      analyze_mpeg_adts(fread, info, fskip)
-    elif format.startswith('mp3-'):
-      # TODO(pts): Skip the ID3 tags in the beginning, then parse as
-      # mpeg-adts.
-      info['format'] = 'mp3'
     elif format == 'jp2':
       if len(fread(12)) != 12:
         raise ValueError('Too short for jp2 header.')
@@ -2767,8 +3507,35 @@ def mediafileinfo_detect():
     elif format == 'exe':
       analyze_exe(fread, info, fskip)
 
-    if info.get('tracks'):
-      copy_info_from_tracks(info)
+
+  def analyze(f, info=None, file_size_for_seek=None):
+    """Detects file format, and gets media parameters in file f.
+
+    For videos, info['tracks'] is a list with an item for each video or audio
+    track (info['tracks'][...]['type'] in ('video', 'audio'). Presence and
+    parameters of subtitle tracks are not reported.
+
+    Args:
+      f: File-like object with a .read(n) method and an optional .seek(n) method,
+          should do buffering for speed, and must return exactly n bytes unless
+          at EOF. Seeking will be avoided if possible.
+      info: A dict to update with the info found, or None to create a new one.
+      file_size_for_seek: None or an integer specifying the file size up to which
+          it is OK to seek forward (fskip).
+    Returns:
+      The info dict.
+    """
+    if info is None:
+      info = {}
+    # Set it early, in case of an exception.
+    info.setdefault('format', '?')
+    format, header = detect_format(f)
+    info['format'] = format
+    try:
+      _analyze_detected_format(f, info, header, file_size_for_seek)
+    finally:
+      if info.get('tracks'):
+        copy_info_from_tracks(info)
     return info
 
   return locals()
@@ -2855,6 +3622,10 @@ def main(argv):
       except IOError, e:
         info['error'] = 'bad_read'
         print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
+      except AssertionError, e:
+        info['error'] = 'assert'
+        print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
       except (KeyboardInterrupt, SystemExit):
         raise
