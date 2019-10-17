@@ -684,6 +684,10 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         info['error'] = 'bad_read'
         print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
+      except AssertionError, e:
+        info['error'] = 'assert'
+        print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
+            filename, e.__class__.__module__, e.__class__.__name__, e)
       except (KeyboardInterrupt, SystemExit):
         raise
       except Exception, e:
