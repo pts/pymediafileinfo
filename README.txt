@@ -163,11 +163,15 @@ A6. No, it isn't. This feature is not of high priority, but feel free to
 
 Q7. Does mediafileinfo.py support MPEG?
 
-A7. mediafileinfo.py can detect MP3 and MPEG files (unless there is junk in
-    front of the MPEG header in the file) and get media parameters (e.g.
-    codec, dimensions), with the following restrictions: it can't get media
-    parameters for MPEG-TS (yet), and it can't detect raw MPEG audio streams
-    (i.e. not wrapped to an MPEG-ADTS elementary stream).
+A7. mediafileinfo.py can detect MP3 and MPEG files (mpeg-video (elementary
+    stream), mpeg-adts (audio elementary stream), mpeg-ps, mpeg-ts) and get
+    media parameters (e.g. codec, dimensions), with the following restrictions:
+
+    * If there is junk in front of the MPEG header in the file, the file is
+      not detected as MPEG.
+    * Raw MPEG audio streams without MPEG-ADTS frame wrapping are not detected.
+      (Does this even exist? Aren't just junk in the beginning of the
+      mpeg-adts file?)
 
 TODO
 ~~~~
