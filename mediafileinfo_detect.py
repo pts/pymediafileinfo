@@ -1730,7 +1730,7 @@ class MpegAudioHeaderFinder(object):
 # --- Video streams in MPEG.
 
 
-def get_mpeg_video_track_info(header, expect_mpeg4=None):
+def parse_mpeg_video_header(header, expect_mpeg4=None):
   is_mpeg4 = (
       header.startswith('\0\0\1\xb5') or
       (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5'))
@@ -1739,47 +1739,58 @@ def get_mpeg_video_track_info(header, expect_mpeg4=None):
       raise ValueError('mpeg-video mpeg-4 signature not found.')
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
     # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of
-    # H.263, DivX.
+    # H.263, DivX, mp42.
     # '\0\0\1\xb0' is the profile header, with a single-byte value.
+    i = 4 + 5 * header.startswith('\0\0\1\xb0')
+    track_info = {'type': 'video', 'codec': 'mpeg-4'}
+    # Get width and height in get_mpeg_video_track_info instead of here.
+  else:
+    if len(header) < 9:
+      raise ValueError('Too short for mpeg-video.')
+    # MPEG video sequence header start code.
+    if not header.startswith('\0\0\1\xb3'):
+      raise ValueError('mpeg-video signature not found.')
+    wdht, = struct.unpack('>L', header[3 : 7])
+    track_info = {'type': 'video', 'codec': 'mpeg'}
+    # TODO(pts): Verify that width and height are positive.
+    track_info['width'] = (wdht >> 12) & 0xfff
+    track_info['height'] = wdht & 0xfff
+    if len(header) >= 16 and not ord(header[11]) & 3:
+      i = 12
+    elif len(header) >= 144 and ord(header[11]) & 2 and ord(header[75]) & 1:
+      i = 140
+    elif len(header) >= 80 and (
+        (ord(header[11]) & 2 and not ord(header[75]) & 1) or
+        (not ord(header[11]) & 2 and ord(header[11]) & 1)):
+      i = 76
+    else:
+      i = None
+    if i:
+      start_data = header[i : i + 4]
+      if start_data == '\0\0\0\1':
+        i += 1
+        start_data = header[i : i + 4]
+      if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):
+        track_info['codec'] = 'mpeg-1'
+      elif start_data in ('\0\0\1\xb5'):  # MPEG-2 sequence extension.
+        track_info['codec'] = 'mpeg-2'
+      elif not start_data.startswith('\0\0\1'):
+        raise ValueError('mpeg-video start expected.')
+      else:
+        raise ValueError('Unexpected mpeg-video start code: 0x%02x' % ord(start_data[3]))
+  return i, track_info
+
+
+def get_mpeg_video_track_info(header, expect_mpeg4=None):
+  i, track_info = parse_mpeg_video_header(header, expect_mpeg4)
+  if track_info['codec'] == 'mpeg-4':
     # https://www.google.com/search?q="video_object_layer_verid"
     # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
     # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
     # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
     # extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
-    i = 4 + 5 * header.startswith('\0\0\1\xb0')
-    track_info = {'type': 'video', 'codec': 'mpeg-4'}
     # TODO(pts): Analyze mpeg-4, get media parameters (width, height).
-    return track_info
-  if len(header) < 9:
-    raise ValueError('Too short for mpeg-video.')
-  # MPEG video sequence header start code.
-  if not header.startswith('\0\0\1\xb3'):
-    raise ValueError('mpeg-video signature not found.')
-  wdht, = struct.unpack('>L', header[3 : 7])
-  track_info = {'type': 'video', 'codec': 'mpeg'}
-  # TODO(pts): Verify that width and height are positive.
-  track_info['width'] = (wdht >> 12) & 0xfff
-  track_info['height'] = wdht & 0xfff
-  if len(header) >= 16 and not ord(header[11]) & 3:
-    i = 12
-  elif len(header) >= 144 and ord(header[11]) & 2 and ord(header[75]) & 1:
-    i = 140
-  elif len(header) >= 80 and (
-      (ord(header[11]) & 2 and not ord(header[75]) & 1) or
-      (not ord(header[11]) & 2 and ord(header[11]) & 1)):
-    i = 76
-  else:
-    i = None
-  if i:
-    start_data = header[i : i + 4]
-    if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):
-      track_info['codec'] = 'mpeg-1'
-    elif start_data in ('\0\0\1\xb5'):  # MPEG-2 sequence extension.
-      track_info['codec'] = 'mpeg-2'
-    elif not start_data.startswith('\0\0\1'):
-      raise ValueError('mpeg-video start expected.')
-    else:
-      raise ValueError('Unexpected mpeg-video start code: 0x%02x' % ord(start_data[3]))
+    pass
   return track_info
 
 
@@ -1794,14 +1805,11 @@ class MpegVideoHeaderFinder(object):
   def get_track_info(self):
     buf = self._buf
     # MPEG video sequence header start code.
-    if (buf.startswith('\0\0\1\xb3') and
-        (len(buf) >= 144 or
-         (len(buf) >= 80 and
-          (ord(buf[11]) & 2 and not ord(buf[75]) & 1) or
-          (not ord(buf[11]) & 2 and ord(buf[11]) & 1)) or
-         (len(buf) >= 16 and not ord(buf[11]) & 3)) or
-        buf.startswith('\0\0\1\xb5') or
-        (buf.startswith('\0\0\1\xb0') and buf[5 : 9] == '\0\0\1\xb5')):
+    if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb5\xb0':
+      try:
+        parse_mpeg_video_header(buf)
+      except ValueError:
+        return None
       track_info = get_mpeg_video_track_info(buf)
       track_info['header_ofs'] = self._header_ofs
       return track_info
@@ -1815,8 +1823,8 @@ class MpegVideoHeaderFinder(object):
       buf = self._buf
       # MPEG video sequence header start code. We need 7 bytes of header.
       if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb0\xb5':  # Found before signature.
-        if len(buf) < 144:
-          self._buf = buf + data[:144 - len(buf)]
+        if len(buf) < 145:
+          self._buf = buf + data[:145 - len(buf)]
       elif buf.endswith('\0\0\1') and data[0] in '\xb3\xb0\xb5':
         self._header_ofs += len(buf) - 3
         self._buf = buf[-3:] + data[:16]  # Found signature.
@@ -1838,7 +1846,7 @@ class MpegVideoHeaderFinder(object):
           i = i3
         if i >= 0:
           self._header_ofs += i
-          self._buf = data[i : i + 144]  # Found signature.
+          self._buf = data[i : i + 145]  # Found signature.
         elif len(data) >= 3:
           self._header_ofs += len(data) - 3
           self._buf = data[-3:]  # Not found.
@@ -1849,7 +1857,7 @@ class MpegVideoHeaderFinder(object):
 def analyze_mpeg_video(fread, info, fskip):
   # https://en.wikipedia.org/wiki/Elementary_stream
   # http://www.cs.columbia.edu/~delbert/docs/Dueck%20--%20MPEG-2%20Video%20Transcoding.pdf
-  header = fread(144)
+  header = fread(145)
   info['format'] = 'mpeg-video'
   info['tracks'] = [get_mpeg_video_track_info(header)]
 

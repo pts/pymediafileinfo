@@ -22,6 +22,36 @@ import mediafileinfo_detect
 
 class MediaFileInfoDetectTest(unittest.TestCase):
 
+  def test_get_mpeg_video_track_info(self):
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a4000001b8'.decode('hex')),
+        {'codec': 'mpeg-1', 'height': 240, 'type': 'video', 'width': 352})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a4000001b8'.decode('hex'), expect_mpeg4=False),
+        {'codec': 'mpeg-1', 'height': 240, 'type': 'video', 'width': 352})
+    try:
+      mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a4000001b8'.decode('hex'), expect_mpeg4=True)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e), 'mpeg-video mpeg-4 signature not found.')
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a4000001'.decode('hex')),
+        {'codec': 'mpeg', 'height': 240, 'type': 'video', 'width': 352})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a400000001b8'.decode('hex')),
+        {'codec': 'mpeg-1', 'height': 240, 'type': 'video', 'width': 352})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex')),
+        {'codec': 'mpeg-4', 'type': 'video'})
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex'), expect_mpeg4=True),
+        {'codec': 'mpeg-4', 'type': 'video'})
+    try:
+      mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex'), expect_mpeg4=False)
+      self.fail('ValueError not raised.')
+    except ValueError, e:
+      self.assertEqual(str(e), 'mpeg-video signature not found.')
+
   def test_get_mpeg_ts_es_track_info(self):
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_ts_es_track_info('\0\0\1\xb3\x16\x01\x20\x13\xff\xff\xe0\x18\0\0\1\xb8', 0x01),
