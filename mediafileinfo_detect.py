@@ -2451,7 +2451,9 @@ def is_mpeg_ts(header):
   i = (0, 4)[is_bdav]
   if len(header) < i + 4:
     return False
-  had_pat = False
+  had_pat = had_pat_pusi = False
+  cc_by_pid = {}
+  #print '---ts'
   for pc in xrange(5):  # Number of packets to scan.
     if len(header) < i + 4:
       return True
@@ -2461,18 +2463,33 @@ def is_mpeg_ts(header):
     tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
     pid = (b >> 8) & 0x1fff  # Packet id.
     tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
-    #print (tei, cc, tsc, pid)
-    if tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0:  # pat.
+    if tei:  # Error in transport.
+      return False
+    if pid == 0x1fff:  # Ignore null packet.
+      continue
+    if tsc:  # Scrambled packet.
+      return False
+    #print (pusi, cc, 'pid=0x%x' % pid, tei, tp, tsc, afc)
+    if pid in cc_by_pid:
+      if cc_by_pid[pid] != cc:  # Unexpected continuation cc.
+        return False
+    elif cc not in (0, 1):
+      return False  # Unexpected followup cc.
+    cc_by_pid[pid] = (cc + (afc & 1)) & 15
+    if pid == 0:  # pat.
+      if not (afc & 1):
+        return False  # pat without payload.
+      if pusi:
+        had_pat_pusi = True
+      elif not had_pat_pusi:
+        return False
       had_pat = True
       # TODO(pts): Call parse_mpeg_ts_pat, ignore 'EOF '.
-    elif tei == 0 and cc in (0, 1) and tsc == 0 and 0x10 <= pid <= 0x20:
+    elif 0x10 <= pid <= 0x20:
       # pid=0x11 is
       # https://en.wikipedia.org/wiki/Service_Description_Table
       pass  # DVB metadata.
-    elif tei == 0 and cc in (0, 1) and tsc == 0 and pid == 0x1fff: # Null.
-      pass
-    elif (tei == 0 and cc in (0, 1) and tsc == 0 and 0x20 <= pid < 0x1fff and
-          had_pat):
+    elif 0x20 <= pid < 0x1fff and had_pat:
       break
     else:
       return False
@@ -2503,6 +2520,7 @@ def analyze_mpeg_ts(fread, info, fskip):
   buffered_pmt_data_by_pid = {}
   es_streams_by_type = {'audio': 0, 'video': 0}
   es_payloads_by_type = {'audio': 0, 'video': 0}
+  cc_by_pid = {}
   # info['format'] = 'mpeg-ts'  # Not yet, later.
   info['tracks'] = []
   eof_msg = ''
@@ -2543,10 +2561,20 @@ def analyze_mpeg_ts(fread, info, fskip):
     tei, pusi, tp = (h >> 23) & 1, (h >> 22) & 1, (h >> 21) & 1
     pid = (h >> 8) & 0x1fff  # Packet id.
     tsc, afc, cc = (h >> 6) & 3, (h >> 4) & 3, h & 15
+    #print (pusi, cc, 'pid=0x%x' % pid, tei, tp, tsc, afc)
     if tei:  # Ignore packet with errors.
       continue
     if pid == 0x1fff:  # Ignore null packet.
       continue
+    if tsc:
+      raise ValueError('Unexpected scrambled mpeg-ts packet.')
+    if pid in cc_by_pid:
+      if cc_by_pid[pid] != cc:
+        raise ValueError('Bad mpeg-ts cc: pid=0x%x expected=%d got=%d' %
+                         (pid, cc_by_pid[pid], cc))
+    elif cc not in (0, 1):
+      raise ValueError('Bad mpeg-ts first cc: pid=0x%x got=%d' % (pid, cc))
+    cc_by_pid[pid] = (cc + (afc & 1)) & 15
     if pusi:  # New payload packet starts in this ts packet.
       ts_pusi_count += 1
     if afc == 3:
@@ -2653,10 +2681,9 @@ def analyze_mpeg_ts(fread, info, fskip):
           expected_es_streams -= 1
           if not expected_es_streams:
             break  # Stop scanning when all es streams have been found.
-    if not programs and ts_payload_count >= 3000:
-      raise ValueError('Missing mpeg-ts pat payload.')
-    if not es_streams and ts_payload_count >= 3500:
-      raise ValueError('Missing mpeg-ts pmt payload.')
+    if ((not programs and ts_payload_count >= 3000) or
+        (not es_streams and ts_payload_count >= 3500)):
+      break
   if (first_few_packets is not None and
       not is_mpeg_ts(''.join(first_few_packets))):
     raise ValueError('Bad mpeg-ps header.')
