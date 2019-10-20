@@ -1666,6 +1666,114 @@ def analyze_ac3(fread, info, fskip):
   info['tracks'] = [get_ac3_track_info(header)]
 
 
+def is_dts(header):
+  # Works with: isinstance(header, (str, buffer)).
+  return ((len(header) >= 4 and header[:4] == '\x7f\xfe\x80\x01') or
+          (len(header) >= 4 and header[:4] == '\xfe\x7f\x01\x80') or
+          (len(header) >= 5 and header[:4] == '\x1f\xff\xe8\x00' and 4 <= ord(header[4]) <= 7) or
+          (len(header) >= 6 and header[:4] == '\xff\x1f\x00\xe8' and 4 <= ord(header[5]) <= 7))
+
+
+def yield_swapped_bytes(data):
+  if not isinstance(data, (str, buffer)):
+    raise TypeError
+  data = iter(data)
+  for b0 in data:
+    for b1 in data:
+      yield b1
+      break
+    else:
+      yield '\0'
+    yield b0
+
+
+def yield_uint14s(data):
+  if not isinstance(data, (str, buffer)):
+    raise TypeError
+  data = iter(data)
+  for b0 in data:
+    b0 = ord(b0)
+    if (b0 >> 5) not in (0, 7):
+      raise ValueError('Invalid 14-to-16 sign-extension.')
+    for b1 in data:
+      yield (b0 & 63) << 8 | ord(b1)
+      break
+    else:
+      yield (b0 & 63) << 8
+
+
+def yield_convert_uint14s_to_bytes(uint14s):
+  uint14s = iter(uint14s)
+  for v in uint14s:
+    # Now v has 14 bits.
+    yield chr(v >> 6)
+    for w in uint14s:
+      v = (v & 63) << 14 | w  # 20 bits.
+      break
+    else:
+      yield chr((v & 63) << 2)
+      break
+    yield chr((v >> 12) & 255)
+    yield chr((v >> 4) & 255)
+    for w in uint14s:
+      v = (v & 15) << 14 | w  # 18 bits.
+      break
+    else:
+      yield chr((v & 15) << 4)
+      break
+    yield chr((v >> 10) & 255)
+    yield chr((v >> 2) & 255)
+    for w in uint14s:
+      v = (v & 3) << 14 | w  # 16 bits.
+      break
+    else:
+      yield chr((v & 3) << 6)
+      break
+    yield chr(v >> 8)
+    yield chr(v & 255)
+
+
+def get_dts_track_info(header):
+  # https://en.wikipedia.org/wiki/DTS_(sound_system)
+  # http://www.ac3filter.net/wiki/DTS
+  # https://wiki.multimedia.cx/index.php/DTS
+  # https://github.com/MediaArea/MediaInfoLib/blob/master/Source/MediaInfo/Audio/File_Dts.cpp
+  if len(header) < 13:
+    raise ValueError('Too short for dts.')
+  if header.startswith('\x1f\xff\xe8\x00') and 4 <= ord(header[4]) <= 7:
+    header = ''.join(yield_convert_uint14s_to_bytes(yield_uint14s(buffer(header, 0, 18))))
+  elif header[:4] == '\xff\x1f\x00\xe8' and 4 <= ord(header[5]) <= 7:
+    header = ''.join(yield_convert_uint14s_to_bytes(yield_uint14s(''.join(yield_swapped_bytes(buffer(header, 0, 18))))))
+  elif header.startswith('\x7f\xfe\x80\x01'):
+    pass
+  elif header.startswith('\xfe\x7f\x01\x80'):
+    header = ''.join(yield_swapped_bytes(buffer(header, 0, 15)))
+  else:
+    raise ValueError('dts signature not found.')
+  cpf = (ord(header[4]) >> 1) & 1  # Has CRC-32?
+  if len(header) < 13 + 2 * cpf:
+    raise ValueError('EOF in dts header.')
+  h, = struct.unpack('>H', header[7 : 9])
+  amode, sfreq = (h >> 6) & 63, (h >> 2) & 15
+  if sfreq < 16:  # >= 16 is user-defined.
+    arate = (0, 8000, 16000, 32000, 0, 0, 11025, 22050, 44100, 0, 0, 12000, 24000, 48000, 96000, 192000)[sfreq]
+    if not arate:
+      raise ValueError('Invalid dts sfreq (arate).')
+  anch = (1, 2, 2, 2, 2, 3, 3, 4, 4, 5, 6, 6, 6, 7, 8, 8)[amode]
+  i = 11 + 2 * cpf
+  h, = struct.unpack('>H', header[i : i + 2])
+  pcmr = (h >> 6) & 3
+  asbits = (16, 20, 24, 24)[pcmr >> 1]
+  return {'type': 'audio', 'codec': 'dts', 'sample_size': asbits,
+          'sample_rate': arate, 'channel_count': anch}
+
+
+def analyze_dts(fread, info, fskip):
+  header = fread(18)
+  info['format'] = 'dts'
+  info['tracks'] = [get_dts_track_info(header)]
+
+
 class MpegAudioHeaderFinder(object):
   """Supports the mpeg-adts (mp1, mp2, mp3) and ac3 audio codecs."""
 
@@ -2210,12 +2318,12 @@ def get_mpeg_ts_es_track_info(header, stream_type):
     if header:
       track_info.update(get_ac3_track_info(header))
   elif stream_type in (0x82, 0x85):
-    if not (header.startswith('\x7f\xfe\x80\x01') or
-            header.startswith('\xfe\x7f\x01\x80')):
+    if header and not is_dts(header):
       # Can be SCTE subtitle.
       return {'type': 'audio', 'codec': 'not-dts'}
-    # TODO(pts): Get audio parameters.
-    return {'type': 'audio', 'codec': 'dts'}
+    track_info = {'type': 'audio', 'codec': 'dts'}
+    if header:
+      track_info.update(get_dts_track_info(header))
   elif stream_type == 0x83:
     return {'type': 'audio', 'codec': 'truehd'}  # Dolby.
   elif stream_type == 0x84:
@@ -3139,11 +3247,7 @@ FORMAT_ITEMS = (
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
-    # TODO(pts): Add analyizing of audio parameters.
-    #     https://en.wikipedia.org/wiki/DTS_(sound_system)
-    #     http://www.ac3filter.net/wiki/DTS
-    #     https://wiki.multimedia.cx/index.php/DTS
-    ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80'))),
+    ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80', '\x1f\xff\xe8\x00', '\xff\x1f\x00\xe8'), 6, lambda header: (is_dts(header), 1))),
 
     # Document media.
 
@@ -3496,6 +3600,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mp4(fread, info, fskip)
   elif format == 'ac3':
     analyze_ac3(fread, info, fskip)
+  elif format == 'dts':
+    analyze_dts(fread, info, fskip)
   elif format == 'jp2':
     if len(fread(12)) != 12:
       raise ValueError('Too short for jp2 header.')
