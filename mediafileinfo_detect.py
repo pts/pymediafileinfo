@@ -1650,7 +1650,7 @@ def get_ac3_track_info(header):
     raise ValueError('ac3 signature not found.')
   arate = (48000, 44100, 32000, 0)[ord(header[4]) >> 6]  # fscod.
   if arate == 0:
-    raise ValueError('Invalid arate for ac3.')
+    raise ValueError('Invalid ac3 fscode (arate).')
   anch = (2, 1, 2, 3, 3, 4, 4, 5)[ord(header[6]) >> 5]  # acmod.
   track_info = {'type': 'audio'}
   track_info['codec'] = 'ac3'
@@ -3064,7 +3064,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Is there anything else not covered by mpeg-video, mpeg-ps, h264 and h265?
     ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
-    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42',  '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
+    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     ('swf', (0, ('FWS', 'CWS'))),
     ('rm', (0, '.RMF\0\0\0')),
@@ -3458,6 +3458,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mpeg_adts(fread, info, fskip)
   elif format == 'mp3-id3v2':
     analyze_id3v2(fread, info, fskip)
+    # TODO(pts): Ignore \x00 bytes here.
     analyze_mpeg_adts(fread, info, fskip)
   elif format == 'h264':
     analyze_h264(fread, info, fskip)
