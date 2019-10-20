@@ -1744,7 +1744,7 @@ def parse_mpeg_video_header(header, expect_mpeg4=None):
     i = 4 + 5 * header.startswith('\0\0\1\xb0')
     track_info = {'type': 'video', 'codec': 'mpeg-4'}
     # Get width and height in get_mpeg_video_track_info instead of here.
-  else:
+  else:  # Returns full info inof len(header) >= 145.
     if len(header) < 9:
       raise ValueError('Too short for mpeg-video.')
     # MPEG video sequence header start code.
@@ -2023,7 +2023,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                finders[sid] = MpegVideoHeaderFinder()
              finders[sid].append(buffer(data, i))
              track_info = finders[sid].get_track_info()
-             if track_info:  # Use first video stream with header.
+             if track_info and track_info['codec'] != 'mpeg':  # Use first video stream with header.
                had_video = True
                info['tracks'].append(track_info)
                info['pes_video_at'] = track_info['header_ofs']
