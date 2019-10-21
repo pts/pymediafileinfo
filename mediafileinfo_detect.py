@@ -2113,7 +2113,6 @@ def analyze_mpeg_ps(fread, info, fskip):
   # * 0xff: program stream directory
   #
   # TODO(pts): Can we get a list of SIDs without scanning through the file?
-  #
   header = fread(12)
   if len(header) < 12:
     raise ValueError('Too short for mpeg-ps.')
@@ -2261,7 +2260,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                info['pes_audio_at'] = track_info['header_ofs']
           if (had_audio and had_video) or av_packet_count > 1000:
             break
-    #else:  # Some broken MPEGs have useless SIDs, ingore those silently.
+    #else:  # Some broken MPEGs have useless SIDs, ignore those silently.
     #  raise ValueError('unexpected mpeg-ps sid=0x%02x' % sid)
   info['hdr_packet_count'] = packet_count
   info['hdr_av_packet_count'] = av_packet_count
