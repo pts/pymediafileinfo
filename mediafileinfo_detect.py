@@ -3071,32 +3071,36 @@ def analyze_id3v2(fread, info, fskip):
   # Just reads the ID3v2 header with fread and fskip.
   # http://id3.org/id3v2.3.0
   header = fread(10)
-  if len(header) < 10:
-    raise ValueError('Too short for id3v2.')
-  if not header.startswith('ID3'):
-    raise ValueError('id3v2 signature not found.')
-  version = '2.%d.%d' % (ord(header[3]), ord(header[4]))
-  if ord(header[3]) > 9:
-    raise ValueError('id3v2 version too large: %d' % version)
-  if ord(header[5]) & 7:
-    raise ValueError('Unexpected id3v2 flags: 0x%x' % ord(header[5]))
-  if ord(header[6]) >> 7 or ord(header[7]) >> 7 or ord(header[8]) >> 7 or ord(header[9]) >> 7:
-    raise ValueError('Invalid id3v2 size bits.')
-  size = ord(header[6]) << 21 | ord(header[7]) << 14 | ord(header[8]) << 7 | ord(header[9])
-  info.setdefault('format', 'id3v2')
-  info['id3_version'] = version
-  if size >= 10:
-    # Some files incorrectly have `size - 10' instead of size.
-    if not fskip(size - 10):
-      raise ValueError('EOF in id3v2 data, shorter than %d.' % (size - 10))
+  while 1:
+    if len(header) < 10:
+      raise ValueError('Too short for id3v2.')
+    if not header.startswith('ID3'):
+      raise ValueError('id3v2 signature not found.')
+    version = '2.%d.%d' % (ord(header[3]), ord(header[4]))
+    if ord(header[3]) > 9:
+      raise ValueError('id3v2 version too large: %d' % version)
+    if ord(header[5]) & 7:
+      raise ValueError('Unexpected id3v2 flags: 0x%x' % ord(header[5]))
+    if ord(header[6]) >> 7 or ord(header[7]) >> 7 or ord(header[8]) >> 7 or ord(header[9]) >> 7:
+      raise ValueError('Invalid id3v2 size bits.')
+    size = ord(header[6]) << 21 | ord(header[7]) << 14 | ord(header[8]) << 7 | ord(header[9])
+    info.setdefault('format', 'id3v2')
+    info.setdefault('id3_version', version)
+    if size >= 10:
+      # Some files incorrectly have `size - 10' instead of size.
+      if not fskip(size - 10):
+        raise ValueError('EOF in id3v2 data, shorter than %d.' % (size - 10))
+      header = fread(4)
+      analyze_func = detect_id3v2_audio_format(header)
+      if analyze_func:
+        return analyze_func(fread, info, fskip, header)
+      size = 10 - len(header)
+    if not fskip(size):
+      raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
     header = fread(4)
-    analyze_func = detect_id3v2_audio_format(header)
-    if analyze_func:
-      return analyze_func(fread, info, fskip, header)
-    size = 10 - len(header)
-  if not fskip(size):
-    raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
-  header = fread(4)
+    if not header.startswith('ID3'):
+      break
+    header += fread(10 - len(header))  # Another ID3 tag found.
   c = 0
   while 1:  # Skip some \0 bytes.
     if not header.startswith('\0') or len(header) != 4 or c >= 4096:
