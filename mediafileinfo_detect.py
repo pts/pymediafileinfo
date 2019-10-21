@@ -3563,7 +3563,7 @@ FORMAT_ITEMS = (
     # Image.
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
-    # TODO(pts): Which JPEG marker can be header[3]?
+    # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
     ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
     # JPEG reencoded by Dropbox lepton.
@@ -3571,8 +3571,6 @@ FORMAT_ITEMS = (
     # Also includes 'nikon-nef' raw images.
     # This is tricky to prefix-optimize.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
-    # TODO(pts): Get dimensions for all ppm.
-    # This is tricky to prefix-optimize.
     ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('ppm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
