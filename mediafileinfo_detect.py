@@ -3277,10 +3277,8 @@ FORMAT_ITEMS = (
     ('short2', (3, lambda header: (len(header) == 2, MAX_CONFIDENCE))),
     ('short3', (4, lambda header: (len(header) == 3, MAX_CONFIDENCE))),
 
-    # Video.
+    # Media container (with audio and/or video).
 
-    # \1 is the version number, but there is no version later than 1 in 2017.
-    ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Can also be .webm as a subformat.
     ('mkv', (0, '\x1a\x45\xdf\xa3')),
     # Can also be (new) .mov, .f4v etc. as a subformat.
@@ -3296,27 +3294,32 @@ FORMAT_ITEMS = (
     # Also 'wma' and 'wmv'.
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
     ('avi', (0, 'RIFF', 8, 'AVI ')),
+    # \1 is the version number, but there is no version later than 1 in 2017.
+    ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
-    ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-    # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
-    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
-    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
-    ('mng', (0, '\212MNG\r\n\032\n')),
-    ('swf', (0, ('FWS', 'CWS'))),
     ('rm', (0, '.RMF\0\0\0')),
     # .bup and .ifo files on a video DVD.
     ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
-    ('mov-mdat', (4, 'mdat')),
+    ('mov-mdat', (4, 'mdat')),  # TODO(pts): Analyze mpeg inside.
     # This box ('wide', 'free' or 'skip'), after it's data, is immediately
     # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
     # can't detect 'mdat' here, it's too far for us.
     ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
     ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
+    ('swf', (0, ('FWS', 'CWS'))),
+
+    # Video (single elementary stream, no audio).
+
+    ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
+    # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
+    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
+    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
+    ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
