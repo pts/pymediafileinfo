@@ -1523,6 +1523,90 @@ def count_is_h265(header):
   return i * 100
 
 
+def parse_h265_sps(
+    data,
+    _hextable='0123456789abcdef',
+    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+  """Parses H.256 sequence_parameter_set.
+
+  Args:
+    data: str or buffer containing the sequence_parameter_set RBSP.
+  Returns:
+    tuple of (width, height).
+  """
+  # https://www.itu.int/rec/dologin.asp?lang=e&id=T-REC-H.265-201504-S!!PDF-E&type=items
+  # https://github.com/MediaArea/MediaInfoLib/blob/5acd58a3fc11688a29bf50a512920fecb3ddcd46/Source/MediaInfo/Video/File_Hevc.cpp#L1445
+  #
+  # Maximum byte size we scan of the sps is 165, with hugely overestimating
+  # the allowed read_ue() sizes.
+  bitstream = iter(''.join(  # Convert to binary.
+      _hex_to_bits[_hextable.find(c)]
+      for c in data[:165].encode('hex')))
+  def read_1():
+    return int(bitstream.next() == '1')
+  def read_n(n):
+    r = 0
+    for _ in xrange(n):
+      r = r << 1 | (bitstream.next() == '1')
+    return r
+  def skip_n(n):
+    for _ in xrange(n):
+      bitstream.next()
+  def read_ue():  # Unsigned varint in Exp-Golomb code, ue(v).
+    r = n = 0
+    while bitstream.next() == '0':
+      n += 1
+      if n > 32:
+        raise ValueError('h265 varint too long.')
+    for _ in xrange(n):
+      r = r << 1 | (bitstream.next() == '1')
+    return r + (1 << n) - 1
+  try:
+    skip_n(4)  # sps_video_parameter_set_id.
+    msl = read_n(3)  # sps_max_sub_layers_minus1.
+    read_1()  # sps_temporal_id_nesting_flag.
+    if 1:  # profile_tier_level(1, sps_max_sub_layers_minus1).
+      layer_bits = 0x30000  # general_* layer is always present.
+      if msl:
+        layer_bits |= read_n(16)  # sub_layer_profile_present_flag, sub_layer_level_present_flag.
+        if layer_bits & ((1 << ((8 - msl) << 1)) - 1):
+          raise ValueError('Bad h264 sub_layer trailing bits.')
+      mask = 1 << 17
+      for _ in xrange(msl + 1):
+        if layer_bits & mask:  # sub_layer_profile_present_flag[i].
+          #read_n(2)  # general_profile_space or sub_layer_profile_space.
+          #read_1()  # sub_layer_tier_flag.
+          #read_n(5)  # sub_layer_profile_idc.
+          #read_n(32)  # sub_layer_profile_compatitibility_flag.
+          #read_n(4)  # sub_layer_progressive_source_flag, sub_layer_interlaced_source_flag, sub_layer_non_packed_constraint_flag, sub_layer_frame_only_constraint_flag.
+          #read_n(22)  # First half of sub_layer_reserved_zero_43bits.
+          #read_n(21)  # Second half of sub_layer_reserved_zero_43bits.
+          #read_n(1)  # sub_layer_inbld_flag (or reserved 0 bit).
+          skip_n(88)
+        mask >>= 1
+        if layer_bits & mask:  # sub_layer_level_predent_flag[i].
+          skip_n(8)  # sub_layer_idc.
+        mask >>= 1
+    read_ue()  # sps_seq_parameter_set_id.
+    chroma_format_idc = read_ue()
+    if chroma_format_idc > 3:
+      raise ValueError('Bad h265 chroma_format_idc: %d' % chroma_format_idc)
+    separate_colour_plane_flag = int(chroma_format_idc == 3) and read_1()
+    chroma_array_type = int(not separate_colour_plane_flag) and chroma_format_idc
+    crop_unit_x = (1, 2, 2, 1)[chroma_array_type]
+    crop_unit_y = (1, 2, 1, 1)[chroma_array_type]
+    width = read_ue()  # pic_width_in_luma_samples.
+    height = read_ue()  # pic_height_in_luma_samples.
+    if read_1():  # conformance_window_flag.
+      width -= read_ue() * crop_unit_x  # conf_win_left_offset.
+      width -= read_ue() * crop_unit_x  # conf_win_right_offset.
+      height -= read_ue() * crop_unit_y  # conf_win_top_offset.
+      height -= read_ue() * crop_unit_y  # conf_win_bottom_offset.
+    return width, height
+  except StopIteration:
+    raise ValueError('EOF in h265 sequence_parameter_set.')
+
+
 def analyze_h265(fread, info, fskip):
   # H.265 is also known as MPEG-4 HEVC.
   #
@@ -1534,8 +1618,8 @@ def analyze_h265(fread, info, fskip):
     raise ValueError('h265 signature not found.')
   assert i <= len(header), 'h265 preread header too short.'
   info['tracks'] = [{'type': 'video', 'codec': 'h265'}]
-  if len(header) - i < 160:  # TODO(pts): Is this enough?
-    header += fread(160 - (len(header) - i))
+  if len(header) - i < 165:
+    header += fread(165 - (len(header) - i))
   if has_bad_emulation_prevention(header):
     raise ValueError('Bad emulation prevention in h265.')
   if header[i - 2] == '\x40':  # Ignore video parameter set (VPS).
@@ -1546,22 +1630,16 @@ def analyze_h265(fread, info, fskip):
   if header[i - 2: i] != '\x42\1':
     raise ValueError('Expected h265 sps, got nalu_type=%d' %
                      ((ord(header[i - 2]) >> 1) & 63))
-  i = header.find('\0\0\1')
-  if i >= 0:
-    header = header[:i]  # Keep until end of SPS NAL unit.
+  if len(header) - i < 165:
+    header += fread(165 - (len(header) - i))
+  i, j = header.find('\0\0\1', i), i
+  if i < 0:
+    i = len(header)
+  header = header[j : i]  # Keep until end of SPS NAL unit.
   # Remove emulation_prevention_three_byte()s.
   header = header.replace('\0\0\3', '\0\0')
-  # TODO(pts): Add getting width and height from sps:pic_width_in_luma_samples.
-  # h265_sps_info = parse_h265_sps(header)
-  # set_video_dimens(info['tracks'][0],
-  #                  h265_sps_info['width'], h265_sps_info['height'])
-  # TODO(pts): The conformance cropping window contains the luma samples with horizontal picture coordinates from
-  #        SubWidthC * conf_win_left_offset to pic_width_in_luma_samples ... ( SubWidthC * conf_win_right_offset + 1 ) and
-  #        vertical picture coordinates from SubHeightC * conf_win_top_offset to
-  #        pic_height_in_luma_samples ... ( SubHeightC * conf_win_bottom_offset + 1 ), inclusive.
-  #        The value of SubWidthC * ( conf_win_left_offset + conf_win_right_offset ) shall be less than
-  #        pic_width_in_luma_samples, and the value of SubHeightC * ( conf_win_top_offset + conf_win_bottom_offset ) shall be
-  #        less than pic_height_in_luma_samples.
+  width, height = parse_h265_sps(header)
+  set_video_dimens(info['tracks'][0], width, height)
 
 
 # --- Audio streams in MPEG.
@@ -1922,7 +2000,7 @@ def find_mpeg_video_mpeg4_video_object_layer_start(header, visual_object_start_o
 
 
 def parse_mpeg_video_mpeg4_video_object_layer_start(
-    header, profile_level,
+    data, profile_level,
     _hextable='0123456789abcdef',
     _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
   # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
@@ -1934,7 +2012,7 @@ def parse_mpeg_video_mpeg4_video_object_layer_start(
   # 24 bytes of bitstream is enough for the rest.
   bitstream = iter(''.join(  # Convert to binary.
       _hex_to_bits[_hextable.find(c)]
-      for c in header[:24].encode('hex')))
+      for c in data[:24].encode('hex')))
   def read_1():
     return int(bitstream.next() == '1')
   def read_n(n):

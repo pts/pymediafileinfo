@@ -131,7 +131,7 @@ elements. Some elements are truncated.
       50: pic_type=2 (3 bits, can be 0, 1 or 2)
     000000014001: nal_unit_type=32 nuh_layer_id=0 nuh_temporal_id_plus1=1 video parameter set
       0c01ffff01600000030090000003000003003c959809
-    000000014201: nal_unit_type=33 nuh_layer_id=0 nuh_temporal_id_plus1=1 sequence parameter set
+    000000014201: nal_unit_type=33 nuh_layer_id=0 nuh_temporal_id_plus1=1 sequence parameter set (contains width and height)
       0101600000030090000003000003003ca00b08048596566924caf010100000030010000003019080
     000000014401: nal_unit_type=34 nuh_layer_id=0 nuh_temporal_id_plus1=1 picture parameter set
       c172b46240
