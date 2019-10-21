@@ -2493,14 +2493,21 @@ def get_mpeg_ts_es_track_info(header, stream_type):
     if header:
       track_info.update(get_mpeg_video_track_info(header, expect_mpeg4=False))
   elif stream_type == 0x06:
-    # stream_type=0x06 chosen by ffmpeg. The standard says any ``privately defined MPEG-2 packetized data''.
+    # stream_type=0x06 chosen by ffmpeg for mjpeg and mjpeg2000.
+    # The standard says any ``privately defined MPEG-2 packetized data''.
     if not header:
       return {'type': 'video', 'codec': 'maybe-mjpeg'}
-    if not header.startswith('\xff\xd8\xff'):
+    elif header.startswith('\xff\xd8\xff'):
+      track_info = {'type': 'video', 'codec': 'mjpeg'}
+      track_info['width'], track_info['height'] = get_jpeg_dimensions(
+          get_string_fread(header))
+    elif (header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+          header[16 : 24] == 'ftypjp2 '):
+      track_info = get_track_info_from_analyze_func(
+          buffer(header, 12), analyze_mp4,
+          {'type': 'video', 'codec': 'mjpeg2000'})
+    else:
       return {'type': 'video', 'codec': 'not-mjpeg'}
-    track_info = {'type': 'video', 'codec': 'mjpeg'}
-    track_info['width'], track_info['height'] = get_jpeg_dimensions(
-        get_string_fread(header))
   elif stream_type == 0x10:
     track_info = {'type': 'video', 'codec': 'mpeg-4'}
     if header:
@@ -2509,8 +2516,14 @@ def get_mpeg_ts_es_track_info(header, stream_type):
     track_info = get_track_info_from_analyze_func(
         header, analyze_h264, {'type': 'video', 'codec': 'h264'})
   elif stream_type == 0x21:
-    # TODO(pts): What is the actual format here? Is it jp2? How can we get width and height?
-    return {'type': 'video', 'codec': 'mjpeg2000'}
+    track_info = {'type': 'video', 'codec': 'mjpeg2000'}
+    if (header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+          header[16 : 24] == 'ftypjp2 '):
+      track_info = get_track_info_from_analyze_func(
+          buffer(header, 12), analyze_mp4,
+          {'type': 'video', 'codec': 'mjpeg2000'})
+    elif header:
+      raise ValueError('jp2 signature not found.')
   elif stream_type == 0x24:
     return get_track_info_from_analyze_func(
         header, analyze_h265, {'type': 'video', 'codec': 'h265'})
