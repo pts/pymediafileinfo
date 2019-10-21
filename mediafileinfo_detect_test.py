@@ -20,6 +20,20 @@ import unittest
 import mediafileinfo_detect
 
 
+def get_string_fread_fskip(data):
+  i_ary = [0]
+
+  def fread(n):
+    result = data[i_ary[0] : i_ary[0] + n]
+    i_ary[0] += len(result)
+    return result
+
+  def fskip(n):
+    return len(fread(n)) == n
+
+  return fread, fskip
+
+
 class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_yield_swapped_bytes(self):
@@ -158,6 +172,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(
         mediafileinfo_detect.parse_mpeg_ts_pmt(buffer('0002b0230001c10000f011f0001bf011f00081f100f00c0a04656e6700050441432d334a1fa123ffff'.decode('hex')), 1),
         [(0x1011, 0x1b), (0x1100, 0x81)])
+
+  def test_analyze_ape(self):
+    fread, fskip = get_string_fread_fskip(
+        '4d414320960f00003400000018000000580000002c00000014c5db00000000000000000068e379c7c0d13d822b738a67144f4248a00f0000008004001c840200160000001000020044ac'.decode('hex'))
+    info = {}
+    mediafileinfo_detect.analyze_ape(fread, info, fskip)
+    self.assertEqual(info, {
+        'format': 'ape',
+        'tracks': [{'channel_count': 2, 'codec': 'ape',
+                    'sample_rate': 44100, 'sample_size': 16, 'type': 'audio'}]})
 
 
 if __name__ == '__main__':

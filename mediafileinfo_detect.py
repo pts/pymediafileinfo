@@ -1292,6 +1292,37 @@ def analyze_flac(fread, info, fskip, header=''):
   })
 
 
+# --- ape.
+
+
+def analyze_ape(fread, info, fskip, header=''):
+  if len(header) < 10:
+    header += fread(10 - len(header))
+  if len(header) < 5:
+    raise ValueError('Too short for ape.')
+  if not header.startswith('MAC '):
+    raise ValueError('ape signature not found.')
+  info['format'] = 'ape'
+  version, = struct.unpack('<H', header[4 : 6])
+  info['tracks'] = [{'type': 'audio', 'codec': 'ape', 'sample_size': 16}]
+  if version > 0xf8b:
+    header_size, = struct.unpack('<H', header[8 : 10])
+    if header_size < 10:
+      raise ValueError('ape header too short.')
+    assert header_size >= len(header), 'Supplied ape header too long.'
+    if not fskip(header_size - len(header)):
+      raise ValueError('EOF in ape header.')
+    data = fread(22)
+    if len(data) < 22:
+      raise ValueError('EOF in ape parameters.')
+    data = buffer(data, 18, 4)
+  else:
+    if len(header) < 14:
+      header += fread(14 - len(header))
+    data = buffer(data, 10, 4)
+  info['tracks'][-1]['channel_count'], info['tracks'][-1]['sample_rate'] = struct.unpack('<HH', data)
+
+
 # --- H.264.
 
 
@@ -3047,6 +3078,8 @@ def analyze_id3v2(fread, info, fskip):
     header += fread(4 - len(header))
   if header.startswith('fLaC'):
     analyze_flac(fread, info, fskip, header)
+  elif header.startswith('MAC '):
+    analyze_ape(fread, info, fskip, header)
   elif is_mpeg_adts(header):
     analyze_mpeg_adts(fread, info, fskip, header)
   else:
@@ -3459,6 +3492,7 @@ FORMAT_ITEMS = (
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
     ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80', '\x1f\xff\xe8\x00', '\xff\x1f\x00\xe8'), 6, lambda header: (is_dts(header), 1))),
+    ('ape', (0, 'MAC ')),
 
     # Document media.
 
@@ -3794,6 +3828,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     # TODO(pts): Detect image dimensions.
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
+  elif format == 'ape':
+    analyze_ape(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
