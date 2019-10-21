@@ -205,6 +205,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     mediafileinfo_detect.analyze_pcx(fread, info, fskip)
     self.assertEqual(info, {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
 
+  def test_analyze_xpm(self):
+    fread, fskip = get_string_fread_fskip('/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 3456 ')
+    info = {}
+    mediafileinfo_detect.analyze_xpm(fread, info, fskip)
+    self.assertEqual(info, {'codec': 'uncompressed', 'format': 'xpm', 'height': 3456, 'width': 12})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

@@ -3425,6 +3425,37 @@ def analyze_pcx(fread, info, fskip):
   info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
 
 
+def analyze_xpm(fread, info, fskip):
+  header = fread(140)
+  if len(header) < 9:
+    raise ValueError('Too short for xpm.')
+  if not header.startswith('/* XPM */'):
+    raise ValueError('xpm signature not found.')
+  info['format'] = 'xpm'
+  info['codec'] = 'uncompressed'
+  i = header.find('"', 9) + 1
+  if i <= 0:
+    raise ValueError('Missing quote in xpm.')
+  j = i
+  while i < len(header) and header[i].isdigit():
+    i += 1
+  if i == j or i == len(header):
+    raise ValueError('Bad xpm width.')
+  width = int(header[j : i])
+  if not header[i].isspace():
+    raise ValueError('Bad xpm separator.')
+  i += 1
+  j = i
+  while i < len(header) and header[i].isdigit():
+    i += 1
+  if i == j or i == len(header):
+    raise ValueError('Bad xpm height.')
+  height = int(header[j : i])
+  if not header[i].isspace():
+    raise ValueError('Bad xpm separator.')
+  info['width'], info['height'] = width, height
+
+
 def analyze_pnm(fread, info, fskip):
   header = fread(3)
   if len(header) < 3:
@@ -3948,6 +3979,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_lbm(fread, info, fskip)
   elif format == 'pcx':
     analyze_pcx(fread, info, fskip)
+  elif format == 'xpm':
+    analyze_xpm(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':
