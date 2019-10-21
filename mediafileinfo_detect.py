@@ -3389,6 +3389,59 @@ def analyze_png(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
 
 
+def analyze_pnm(fread, info, fskip):
+  header = fread(3)
+  if len(header) < 3:
+    raise ValueError('Too short for pnm.')
+  pnm_whitespace = ' \t\n\x0b\x0c\r'
+  if (header[0] == 'P' and header[1] in '1234567' and
+      (header[2] in pnm_whitespace or header[2] == '#')):
+    if header[1] in '14':
+      info['format'] = 'pbm'
+    elif header[1] in '25':
+      info['format'] = 'pgm'
+    else:
+      info['format'] = 'ppm'
+    if header[1] in '123':
+      info['codec'] = 'rawascii'
+    else:
+      info['codec'] = 'raw'
+  else:
+    raise ValueError('pnm signature not found.')
+  data = header[-1]
+  state = 0
+  dimensions = []
+  memory_budget = 100
+  while 1:
+    if not data:
+      raise ValueError('EOF in %s header.' % info['format'])
+    if memory_budget < 0:
+      raise ValueError('pnm header too long.')
+    if state == 0 and data.isdigit():
+      state = 1
+      memory_budget -= 1
+      dimensions.append(int(data))
+    elif state == 1 and data.isdigit():
+      memory_budget -= 1
+      dimensions[-1] = dimensions[-1] * 10 + int(data)
+    elif data == '#':
+      if len(dimensions) == 2:
+        break
+      while 1:
+        data = fread(1)
+        if data in '\r\n':
+          break
+      state = 0
+    elif data in pnm_whitespace:
+      if len(dimensions) == 2:
+        break
+      state = 0
+    else:
+      raise ValueError('Bad character in pnm header: %r' % data)
+    data = fread(1)
+  info['width'], info['height'] = dimensions
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -3858,11 +3911,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
   elif format == 'png':
     analyze_png(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
-    if fread(2)[1] in '123':
-      info['codec'] = 'rawascii'
-    else:
-      info['codec'] = 'raw'
-    # TODO(pts): Detect image dimensions.
+    analyze_pnm(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':

@@ -183,6 +183,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
         'tracks': [{'channel_count': 2, 'codec': 'ape',
                     'sample_rate': 44100, 'sample_size': 16, 'type': 'audio'}]})
 
+  def test_analyze_pnm(self):
+    fread, fskip = get_string_fread_fskip('P1#f oo\n #bar\r\t123\x0b\x0c456#')
+    info = {}
+    mediafileinfo_detect.analyze_pnm(fread, info, fskip)
+    self.assertEqual(info, {'codec': 'rawascii', 'format': 'pbm', 'height': 456, 'width': 123})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
