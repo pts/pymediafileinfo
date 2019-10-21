@@ -3456,6 +3456,21 @@ def analyze_xpm(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_xcf(fread, info, fskip):
+  # https://gitlab.gnome.org/GNOME/gimp/blob/master/devel-docs/xcf.txt
+  header = fread(22)
+  if len(header) < 22:
+    raise ValueError('Too short for xcf.')
+  signature, version, zero, width, height = struct.unpack(
+      '>9s4sBLL', header)
+  if signature != 'gimp xcf ' or zero or version not in (
+      'file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007',
+      'v008', 'v009'):
+    raise ValueError('xcf signature not found.')
+  info['format'] = 'xcf'
+  info['width'], info['height'] = width, height
+
+
 def analyze_pnm(fread, info, fskip):
   header = fread(3)
   if len(header) < 3:
@@ -3615,7 +3630,7 @@ FORMAT_ITEMS = (
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
-    ('xcf', (0, 'gimp xcf ')),
+    ('xcf', (0, 'gimp xcf ', 9, ('file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007', 'v008', 'v009'))),
     # By Photoshop.
     ('psd', (0, '8BPS')),
     ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
@@ -3981,6 +3996,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pcx(fread, info, fskip)
   elif format == 'xpm':
     analyze_xpm(fread, info, fskip)
+  elif format == 'xcf':
+    analyze_xcf(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':

@@ -211,6 +211,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     mediafileinfo_detect.analyze_xpm(fread, info, fskip)
     self.assertEqual(info, {'codec': 'uncompressed', 'format': 'xpm', 'height': 3456, 'width': 12})
 
+  def test_analyze_xcf(self):
+    fread, fskip = get_string_fread_fskip('gimp xcf v001\0\0\0\1\x0d\0\0\1\7')
+    info = {}
+    mediafileinfo_detect.analyze_xcf(fread, info, fskip)
+    self.assertEqual(info, {'format': 'xcf', 'width': 269, 'height': 263})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
