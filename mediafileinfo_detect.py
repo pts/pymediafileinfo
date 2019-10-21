@@ -3407,6 +3407,24 @@ def analyze_lbm(fread, info, fskip):
   info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
 
 
+def analyze_pcx(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/PCX
+  header = fread(12)
+  if len(header) < 12:
+    raise ValueError('Too short for pcx.')
+  signature, version, encoding, bpp, xmin, ymin, xmax, ymax = struct.unpack(
+      '<BBBBHHHH', header)
+  if signature != 10 or version > 5 or encoding != 1 or bpp not in (1, 2, 4, 8):
+    raise ValueError('pcx signature not found.')
+  if xmax < xmin:
+    raise ValueError('pcx xmax smaller than xmin.')
+  if ymax < ymin:
+    raise ValueError('pcx ymax smaller than ymin.')
+  info['format'] = 'pcx'
+  info['codec'] = 'rle'
+  info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
+
+
 def analyze_pnm(fread, info, fskip):
   header = fread(3)
   if len(header) < 3:
@@ -3930,6 +3948,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_png(fread, info, fskip)
   elif format == 'lbm':
     analyze_lbm(fread, info, fskip)
+  elif format == 'pcx':
+    analyze_pcx(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':

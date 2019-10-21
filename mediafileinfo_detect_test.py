@@ -199,6 +199,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     mediafileinfo_detect.analyze_lbm(fread, info, fskip)
     self.assertEqual(info, {'codec': 'uncompressed', 'format': 'lbm', 'height': 261, 'width': 259})
 
+  def test_analyze_pcx(self):
+    fread, fskip = get_string_fread_fskip('\n\5\1\x08\0\0\0\0\2\1\4\1')
+    info = {}
+    mediafileinfo_detect.analyze_pcx(fread, info, fskip)
+    self.assertEqual(info, {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
