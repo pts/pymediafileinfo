@@ -1951,6 +1951,10 @@ class MpegAudioHeaderFinder(object):
 def parse_mpeg_video_header(header, expect_mpeg4=None):
   # The first 145 bytes contain the mpeg-1 and mpeg-2 headers. mpeg-4
   # headers are at most 48 bytes except if they contain user_data.
+  #
+  # TODO(pts): Some DVD VTS_01_3.VOB files start with
+  # '\x00\x00\x01\xb5\x87W[\x98\x00\x00\x00\x01\x01\x1a7\xf0\xfd\xa3F\x8c0\xd1\xa3F\x8d\x18a\xa3',
+  # causing us to detect mpeg-4 incorrectly (they are actually mpeg-2).
   is_mpeg4 = (
       header.startswith('\0\0\1\xb5') or
       (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5'))
