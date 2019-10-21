@@ -217,6 +217,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     mediafileinfo_detect.analyze_xcf(fread, info, fskip)
     self.assertEqual(info, {'format': 'xcf', 'width': 269, 'height': 263})
 
+  def test_analyze_psd(self):
+    fread, fskip = get_string_fread_fskip('8BPS\0\1\0\0\0\0\0\0\0\1\0\0\1\5\0\0\1\3\0\1\0\0')
+    info = {}
+    mediafileinfo_detect.analyze_psd(fread, info, fskip)
+    self.assertEqual(info, {'format': 'psd', 'width': 259, 'height': 261})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

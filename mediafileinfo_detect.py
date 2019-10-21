@@ -3471,6 +3471,25 @@ def analyze_xcf(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_psd(fread, info, fskip):
+  # https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
+  header = fread(26)
+  if len(header) < 26:
+    raise ValueError('Too short for psd.')
+  signature, version, zeros, channels, height, width, depth, color_mode = struct.unpack(
+      '>4sH6sHLLHH', header)
+  if not (signature == '8BPS' and version in (1, 2) and zeros == '\0\0\0\0\0\0'):
+    raise ValueError('psd signature not found.')
+  if not 1 <= channels <= 56:
+    raise ValueError('Bad psd channels: %d' % channels)
+  if depth not in (1, 8, 16, 32):
+    raise ValueError('Bad psd depth: %d' % depth)
+  if color_mode > 15:
+    raise ValueError('Bad psd color_mode: %d' % depth)
+  info['format'] = 'psd'
+  info['width'], info['height'] = width, height
+
+
 def analyze_pnm(fread, info, fskip):
   header = fread(3)
   if len(header) < 3:
@@ -3632,7 +3651,7 @@ FORMAT_ITEMS = (
     # By GIMP.
     ('xcf', (0, 'gimp xcf ', 9, ('file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007', 'v008', 'v009'))),
     # By Photoshop.
-    ('psd', (0, '8BPS')),
+    ('psd', (0, '8BPS', 4, ('\0\1', '\0\2'), 6, '\0\0\0\0\0\0')),
     ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
     # By AOL browser.
     ('art', (0, 'JG\4\016\0\0\0\0')),
@@ -3998,6 +4017,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xpm(fread, info, fskip)
   elif format == 'xcf':
     analyze_xcf(fread, info, fskip)
+  elif format == 'psd':
+    analyze_psd(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':
