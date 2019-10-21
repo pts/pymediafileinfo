@@ -1269,7 +1269,7 @@ def analyze_flac(fread, info, fskip, header=''):
     raise ValueError('flac signature not found.')
   info['format'] = 'flac'
   if header[4] not in '\0\x80':
-    raise AssertionError('STREAMINFO metadata block expected in flac.')
+    raise ValueError('STREAMINFO metadata block expected in flac.')
   size = fread(3)
   if len(size) != 3:
     raise ValueError('EOF in flac STREAMINFO metadata block size.')
