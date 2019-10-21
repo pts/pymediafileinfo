@@ -3055,6 +3055,18 @@ def analyze_mpeg_ts(fread, info, fskip):
 # ---
 
 
+def detect_id3v2_audio_format(header):
+  # 4 bytes are available in header.
+  if header.startswith('fLaC'):
+    return analyze_flac
+  elif header.startswith('MAC '):
+    return analyze_ape
+  elif is_mpeg_adts(header):
+    return analyze_mpeg_adts
+  else:
+    return None
+
+
 def analyze_id3v2(fread, info, fskip):
   # Just reads the ID3v2 header with fread and fskip.
   # http://id3.org/id3v2.3.0
@@ -3071,10 +3083,19 @@ def analyze_id3v2(fread, info, fskip):
   if ord(header[6]) >> 7 or ord(header[7]) >> 7 or ord(header[8]) >> 7 or ord(header[9]) >> 7:
     raise ValueError('Invalid id3v2 size bits.')
   size = ord(header[6]) << 21 | ord(header[7]) << 14 | ord(header[8]) << 7 | ord(header[9])
-  if not fskip(size):
-    raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
   info.setdefault('format', 'id3v2')
   info['id3_version'] = version
+  if size >= 10:
+    # Some files incorrectly have `size - 10' instead of size.
+    if not fskip(size - 10):
+      raise ValueError('EOF in id3v2 data, shorter than %d.' % (size - 10))
+    header = fread(4)
+    analyze_func = detect_id3v2_audio_format(header)
+    if analyze_func:
+      return analyze_func(fread, info, fskip, header)
+    size = 10 - len(header)
+  if not fskip(size):
+    raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
   header = fread(4)
   c = 0
   while 1:  # Skip some \0 bytes.
@@ -3089,14 +3110,10 @@ def analyze_id3v2(fread, info, fskip):
       header = header[1:]
     c += 4 - len(header)
     header += fread(4 - len(header))
-  if header.startswith('fLaC'):
-    analyze_flac(fread, info, fskip, header)
-  elif header.startswith('MAC '):
-    analyze_ape(fread, info, fskip, header)
-  elif is_mpeg_adts(header):
-    analyze_mpeg_adts(fread, info, fskip, header)
-  else:
+  analyze_func = detect_id3v2_audio_format(header)
+  if not analyze_func:
     raise ValueError('Unknown signature after id3v2 header.')
+  return analyze_func(fread, info, fskip, header)
 
 
 # --- Image file formats.
