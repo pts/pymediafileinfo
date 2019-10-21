@@ -1841,6 +1841,8 @@ class MpegAudioHeaderFinder(object):
 
 
 def parse_mpeg_video_header(header, expect_mpeg4=None):
+  # The first 145 bytes contain the mpeg-1 and mpeg-2 headers. mpeg-4
+  # headers are at most 48 bytes except if they contain user_data.
   is_mpeg4 = (
       header.startswith('\0\0\1\xb5') or
       (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5'))
@@ -1850,11 +1852,19 @@ def parse_mpeg_video_header(header, expect_mpeg4=None):
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
     # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of
     # H.263, DivX, mp42.
-    # '\0\0\1\xb0' is the profile header, with a single-byte value.
-    i = 4 + 5 * header.startswith('\0\0\1\xb0')
-    track_info = {'type': 'video', 'codec': 'mpeg-4'}
+    track_info = {'type': 'video', 'codec': 'mpeg-4', }
+    if header.startswith('\0\0\1\xb0'):
+      # '\0\0\1\xb0' is the profile header (visual_object_sequence_start),
+      # with a single-byte value.
+      if header[4] == '\0':
+        raise ValueError('Bad mpeg-video mpeg-4 profile_level 0.')
+      track_info['profile_level'], i = ord(header[4]), 9
+    else:
+      track_info['profile_level'], i = 0, 4
     # Get width and height in get_mpeg_video_track_info instead of here.
-  else:  # Returns full info inof len(header) >= 145.
+  else:  # Returns full info if len(header) >= 145.
+    # https://en.wikipedia.org/wiki/Elementary_stream
+    # http://www.cs.columbia.edu/~delbert/docs/Dueck%20--%20MPEG-2%20Video%20Transcoding.pdf
     if len(header) < 9:
       raise ValueError('Too short for mpeg-video.')
     # MPEG video sequence header start code.
@@ -1891,16 +1901,111 @@ def parse_mpeg_video_header(header, expect_mpeg4=None):
   return i, track_info
 
 
+def find_mpeg_video_mpeg4_video_object_layer_start(header, visual_object_start_ofs):
+  header = str(header)
+  i = header.find('\0\0\1', visual_object_start_ofs)
+  if i < 0 or i + 4 > len(header):
+    raise ValueError('EOF in mpeg-video mpeg-4 visual_object_start.')
+  while header[i + 3] == '\xb3':  # user_data.
+    i = header.find('\0\0\1', i + 4)
+    if i < 0 or i + 4 > len(header):
+      raise ValueError('EOF in mpeg-video mpeg-4 user_data.')
+  if header[i + 3] < '\x20':  # video_object_start.
+    if i + 8 > len(header):
+      raise ValueError('EOF in mpeg-video mpeg-4 video_object_start.')
+    i += 4
+    if header[i : i + 3] != '\0\0\1':
+      raise ValueError('Bad non-empty mpeg-video mpeg-4 video_object_start.')
+  if not '\x20' <= header[i + 3] <= '\x2f':
+    raise ValueError('Expected mpeg-video mpeg-4 video_object_layer_start.')
+  return i + 4
+
+
+def parse_mpeg_video_mpeg4_video_object_layer_start(
+    header, profile_level,
+    _hextable='0123456789abcdef',
+    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+  # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
+  # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
+  # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
+  # https://www.google.com/search?q="video_object_layer_verid"
+  # Extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
+  #
+  # 24 bytes of bitstream is enough for the rest.
+  bitstream = iter(''.join(  # Convert to binary.
+      _hex_to_bits[_hextable.find(c)]
+      for c in header[:24].encode('hex')))
+  def read_1():
+    return int(bitstream.next() == '1')
+  def read_n(n):
+    r = 0
+    for _ in xrange(n):
+      r = r << 1 | (bitstream.next() == '1')
+    return r
+  def expect_1():
+    if not read_1():
+      raise ValueError('Expected marker bit 1 in mpeg-video mpeg-4 video_object_layer_start.')
+  def expect_shape():
+    vob_layer_shape = read_n(2)  # video_object_layer_shape
+    if vob_layer_shape:  # 0: Rectangular, 2: BinaryOnly, 3: GrayScale.
+      raise ValueError('Expected mpeg-video mpeg-4 video_object_layer_shape rectangular, got: %d' % vob_layer_shape)
+  try:
+    read_1()  # random_accessible_vol.
+    vob_type = read_n(8)  # video_object_type_indication.
+    if vob_type == 0x21:  # Fine granularity scalable.
+      raise ValueError('Unsupported mpeg-video mpeg-4 video_object_type_indication.')
+    if 225 <= profile_level <= 232:  # Studio profile.
+      read_n(4)  # visual_object_layer_verid.
+      expect_shape()
+      read_n(4)  # video_object_layer_shape_extension.
+      read_n(1)  # progressive_sequence.
+      read_n(1)  # rgb_compontents.
+      read_n(2)  # chroma_format.
+      read_n(4)  # bits_per_pixel.
+    else:
+      if read_1():  # is_object_layer_identifier
+        read_n(4 + 3)  # video_object_layer_verid, video_object_layer_priority.
+      if read_n(4) == 0xf:  # aspect_ratio_info.
+        read_n(8 + 8)  # par_width, par_height.
+      if read_1():  # vol_control_parameters.
+        read_n(2 + 1)  # chrome_format, low_delay.
+        if read_1():  # vbv_parameters
+          read_n(15)  # first_half_bit_rate.
+          expect_1()
+          read_n(15)  # latter_half_bit_rate.
+          expect_1()
+          read_n(15)  # first_half_vbv_buffer_size.
+          expect_1()
+          read_n(3 + 11)  # latter_half_vbv_buffer_size, first_half_vbv_occupancy.
+          expect_1()
+          read_n(15)  # latter_half_vbv_occupancy.
+          expect_1()
+      expect_shape()
+      expect_1()
+      vop_time_increment_resolution = read_n(16)
+      expect_1()
+      if read_1():  # fixed_vop_rate.
+        time_size = 0
+        while time_size <= 16 and vop_time_increment_resolution >= (1 << time_size):
+          time_size += 1
+        read_n(time_size)  # fixed_vop_time_increment.
+    expect_1()
+    width = read_n(13)  # video_object_layer_width.
+    expect_1()
+    height = read_n(13)  # video_object_layer_height.
+    expect_1()
+    return width, height
+  except StopIteration:
+    raise ValueError('EOF in mpeg-video mpeg-4 video_object_layer_start.')
+
+
 def get_mpeg_video_track_info(header, expect_mpeg4=None):
   i, track_info = parse_mpeg_video_header(header, expect_mpeg4)
   if track_info['codec'] == 'mpeg-4':
-    # https://www.google.com/search?q="video_object_layer_verid"
-    # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
-    # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
-    # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
-    # extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
-    # TODO(pts): Analyze mpeg-4, get media parameters (width, height).
-    pass
+    i = find_mpeg_video_mpeg4_video_object_layer_start(header, i)
+    width, height = parse_mpeg_video_mpeg4_video_object_layer_start(
+        buffer(header, i), track_info['profile_level'])
+    set_video_dimens(track_info, width, height)
   return track_info
 
 
@@ -1965,11 +2070,17 @@ class MpegVideoHeaderFinder(object):
 
 
 def analyze_mpeg_video(fread, info, fskip):
-  # https://en.wikipedia.org/wiki/Elementary_stream
-  # http://www.cs.columbia.edu/~delbert/docs/Dueck%20--%20MPEG-2%20Video%20Transcoding.pdf
-  header = fread(145)
   info['format'] = 'mpeg-video'
-  info['tracks'] = [get_mpeg_video_track_info(header)]
+  # 145 bytes is enough unless the mpeg-4 headers contain long user_data.
+  # TODO(pts): Get rid of the 145 limit here and above.
+  header = fread(145)
+  i, track_info = parse_mpeg_video_header(header)
+  if track_info['codec'] == 'mpeg-4':
+    i = find_mpeg_video_mpeg4_video_object_layer_start(header, i)
+    width, height = parse_mpeg_video_mpeg4_video_object_layer_start(
+        buffer(header, i), track_info['profile_level'])
+    set_video_dimens(track_info, width, height)
+  info['tracks'] = [track_info]
 
 
 # --- Multiplexed MPEG.
@@ -3190,7 +3301,7 @@ FORMAT_ITEMS = (
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-    # TODO(pts): 'mpeg-pes' has: '\0\0\1', [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
+    # TODO(pts): 'mpeg-pes' has: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
     # TODO(pts): Is there anything else not covered by mpeg-video, mpeg-ps, h264 and h265?
     ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),

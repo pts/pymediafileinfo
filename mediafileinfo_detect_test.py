@@ -61,15 +61,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
         {'codec': 'mpeg-1', 'height': 240, 'type': 'video', 'width': 352})
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex')),
-        {'codec': 'mpeg-4', 'type': 'video'})
+        {'codec': 'mpeg-4', 'height': 288, 'profile_level': 1, 'type': 'video', 'width': 352})
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex'), expect_mpeg4=True),
-        {'codec': 'mpeg-4', 'type': 'video'})
+        {'codec': 'mpeg-4', 'height': 288, 'profile_level': 1, 'type': 'video', 'width': 352})
     try:
       mediafileinfo_detect.get_mpeg_video_track_info('000001b001000001b58913000001000000012000c48d8800cd0b04241443'.decode('hex'), expect_mpeg4=False)
       self.fail('ValueError not raised.')
     except ValueError, e:
       self.assertEqual(str(e), 'mpeg-video signature not found.')
+    self.assertEqual(
+        mediafileinfo_detect.get_mpeg_video_track_info('000001b0f3000001b509000001010000012002044007a85820f0a21f'.decode('hex'), expect_mpeg4=True),
+        {'codec': 'mpeg-4', 'height': 240, 'profile_level': 243, 'type': 'video', 'width': 352})
 
   def test_get_mpeg_ts_es_track_info(self):
     self.assertEqual(
