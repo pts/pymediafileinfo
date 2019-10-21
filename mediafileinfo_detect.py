@@ -1678,11 +1678,10 @@ def analyze_h265(fread, info, fskip):
 
 def is_mpeg_adts(header):
   # Works with: isinstance(header, (str, buffer)).
-  return (len(header) >= 4 and
-          header[0] == '\xff' and
-          (header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' '\xf0\xf1\xf8\xf9' and
+  return (len(header) >= 4 and header[0] == '\xff' and
+          ((header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' '\xf0\xf1\xf8\xf9' and
            ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
-          (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13))
+           (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13)))
 
 
 def get_mpeg_adts_track_info(header, expect_aac=None):
