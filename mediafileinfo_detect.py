@@ -3301,9 +3301,7 @@ FORMAT_ITEMS = (
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-    # TODO(pts): 'mpeg-pes' has: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
-    # TODO(pts): Is there anything else not covered by mpeg-video, mpeg-ps, h264 and h265?
-    ('mpeg', (0, '\0\0\1', 3, ('\xbb', '\x07', '\x27', '\x47', '\x67', '\x87', '\xa7', '\xc7', '\xe7', '\xb5'))),
+    # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
     ('mng', (0, '\212MNG\r\n\032\n')),
