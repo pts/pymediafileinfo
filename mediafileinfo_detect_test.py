@@ -189,6 +189,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     mediafileinfo_detect.analyze_pnm(fread, info, fskip)
     self.assertEqual(info, {'codec': 'rawascii', 'format': 'pbm', 'height': 456, 'width': 123})
 
+  def test_analyze_lbm(self):
+    fread, fskip = get_string_fread_fskip('FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5')
+    info = {}
+    mediafileinfo_detect.analyze_lbm(fread, info, fskip)
+    self.assertEqual(info, {'codec': 'rle', 'format': 'lbm', 'height': 261, 'width': 259})
+    fread, fskip = get_string_fread_fskip('FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5')
+    info = {}
+    mediafileinfo_detect.analyze_lbm(fread, info, fskip)
+    self.assertEqual(info, {'codec': 'uncompressed', 'format': 'lbm', 'height': 261, 'width': 259})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

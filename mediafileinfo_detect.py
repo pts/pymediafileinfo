@@ -3353,6 +3353,7 @@ def analyze_bmp(fread, info, fskip):
   if not header.startswith('BM'):
     raise ValueError('bmp signature not found.')
   info['format'] = 'bmp'
+  # TODO(pts): Detect codec other than 'uncompressed'.
   b = ord(header[14])
   if b in (12, 26) and len(header) >= 22:
     info['width'], info['height'] = struct.unpack(
@@ -3387,6 +3388,23 @@ def analyze_png(fread, info, fskip):
   info['codec'] = 'flate'
   if header[12 : 16] == 'IHDR':
     info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
+
+
+def analyze_lbm(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/ILBM
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for lbm.')
+  if not (header.startswith('FORM') and
+          header[8 : 12] in ('ILBM', 'PBM ') and
+          header[12 : 20] == 'BMHD\0\0\0\x14'):
+    raise ValueError('lbm signature not found.')
+  info['format'] = 'lbm'
+  if header[8] == 'I':
+    info['codec'] = 'rle'
+  else:
+    info['codec'] = 'uncompressed'
+  info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
 
 
 def analyze_pnm(fread, info, fskip):
@@ -3543,7 +3561,7 @@ FORMAT_ITEMS = (
     # sam2p can read it.
     ('xpm', (0, '/* XPM */')),
     # sam2p can read it.
-    ('lbm', (0, 'FORM', 8, 'ILBMBMHD')),
+    ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'I', 'M'))),
     # http://fileformats.archiveteam.org/wiki/JBIG2
     ('jbig2', (0, '\x97\x4A\x42\x32\x0D\x0A\x1A\x0A')),
@@ -3910,6 +3928,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['width'], info['height'] = get_jpeg_dimensions(fread)
   elif format == 'png':
     analyze_png(fread, info, fskip)
+  elif format == 'lbm':
+    analyze_lbm(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':
