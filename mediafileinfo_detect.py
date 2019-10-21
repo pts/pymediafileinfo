@@ -3080,7 +3080,7 @@ def analyze_id3v2(fread, info, fskip):
   while 1:  # Skip some \0 bytes.
     if not header.startswith('\0') or len(header) != 4 or c >= 4096:
       break
-    c4 += 1
+    c += 1
     if header.startswith('\0\0\0'):
       header = header[3:]
     elif header.startswith('\0\0'):
