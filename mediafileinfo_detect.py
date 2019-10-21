@@ -1260,8 +1260,9 @@ def analyze_asf(fread, info, fskip):
 # --- flac
 
 
-def analyze_flac(fread, info, fskip):
-  header = fread(5)
+def analyze_flac(fread, info, fskip, header=''):
+  if len(header) < 5:
+    header += fread(5 - len(header))
   if len(header) < 5:
     raise ValueError('Too short for flac.')
   if not header.startswith('fLaC'):
@@ -1625,8 +1626,9 @@ def get_mpeg_adts_track_info(header, expect_aac=None):
   return track_info
 
 
-def analyze_mpeg_adts(fread, info, fskip):
-  header = fread(4)
+def analyze_mpeg_adts(fread, info, fskip, header=''):
+  if len(header) < 4:
+    header += fread(4 - len(header))
   info['tracks'] = [get_mpeg_adts_track_info(header)]
   if (info['tracks'][0]['codec'] == 'mp3' and
       info['tracks'][0]['subformat'] == 'mpeg-1'):
@@ -2841,6 +2843,26 @@ def analyze_id3v2(fread, info, fskip):
     raise ValueError('EOF in id3v2 data, shorter than %d.' % size)
   info.setdefault('format', 'id3v2')
   info['id3_version'] = version
+  header = fread(4)
+  c = 0
+  while 1:  # Skip some \0 bytes.
+    if not header.startswith('\0') or len(header) != 4 or c >= 4096:
+      break
+    c4 += 1
+    if header.startswith('\0\0\0'):
+      header = header[3:]
+    elif header.startswith('\0\0'):
+      header = header[2:]
+    elif header.startswith('\0'):
+      header = header[1:]
+    c += 4 - len(header)
+    header += fread(4 - len(header))
+  if header.startswith('fLaC'):
+    analyze_flac(fread, info, fskip, header)
+  elif is_mpeg_adts(header):
+    analyze_mpeg_adts(fread, info, fskip, header)
+  else:
+    raise ValueError('Unknown signature after id3v2 header.')
 
 
 # --- Image file formats.
@@ -3562,8 +3584,6 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mpeg_adts(fread, info, fskip)
   elif format == 'mp3-id3v2':
     analyze_id3v2(fread, info, fskip)
-    # TODO(pts): Ignore \x00 bytes here.
-    analyze_mpeg_adts(fread, info, fskip)
   elif format == 'h264':
     analyze_h264(fread, info, fskip)
   elif format == 'h265':
