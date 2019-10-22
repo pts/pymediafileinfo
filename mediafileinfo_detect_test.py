@@ -247,6 +247,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_swf, 'FWS 4\x07\x01\x00p\x00\x0f\xa0\x00\x00\x8c\xa0\x00'),
                      {'codec': 'uncompressed', 'format': 'swf', 'height': 225, 'width': 400})
 
+  def test_analyze_miff(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_miff, 'id=ImageMagick\rrows=42\t \fcolumns=137:\x1arows=111'),
+                     {'codec': 'uncompressed', 'format': 'miff', 'height': 42, 'width': 137})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_miff, 'id=ImageMagick\rrows=42\t \fcolumns=137\ncompression=BZip:\x1arows=111'),
+                     {'codec': 'bzip2', 'format': 'miff', 'height': 42, 'width': 137})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

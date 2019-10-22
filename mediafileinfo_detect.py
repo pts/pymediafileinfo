@@ -3830,6 +3830,55 @@ def analyze_ps(fread, info, fskip):
       info['width'], info['height'] = (wd_ht[0] or 1, wd_ht[1] or 1)
 
 
+MIFF_CODEC_MAP = {
+    'none': 'uncompressed',
+    'bzip': 'bzip2',
+    'zip': 'flate',
+}
+
+
+def analyze_miff(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Magick_Image_File_Format
+  # http://www.imagemagick.org/script/miff.php
+  header = fread(14)
+  if len(header) < 14:
+    raise ValueError('Too short for miff.')
+  if not header.startswith('id=ImageMagick'):
+    raise ValueError('miff signature not found.')
+  info['format'] = 'miff'
+  buf = [header]
+  while 1:
+    buf.append(fread(128))
+    if not buf[-1]:
+      raise ValueError('EOF in miff header.')
+    if buf[-2].endswith(':') and buf[-1].startswith('\x1a'):
+      del buf[-1]
+      buf[-1] = buf[-1][:-1]
+      break
+    i = buf[-1].find(':\x1a')
+    if i >= 0:
+      buf[-1] = buf[-1][:i]
+      break
+  # TODO(pts): Remove comments in {braces}.
+  header = ''.join(buf).split()
+  info['codec'] = 'uncompressed'
+  for item in header:
+    if '=' in item:
+      key, value = item.split('=', 1)
+      key = key.lower()
+      if key == 'compression':
+        value = value.lower()
+        info['codec'] = MIFF_CODEC_MAP.get(value, value)
+      elif key in ('columns', 'rows'):
+        info_key = ('width', 'height')[key == 'rows']
+        try:
+          info[info_key] = int(value)
+        except ValueError:
+          raise ValueError('Bad miff %s syntax.' % info_key)
+        if info[info_key] <= 0:
+          raise ValueError('Bad miff %s.' % info_key)
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -3918,7 +3967,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
     ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
-    # JPEG reencoded by Dropbox lepton.
+    # JPEG reencoded by Dropbox lepton. Getting width and height is complicated.
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
@@ -4314,6 +4363,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pnm(fread, info, fskip)
   elif format == 'ps':
     analyze_ps(fread, info, fskip)
+  elif format == 'miff':
+    analyze_miff(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
