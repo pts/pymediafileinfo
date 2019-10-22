@@ -3490,6 +3490,81 @@ def analyze_psd(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+# https://en.wikipedia.org/wiki/TIFF#Compression
+TIFF_CODECS = {
+    1: 'uncompressed',
+    2: 'rle',  # Unused in sam2p.
+    3: 'fax',
+    4: 'fax',
+    5: 'lzw',
+    6: 'jpeg',  # Unused in sam2p.
+    7: 'jpeg',
+    8: 'zip',  # Unused in sam2p.
+    9: 'jbig',  # Unused in sam2p.
+    10: 'jbig',  # Unused in sam2p.
+    0x8765: 'jbig',  # Unused in sam2p.
+    0x879b: 'jbig2',  # Unused in sam2p.
+    32771: 'rle',  # Unused in sam2p.
+    32773: 'rle',  # Packbits.
+    32946: 'flate',  # Deflate, zip.
+    0x7ffe: 'rle',  # Unused in sam2p.
+    0x8029: 'rle',  # Unused in sam2p.
+    0x807f: 'rasterpadding',  # Unused in sam2p.
+    0x8080: 'rle',  # Unused in sam2p.
+    0x8081: 'rle',  # Unused in sam2p.
+    0x8082: 'rle',  # Unused in sam2p.
+    0x80b3: 'kodak-dcs',  # Unused in sam2p.
+    0x8798: 'jpeg2000',  # Unused in sam2p.
+    0x8799: 'nikon-nef',  # Unused in sam2p.
+}
+
+
+def analyze_tiff(fread, info, fskip):
+  # https://www.adobe.io/content/dam/udp/en/open/standards/tiff/TIFF6.pdf
+  # https://en.wikipedia.org/wiki/TIFF
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for tiff.')
+  if header.startswith('MM\x00\x2a'):  # Big endian.
+    fmt = '>'
+  elif header.startswith('II\x2a\x00'):  # Little endian.
+    fmt = '<'
+  else:
+    raise ValueError('tiff signature not found.')
+  info['format'] = 'tiff'
+  ifd_ofs, = struct.unpack(fmt + '4xL', header)
+  if ifd_ofs < 8:
+    raise ValueError('Bad tiff ifd_ofs: %d' % ifd_ofs)
+  if not fskip(ifd_ofs - 8):
+    raise ValueError('EOF before tiff ifd_ofs.')
+  data = fread(2)
+  if len(data) < 2:
+    raise ValueError('EOF in tiff ifd_size.')
+  ifd_count, = struct.unpack(fmt + 'H', data)
+  if ifd_count < 10:
+    raise ValueError('tiff ifd_count too small: %d' % ifd_count)
+  ifd_data = fread(12 * ifd_count)
+  if len(ifd_data) != 12 * ifd_count:
+    raise ValueError('EOF in tiff ifd_data.')
+  ifd_fmt, short_fmt = fmt + 'HHLL', fmt + 'H'
+  for i in xrange(0, len(ifd_data), 12):
+    # if ie_tag < 254: raise ValueError('...')
+    ie_tag, ie_type, ie_count, ie_value = struct.unpack(
+        ifd_fmt, buffer(ifd_data, i, 12))
+    if ie_count == 1 and ie_type in (3, 4):  # (SHORT, LONG).
+      if ie_type == 3:  # SHORT.
+        ie_value, = struct.unpack(short_fmt, buffer(ifd_data, i + 8, 2))
+      if ie_tag == 256:  # ImageWidth.
+        info['width'] = ie_value
+      elif ie_tag == 257:  # ImageLength.
+        info['height'] = ie_value
+      elif ie_tag == 259:  # Compression.
+        if ie_value in TIFF_CODECS:
+          info['codec'] = TIFF_CODECS[ie_value]
+        else:
+          info['codec'] = str(ie_value)
+
+
 def analyze_pnm(fread, info, fskip):
   header = fread(3)
   if len(header) < 3:
@@ -3634,7 +3709,6 @@ FORMAT_ITEMS = (
     # JPEG reencoded by Dropbox lepton.
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
-    # This is tricky to prefix-optimize.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
     ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
@@ -4019,6 +4093,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xcf(fread, info, fskip)
   elif format == 'psd':
     analyze_psd(fread, info, fskip)
+  elif format == 'tiff':
+    analyze_tiff(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
   elif format == 'flac':
