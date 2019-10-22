@@ -3931,7 +3931,7 @@ FORMAT_ITEMS = (
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'I', 'M'))),
     # http://fileformats.archiveteam.org/wiki/JBIG2
-    ('jbig2', (0, '\x97\x4A\x42\x32\x0D\x0A\x1A\x0A')),
+    ('jbig2', (0, '\x97\x4a\x42\x32\x0d\x0a\x1a\x0a')),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
