@@ -3495,6 +3495,41 @@ def analyze_psd(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+TARGA_CODECS = {
+    1: 'uncompressed',
+    2: 'uncompressed',
+    3: 'uncompressed',
+    9: 'rle',
+    10: 'rle',
+    11: 'rle',
+    32: 'huffman-rle',
+    33: 'huffman-rle-quadtree',
+}
+
+
+def analyze_tga(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Truevision_TGA
+  # http://www.paulbourke.net/dataformats/tga/
+  header = fread(18)
+  if len(header) < 18:
+    raise ValueError('Too short for tga.')
+  id_size, colormap_type, image_type, cm_first_idx, cm_size, cm_entry_size, origin_x, origin_y, width, height, bpp, image_descriptor = struct.unpack(
+      '<BBBHHBHHHHBB', header)
+  if not (id_size == 0 or 30 <= id_size <= 63):
+    # TODO(pts): What non-zero values can we see in the wild?
+    raise ValueError('Bad tga id_size: %d' % id_size)
+  if colormap_type not in (0, 1):
+    raise ValueError('Bad tga colormap_type: %d' % colormap_type)
+  codec = TARGA_CODECS.get(image_type)
+  if codec is None:
+    raise ValueError('Bad tga image_type: %d' % image_type)
+  if bpp not in (1, 2, 4, 8, 16, 24, 32):  # Bits per pixel.
+    raise ValueError('Bad tga bpp: %d' % bpp)
+  info['format'] = 'tga'
+  info['codec'] = codec
+  info['width'], info['height'] = width, height
+
+
 # https://en.wikipedia.org/wiki/TIFF#Compression
 TIFF_CODECS = {
     1: 'uncompressed',
@@ -3743,8 +3778,8 @@ FORMAT_ITEMS = (
     ('pnot', (0, '\0\0\0', 4, 'pnot')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
-    # Unfortunately not all tga (targa) files have 'TRUEVISION-XFILE.\0'.
-    ('tga', (0, tuple(chr(c) for c in xrange(30, 64)), 1, tuple(chr(c) for c in xrange(12)), 16, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08', '\x30'))),
+    # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
+    ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x20', '\x30'))),
 
     # Audio.
 
@@ -4098,6 +4133,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xcf(fread, info, fskip)
   elif format == 'psd':
     analyze_psd(fread, info, fskip)
+  elif format == 'tga':
+    analyze_tga(fread, info, fskip)
   elif format == 'tiff':
     analyze_tiff(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
