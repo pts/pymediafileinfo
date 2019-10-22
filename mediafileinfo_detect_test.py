@@ -241,6 +241,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnot, '\0\0\0\x14pnot\1\2\3\4\0\0PICT\0\1\0\0\0\x0aPICT..' + self.JP2_HEADER),
                      {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352})
 
+  def test_analyze_swf(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_swf, 'FWS\n4\x07\x01\x00x\x00\x05_\x00\x00\x1f@\x00\x00\x18'),
+                     {'codec': 'uncompressed', 'format': 'swf', 'height': 800, 'width': 550})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_swf, 'FWS 4\x07\x01\x00p\x00\x0f\xa0\x00\x00\x8c\xa0\x00'),
+                     {'codec': 'uncompressed', 'format': 'swf', 'height': 225, 'width': 400})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

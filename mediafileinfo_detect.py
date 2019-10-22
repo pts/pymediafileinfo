@@ -123,7 +123,7 @@ def analyze_flv(fread, info, fskip):
         if video_codec_id ==  2:  # 'h263'.
           # 736 of 1531 .flv files have this codec.
           # See H263VIDEOPACKET in swf-file-format-spec.pdf, v19.
-          # http://www.adobe.com/content/dam/Adobe/en/devnet/swf/pdf/swf-file-format-spec.pdf
+          # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
           if len(data) < 9:
             raise ValueError('h263 video tag too short.')
           b, = struct.unpack('>Q', data[1 : 9])
@@ -877,6 +877,96 @@ def analyze_pnot(fread, info, fskip):
   if not fskip(atom_size - 8):
     raise ValueError('EOF in pnot preview data.')
   analyze_mp4(fread, info, fskip)
+
+
+# --- swf
+
+
+def analyze_swf(
+    fread, info, fskip,
+    _hextable='0123456789abcdef',
+    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+  # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for swf.')
+  signature, version, file_size = struct.unpack('<3sBL', header)
+  if not (signature in ('FWS', 'CWS', 'ZWS') and 1 <= version < 40):
+    raise ValueError('swf signature not found.')
+  info['format'] = 'swf'
+  read_size = 17
+  if signature == 'FWS':
+    info['codec'] = codec = 'uncompressed'
+  elif signature == 'CWS' and version >= 8:
+    info['codec'] = codec = 'flate'
+    read_size += 256  # Educated guess.
+  elif signature == 'ZWS' and version >= 13:
+    info['codec'] = codec = 'lzma'
+    read_size += 256  # Educated guess.
+  else:
+    raise ValueError('Bad swf version %d for codec: %s' % (version, codec))
+  if codec == 'flate':
+    try:
+      import zlib
+    except ImportError:
+      return
+    try:
+      data = zlib.decompressobj().decompress(fread(read_size))
+    except zlib.error:
+      raise ValueError('Bad swf flate stream.')
+  elif codec == 'lzma':
+    try:
+      import lzma
+    except ImportError:
+      try:
+        import liblzma as lzma
+      except ImportError:
+        return
+    dc = lzma.LZMADecompressor()
+    if len(fread(4)) != 4:
+      raise ValueError('EOF in swf lzma compressed_size.')
+    data = fread(5)
+    if len(data) != 5:
+      raise ValueError('EOF in swf lzma properties.')
+    output = []
+    try:
+      # https://helpx.adobe.com/flash-player/kb/exception-thrown-you-decompress-lzma-compressed.html
+      output.append(dc.decompress(data))
+      output.append(dc.decompress('\xff\xff\xff\xff\xff\xff\xff\xff'))
+      output.append(dc.decompress(fread(read_size)))
+    except lzma.error:
+      raise ValueError('Bad swf lzma stream.')
+    data = ''.join(output)
+    del dc, output  # Save memory.
+  else:
+    data = fread(read_size)
+
+  bitstream = iter(''.join(  # Convert to binary.
+      _hex_to_bits[_hextable.find(c)]
+      for c in data[:17].encode('hex')))
+  def read_1():
+    return int(bitstream.next() == '1')
+  def read_n(n):
+    r = 0
+    for _ in xrange(n):
+      r = r << 1 | (bitstream.next() == '1')
+    return r
+  try:
+    nb = read_n(5)
+    if not nb:
+      raise ValueError('Bad swf FrameSize RECT bitcount.')
+    xmin = read_n(nb)
+    xmax = read_n(nb)
+    ymin = read_n(nb)
+    ymax = read_n(nb)
+  except StopIteration:
+    raise ValueError('EOF in swf FrameSize RECT.')
+  if xmax < xmin:
+    raise ValueError('Bad swf FrameSize x order.')
+  if ymax < ymin:
+    raise ValueError('Bad swf FrameSize y order.')
+  info['width'], info['height'] =  (
+      (xmax - xmin + 10) // 20, (ymax - ymin + 10) // 20)
 
 
 # --- Windows
@@ -3809,7 +3899,7 @@ FORMAT_ITEMS = (
     # can't detect 'mdat' here, it's too far for us.
     ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
     ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
-    ('swf', (0, ('FWS', 'CWS'))),
+    ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in range(1, 40)))),
 
     # Video (single elementary stream, no audio).
 
@@ -4241,6 +4331,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'lzma'
   elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
+  elif format == 'swf':
+    analyze_swf(fread, info, fskip)
   elif format == 'pnot':
     analyze_pnot(fread, info, fskip)
   elif format == 'ac3':
