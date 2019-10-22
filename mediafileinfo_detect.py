@@ -3659,6 +3659,59 @@ def analyze_pnm(fread, info, fskip):
   info['width'], info['height'] = dimensions
 
 
+def analyze_ps(fread, info, fskip):
+  header = fread(15)
+  if len(header) < 15:
+    raise ValueError('Too short for ps.')
+  if not (header.startswith('%!PS-Adobe-') and
+          header[11] in '123' and header[12] == '.'):
+    raise ValueError('ps signature not found.')
+  info['format'] = 'ps'
+  i = 0
+  data, header = header, ''
+  for _ in xrange(8):
+    # Slow copy, but doable 8 times.
+    header += data.replace('\r\n', '\n').replace('\r', '\n').replace('\t', ' ')
+    i = header.find('\n', i)
+    while i >= 0:
+      if header[i + 1 : i + 3] != '%%':
+        i = -i
+      else:
+        i = header.find('\n', i + 3)
+    if i < -1:
+      header = header[:-i]
+      break
+    data = fread(256)
+    if not data:
+      break
+  header = header.split('\n')
+  if ' EPSF-' in header[0]:
+    info['subformat'] = 'eps'
+  else:
+    info['subformat'] = 'ps'
+  for line in header:
+    if line == '%%EndComments':
+      break
+    if line.startswith('%%BoundingBox: ') and 'width' not in info:
+      # We ignore HiResBoundingBox and ExactBoundingBox.
+      try:
+        bbox = map(float, line.split()[1:])
+      except ValueError:
+        bbox = ()
+      if len(bbox) != 4:
+        raise ValueError('Bad ps ' + line)
+      def bbox_entry_to_int(value):
+        if value < 0:
+          return -int(.5 - value)
+        else:
+          return int(value + .5)
+      wd_ht = (bbox[2] - bbox[0], bbox[3] - bbox[1])
+      if wd_ht[0] < 0 or wd_ht[1] < 0:
+        raise ValueError('Expected positive size for ps ' + line)
+      wd_ht = map(bbox_entry_to_int, wd_ht)
+      info['width'], info['height'] = (wd_ht[0] or 1, wd_ht[1] or 1)
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -3801,7 +3854,6 @@ FORMAT_ITEMS = (
     # Document media.
 
     ('pdf', (0, '%PDF')),
-    # TODO(pts): Get papar size (image dimensions) from %%BoundingBox.
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
     # TODO(pts): 10 byte prefix? '\367\002\001\203\222\300\34;\0\0'.
     ('dvi', (0, '\367\002')),
@@ -4140,6 +4192,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_tiff(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
+  elif format == 'ps':
+    analyze_ps(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':

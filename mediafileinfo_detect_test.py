@@ -227,6 +227,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, '000003000000000000000000030105010800'.decode('hex')),
                      {'format': 'tga', 'width': 259, 'height': 261, 'codec': 'uncompressed'})
 
+  def test_analyze_ps(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, '%!PS-Adobe-3.0\tEPSF-3.0\r\n%%Creator: (ImageMagick)\n%%Title:\t(image.eps2)\r\n%%CreationDate: (2019-10-22T21:27:41+02:00)\n%%BoundingBox:\t-1 -0.8\t \t34 56.2\r\n%%HiResBoundingBox: 0\t0\t3 5\r%%LanguageLevel:\t2\r%%Pages: 1\r%%EndComments\nuserdict begin end'),
+                     {'format': 'ps', 'height': 57, 'subformat': 'eps', 'width': 35})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
