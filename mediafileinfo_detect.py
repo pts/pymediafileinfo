@@ -3879,6 +3879,115 @@ def analyze_miff(fread, info, fskip):
           raise ValueError('Bad miff %s.' % info_key)
 
 
+def analyze_jbig2(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/JBIG2
+  # https://www.itu.int/rec/dologin_pub.asp?lang=f&id=T-REC-T.88-200002-S!!PDF-E&type=items
+  header = fread(9)
+  if len(header) < 9:
+    raise ValueError('Too short for jbig2.')
+  if header == '\0\0\0\0\x30\0\1\0\0':
+    # 0: 00000000: segment_number=0
+    # 4: 30: dnr_flag=0 spa_size_flag=0 segment_type=48
+    # 5: 00: count=0
+    # 6: 01: page_number=1
+    # 7: 00000013: data_size=19
+    # 11: ????????: width
+    # 15: ????????: height
+    # 19: 00000000: x_res=0
+    # 23: 00000000: y_res=0
+    header = fread(18)
+    if len(header) < 18:
+      raise ValueError('Too short for jbig2-pdf.')
+    data_size_suffix, width, height, x_res, y_res = struct.unpack(
+        '>HLLLL', header)
+    if data_size_suffix != 0x13 or x_res or y_res:
+      raise ValueError('Bad jbig2-pdf header.')
+    info['format'] = info['codec'] = 'jbig2'
+    info['subformat'] = 'pdf'
+  else:
+    if not header.startswith('\x97JB2\r\n\x1a\n'):
+      raise ValueError('jbig2 signature not found.')
+    info['format'] = info['codec'] = 'jbig2'
+    info['subformat'] = 'jbig2'
+    b = ord(header[8])
+    is_random_access = bool(b & 128)
+    if not b & 64:
+      data = fread(4)
+      if len(data) != 4:
+        raise ValueError('EOF in jbig2 page_count.')
+      if data == '\0\0\0\0':
+        raise ValueError('Bad jbig2 page_count.')
+    page_info = None
+    page_info_ofs = 0
+    while 1:
+      data = fread(6)
+      if len(data) < 6:
+        raise ValueError('EOF in jbig2 segment header.')
+      segment_number, flags, count = struct.unpack('>LBB', data)
+      segment_type = flags & 63
+      spa_size = 1 + ((flags >> 6) & 1) * 3
+      count_hi = count >> 4
+      if count_hi <= 4:
+        ref_size = 0
+        ref_count = count_hi
+      elif count_hi == 7:
+        data = data[-1] + fread(3)
+        if len(data) < 4:
+          raise ValueError('Bad jbig2 segment long ref_count.')
+        ref_count = struct.unpack('>L', data) & 0x1fffffff
+        ref_size = (ref_count + 8) >> 3
+      else:
+        raise ValueError('Bad jbig2 segment count_hi.')
+      if not fskip(ref_size):
+        raise ValueError('EOF in jbig2 segment ref data.')
+      data = fread(spa_size)  # Segment page association.
+      if len(data) < spa_size:
+        raise ValueError('EOF in jbig2 segment spa.')
+      if spa_size == 1:
+        page_number, = struct.unpack('>B', data)
+      else:
+        page_number, = struct.unpack('>L', data)
+      data = fread(4)
+      if len(data) < 4:
+        raise ValueError('EOF in jbig2 segment data size.')
+      data_size, = struct.unpack('>L', data)
+      if data_size == 0xffffffff:
+        raise ValueError('Unexpected implicit jbig2 segment data size.')
+      #print (segment_number, segment_type, ref_count, page_number, data_size)
+      if segment_type == 51:  # End of file.
+        break
+      if segment_type == 48:  # Page information.
+        if data_size != 19:
+          raise ValueError('Bad jbig2 page information data size: %d' % data_size)
+        if is_random_access:
+          page_info = True
+        else:
+          page_info = fread(data_size)
+          if len(page_info) != data_size:
+            raise ValueError('EOF in jbig2 page information.')
+          break
+      elif is_random_access:
+        if not page_info:
+          page_info_ofs += data_size
+      else:
+        if not fskip(data_size):
+          raise ValueError('EOF in jbig2 segment.')
+    if page_info is True:
+      if not fskip(page_info_ofs):
+        raise ValueError('EOF in jbig2 segment data before page information.')
+      data_size = 19
+      page_info = fread(data_size)
+      if len(page_info) != data_size:
+        raise ValueError('EOF in jbig2 random-access page information.')
+    width, height, x_res, y_res, flags, striping_info = struct.unpack(
+        '>LLLLBH', page_info)
+  if width == 0xffffffff:
+    raise ValueError('Bad jbig2 width.')
+  info['width'] = width
+  if height != 0xffffffff:  # Known already.
+    info['height'] = height
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -3979,8 +4088,9 @@ FORMAT_ITEMS = (
     # sam2p can read it.
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'I', 'M'))),
-    # http://fileformats.archiveteam.org/wiki/JBIG2
-    ('jbig2', (0, '\x97\x4a\x42\x32\x0d\x0a\x1a\x0a')),
+    ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
+    # PDF-ready output of `jbig2 -p'.
+    ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4365,6 +4475,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ps(fread, info, fskip)
   elif format == 'miff':
     analyze_miff(fread, info, fskip)
+  elif format in ('jbig2', 'jbig2-pdf'):
+    analyze_jbig2(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
