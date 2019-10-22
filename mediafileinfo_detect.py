@@ -3613,17 +3613,18 @@ def analyze_pnm(fread, info, fskip):
   if (header[0] == 'P' and header[1] in '1234567' and
       (header[2] in pnm_whitespace or header[2] == '#')):
     if header[1] in '14':
-      info['format'] = 'pbm'
+      info['subformat'] = 'pbm'
     elif header[1] in '25':
-      info['format'] = 'pgm'
+      info['subformat'] = 'pgm'
     else:
-      info['format'] = 'ppm'
+      info['subformat'] = 'ppm'
     if header[1] in '123':
       info['codec'] = 'rawascii'
     else:
       info['codec'] = 'raw'
   else:
     raise ValueError('pnm signature not found.')
+  info['format'] = 'pnm'
   data = header[-1]
   state = 0
   dimensions = []

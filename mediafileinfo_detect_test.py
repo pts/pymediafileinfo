@@ -195,7 +195,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_pnm(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P1#f oo\n #bar\r\t123\x0b\x0c456#'),
-                     {'codec': 'rawascii', 'format': 'pbm', 'height': 456, 'width': 123})
+                     {'codec': 'rawascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
 
   def test_analyze_lbm(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5'),
