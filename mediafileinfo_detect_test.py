@@ -34,6 +34,13 @@ def get_string_fread_fskip(data):
   return fread, fskip
 
 
+def analyze_string(analyze_func, data):
+  fread, fskip = get_string_fread_fskip(data)
+  info = {}
+  analyze_func(fread, info, fskip)
+  return info
+
+
 class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_yield_swapped_bytes(self):
@@ -174,60 +181,41 @@ class MediaFileInfoDetectTest(unittest.TestCase):
         [(0x1011, 0x1b), (0x1100, 0x81)])
 
   def test_analyze_ape(self):
-    fread, fskip = get_string_fread_fskip(
-        '4d414320960f00003400000018000000580000002c00000014c5db00000000000000000068e379c7c0d13d822b738a67144f4248a00f0000008004001c840200160000001000020044ac'.decode('hex'))
-    info = {}
-    mediafileinfo_detect.analyze_ape(fread, info, fskip)
-    self.assertEqual(info, {
-        'format': 'ape',
-        'tracks': [{'channel_count': 2, 'codec': 'ape',
-                    'sample_rate': 44100, 'sample_size': 16, 'type': 'audio'}]})
+    self.assertEqual(
+        analyze_string(mediafileinfo_detect.analyze_ape, '4d414320960f00003400000018000000580000002c00000014c5db00000000000000000068e379c7c0d13d822b738a67144f4248a00f0000008004001c840200160000001000020044ac'.decode('hex')),
+        {'format': 'ape',
+         'tracks': [{'channel_count': 2, 'codec': 'ape',
+                     'sample_rate': 44100, 'sample_size': 16, 'type': 'audio'}]})
 
   def test_analyze_pnm(self):
-    fread, fskip = get_string_fread_fskip('P1#f oo\n #bar\r\t123\x0b\x0c456#')
-    info = {}
-    mediafileinfo_detect.analyze_pnm(fread, info, fskip)
-    self.assertEqual(info, {'codec': 'rawascii', 'format': 'pbm', 'height': 456, 'width': 123})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P1#f oo\n #bar\r\t123\x0b\x0c456#'),
+                     {'codec': 'rawascii', 'format': 'pbm', 'height': 456, 'width': 123})
 
   def test_analyze_lbm(self):
-    fread, fskip = get_string_fread_fskip('FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5')
-    info = {}
-    mediafileinfo_detect.analyze_lbm(fread, info, fskip)
-    self.assertEqual(info, {'codec': 'rle', 'format': 'lbm', 'height': 261, 'width': 259})
-    fread, fskip = get_string_fread_fskip('FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5')
-    info = {}
-    mediafileinfo_detect.analyze_lbm(fread, info, fskip)
-    self.assertEqual(info, {'codec': 'uncompressed', 'format': 'lbm', 'height': 261, 'width': 259})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5'),
+                     {'codec': 'rle', 'format': 'lbm', 'height': 261, 'width': 259})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5'),
+                     {'codec': 'uncompressed', 'format': 'lbm', 'height': 261, 'width': 259})
 
   def test_analyze_pcx(self):
-    fread, fskip = get_string_fread_fskip('\n\5\1\x08\0\0\0\0\2\1\4\1')
-    info = {}
-    mediafileinfo_detect.analyze_pcx(fread, info, fskip)
-    self.assertEqual(info, {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),
+                     {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
 
   def test_analyze_xpm(self):
-    fread, fskip = get_string_fread_fskip('/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 3456 ')
-    info = {}
-    mediafileinfo_detect.analyze_xpm(fread, info, fskip)
-    self.assertEqual(info, {'codec': 'uncompressed', 'format': 'xpm', 'height': 3456, 'width': 12})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 3456 '),
+                     {'codec': 'uncompressed', 'format': 'xpm', 'height': 3456, 'width': 12})
 
   def test_analyze_xcf(self):
-    fread, fskip = get_string_fread_fskip('gimp xcf v001\0\0\0\1\x0d\0\0\1\7')
-    info = {}
-    mediafileinfo_detect.analyze_xcf(fread, info, fskip)
-    self.assertEqual(info, {'format': 'xcf', 'width': 269, 'height': 263})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xcf, 'gimp xcf v001\0\0\0\1\x0d\0\0\1\7'),
+                     {'format': 'xcf', 'width': 269, 'height': 263})
 
   def test_analyze_psd(self):
-    fread, fskip = get_string_fread_fskip('8BPS\0\1\0\0\0\0\0\0\0\1\0\0\1\5\0\0\1\3\0\1\0\0')
-    info = {}
-    mediafileinfo_detect.analyze_psd(fread, info, fskip)
-    self.assertEqual(info, {'format': 'psd', 'width': 259, 'height': 261})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psd, '8BPS\0\1\0\0\0\0\0\0\0\1\0\0\1\5\0\0\1\3\0\1\0\0'),
+                     {'format': 'psd', 'width': 259, 'height': 261})
 
   def test_analyze_tiff(self):
-    fread, fskip = get_string_fread_fskip('49492a001600000078da5bc0f080210100062501e10011000001030001000000030000000101030001000000050000000201030001000000010000000301030001000000080000000601030001000000010000000a01030001000000010000000d0102000b000000f800000011010400010000000800000012010300010000000100000015010300010000000100000016010300010000000500000017010400010000000d0000001a01050001000000e80000001b01050001000000f00000001c0103000100000001000000280103000100000001000000290103000200000000000100'.decode('hex'))
-    info = {}
-    mediafileinfo_detect.analyze_tiff(fread, info, fskip)
-    self.assertEqual(info, {'format': 'tiff', 'width': 3, 'height': 5, 'codec': 'zip'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tiff, '49492a001600000078da5bc0f080210100062501e10011000001030001000000345600000101030001000000452300000201030001000000010000000301030001000000080000000601030001000000010000000a01030001000000010000000d0102000b000000f800000011010400010000000800000012010300010000000100000015010300010000000100000016010300010000000500000017010400010000000d0000001a01050001000000e80000001b01050001000000f00000001c0103000100000001000000280103000100000001000000290103000200000000000100'.decode('hex')),
+                     {'format': 'tiff', 'width': 0x5634, 'height': 0x2345, 'codec': 'zip'})
 
 
 if __name__ == '__main__':
