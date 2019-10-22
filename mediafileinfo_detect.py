@@ -2485,6 +2485,13 @@ def get_track_info_from_analyze_func(header, analyze_func, track_info=None):
   return track_info
 
 
+def is_jp2(header):
+  return (len(header) >= 28 and
+          header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+          header[16 : 20] == 'ftyp' and
+          header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
+
+
 def get_mpeg_ts_es_track_info(header, stream_type):
   if not isinstance(header, str):
     raise TypeError
@@ -2504,8 +2511,7 @@ def get_mpeg_ts_es_track_info(header, stream_type):
       track_info = {'type': 'video', 'codec': 'mjpeg'}
       track_info['width'], track_info['height'] = get_jpeg_dimensions(
           get_string_fread(header))
-    elif (header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
-          header[16 : 24] == 'ftypjp2 '):
+    elif is_jp2(header):
       track_info = get_track_info_from_analyze_func(
           buffer(header, 12), analyze_mp4,
           {'type': 'video', 'codec': 'mjpeg2000'})
@@ -2520,8 +2526,7 @@ def get_mpeg_ts_es_track_info(header, stream_type):
         header, analyze_h264, {'type': 'video', 'codec': 'h264'})
   elif stream_type == 0x21:
     track_info = {'type': 'video', 'codec': 'mjpeg2000'}
-    if (header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
-          header[16 : 24] == 'ftypjp2 '):
+    if is_jp2(header):
       track_info = get_track_info_from_analyze_func(
           buffer(header, 12), analyze_mp4,
           {'type': 'video', 'codec': 'mjpeg2000'})
@@ -3733,7 +3738,7 @@ FORMAT_ITEMS = (
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
     # JPEG2000 container format.
-    ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n')),
+    ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # Seems to contain an image.
     ('pnot', (0, '\0\0\0', 4, 'pnot')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
