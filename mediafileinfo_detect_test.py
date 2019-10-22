@@ -43,6 +43,8 @@ def analyze_string(analyze_func, data):
 
 class MediaFileInfoDetectTest(unittest.TestCase):
 
+  JP2_HEADER = '0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a703268000000166968647200000120000001600003080700000000000f636f6c7201000000000012'.decode('hex')
+
   def test_yield_swapped_bytes(self):
     f = mediafileinfo_detect.yield_swapped_bytes
     self.assertEqual('', ''.join(f('')))
@@ -112,10 +114,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
         mediafileinfo_detect.get_mpeg_ts_es_track_info('ffd8ffe000104a46494600010200000100010000fffe00104c61766335382e35342e31303000ffdb0043000804040404040505050505050606060606060606060606060607070708080807070706060707080808080909090808080809090a0a0a0c0c0b0b0e0e0e111114ffc400b70000010501010000000000000000000000030504000201060701000203010101000000000000000000000201050304000607100001020404040306050203040903050102031222050400135232426272f0069214822307c2b2a21543e2f233d2246353731683082534261154171835944401d5a5a3845164369174110001030203050408050305010100000002120003042232054252627206130792f082a214152317b2c2d2e2433316115393f273019183514494ffc00011080120016003012200021100031100ffda000c03010002110311003f00f2aa4ee09e215092a35ea910e9155aba5ca482e2491729090d954eea9f612a979f311515c52214901212e12149c29ff684852e1b4b1289d7677517c572196d1524c3ef455c2e99e738cad6'.decode('hex'), 0x06),
         {'width': 352, 'codec': 'mjpeg', 'type': 'video', 'height': 288})
     self.assertEqual(
-        mediafileinfo_detect.get_mpeg_ts_es_track_info('0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a703268000000166968647200000120000001600003080700000000000f636f6c7201000000000012'.decode('hex'), 0x06),
+        mediafileinfo_detect.get_mpeg_ts_es_track_info(self.JP2_HEADER, 0x06),
         {'width': 352, 'codec': 'mjpeg2000', 'type': 'video', 'height': 288})
     self.assertEqual(
-        mediafileinfo_detect.get_mpeg_ts_es_track_info('0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a703268000000166968647200000120000001600003080700000000000f636f6c7201000000000012'.decode('hex'), 0x21),
+        mediafileinfo_detect.get_mpeg_ts_es_track_info(self.JP2_HEADER, 0x21),
         {'width': 352, 'codec': 'mjpeg2000', 'type': 'video', 'height': 288})
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_ts_es_track_info('0b7739181c30e1'.decode('hex'), 0x81),
@@ -230,6 +232,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_ps(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, '%!PS-Adobe-3.0\tEPSF-3.0\r\n%%Creator: (ImageMagick)\n%%Title:\t(image.eps2)\r\n%%CreationDate: (2019-10-22T21:27:41+02:00)\n%%BoundingBox:\t-1 -0.8\t \t34 56.2\r\n%%HiResBoundingBox: 0\t0\t3 5\r%%LanguageLevel:\t2\r%%Pages: 1\r%%EndComments\nuserdict begin end'),
                      {'format': 'ps', 'height': 57, 'subformat': 'eps', 'width': 35})
+
+  def test_analyze_mp4_jp2(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mp4, self.JP2_HEADER),
+                     {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352})
+
+  def test_analyze_pnot(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnot, '\0\0\0\x14pnot\1\2\3\4\0\0PICT\0\1\0\0\0\x0aPICT..' + self.JP2_HEADER),
+                     {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352})
 
 
 if __name__ == '__main__':

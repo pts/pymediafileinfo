@@ -851,6 +851,34 @@ def analyze_mp4(fread, info, fskip):
       break
 
 
+def analyze_pnot(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/QuickTime_container#pnot
+  # https://developer.apple.com/standards/qtff-2001.pdf
+  header = fread(20)
+  if len(header) < 20:
+    raise ValueError('Too short for pnot.')
+  atom_size, atom_type, modification_date, version, preview_type, preview_index = struct.unpack(
+      '>L4sLH4sH', header)
+  if atom_size != 20 or atom_type != 'pnot' or version != 0:
+    raise ValueError('pnot signature not found.')
+  if preview_type != 'PICT':
+    raise ValueError('Bad pnot preview type: %r' % preview_type)
+  if preview_index != 1:
+    raise ValueError('Bad pnot preview index: %r' % preview_index)
+  info['format'] = 'pnot'
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for pnot preview.')
+  atom_size, atom_type = struct.unpack('>L4s', header)
+  if atom_size < 8:
+    raise ValueError('pnot preview atom size too small.')
+  if atom_type != preview_type:
+    raise ValueError('Bad pnot preview type (expecting %r): %r' % (preview_type, atom_type))
+  if not fskip(atom_size - 8):
+    raise ValueError('EOF in pnot preview data.')
+  analyze_mp4(fread, info, fskip)
+
+
 # --- Windows
 
 # See some on: http://www.fourcc.org/
@@ -3828,8 +3856,8 @@ FORMAT_ITEMS = (
     ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
     # JPEG2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
-    # Seems to contain an image.
-    ('pnot', (0, '\0\0\0', 4, 'pnot')),
+    # .mov preview image.
+    ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
@@ -4213,6 +4241,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'lzma'
   elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
+  elif format == 'pnot':
+    analyze_pnot(fread, info, fskip)
   elif format == 'ac3':
     analyze_ac3(fread, info, fskip)
   elif format == 'dts':
