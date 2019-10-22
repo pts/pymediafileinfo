@@ -3855,8 +3855,10 @@ FORMAT_ITEMS = (
 
     ('pdf', (0, '%PDF')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
-    # TODO(pts): 10 byte prefix? '\367\002\001\203\222\300\34;\0\0'.
-    ('dvi', (0, '\367\002')),
+    # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
+    # TODO(pts): Get width and height from \special{papersize=...}.
+    # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
+    ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
 
     # Compressed file or archive.
 
