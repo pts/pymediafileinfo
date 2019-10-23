@@ -4060,10 +4060,9 @@ def adjust_confidence(base_confidence, confidence):
 
 MAX_CONFIDENCE = 100000
 
-# TODO(pts): Static analysis: fail on duplicate format name.
-# TODO(pts): Static analysis: autodetect collisions in string-only matchers.
+# TODO(pts): Static analysis: fail on duplicate format name. (Do we want this?)
+# TODO(pts): Static analysis: autodetect conflicts and subsumes in string-only matchers.
 # TODO(pts): Optimization: create prefix dicts (for 4 bytes and 8 bytes).
-# TODO(pts): On multiple matches, use the one with largest confidence.
 FORMAT_ITEMS = (
     # (n, f, ...) means: read at most n bytes from the beginning of the file
     # to header, call f(header).
@@ -4132,9 +4131,7 @@ FORMAT_ITEMS = (
     ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('ppm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    # sam2p can read it.
     ('xpm', (0, '/* XPM */')),
-    # sam2p can read it.
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
@@ -4146,10 +4143,13 @@ FORMAT_ITEMS = (
     ('xcf', (0, 'gimp xcf ', 9, ('file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007', 'v008', 'v009'))),
     # By Photoshop.
     ('psd', (0, '8BPS', 4, ('\0\1', '\0\2'), 6, '\0\0\0\0\0\0')),
+    # TODO(pts): Get width and height.
     ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
     # By AOL browser.
+    # TODO(pts): Get width and height.
     ('art', (0, 'JG\4\016\0\0\0\0')),
     # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
+    # TODO(pts): Get width and height.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
     # JPEG2000 container format.
