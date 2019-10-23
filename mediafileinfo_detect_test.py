@@ -265,6 +265,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_djvu, 'AT&TFORM\0\0\1\0DJVMDIRM\0\0\0\5.....NAVM\0\0\0\6......FORM\0\0\0\7DJVI...FORM\0\0\0\4DJVUINFO\0\0\0\4\t\xf6\x0c\xe4'),
                      {'format': 'djvu', 'height': 3300, 'width': 2550, 'subformat': 'djvm'})
 
+  def test_analyze_art(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_art, 'JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xdd\1\xe0\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 480, 'width': 477})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

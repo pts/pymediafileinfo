@@ -4037,6 +4037,21 @@ def analyze_djvu(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_art(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/ART_image_file_format
+  # https://multimedia.cx/eggs/aol-art-format/
+  # http://samples.mplayerhq.hu/image-samples/ART/
+  header = fread(17)
+  if len(header) < 17:
+    raise ValueError('Too short for art.')
+  if not (header.startswith('JG') and header[2] in '\3\4' and
+          header[3 : 8] == '\016\0\0\0\0'):
+    raise ValueError('art signature not found.')
+  # Usually header[8 : 13] == '\7\0\x40\x15\x03'.
+  info['format'] = info['codec'] = 'art'
+  info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -4146,8 +4161,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Get width and height.
     ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
     # By AOL browser.
-    # TODO(pts): Get width and height.
-    ('art', (0, 'JG\4\016\0\0\0\0')),
+    ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
     # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
     # TODO(pts): Get width and height.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
@@ -4528,6 +4542,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_jbig2(fread, info, fskip)
   elif format == 'djvu':
     analyze_djvu(fread, info, fskip)
+  elif format == 'art':
+    analyze_art(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
