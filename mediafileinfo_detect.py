@@ -4052,6 +4052,41 @@ def analyze_art(fread, info, fskip):
   info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
 
 
+def analyze_ico(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/ICO_(file_format)#Outline
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for ico.')
+  signature, image_count = struct.unpack('<4sH', header)
+  if not (signature == '\0\0\1\0' and 1 <= image_count <= 12):
+    raise ValueError('ico signature not found.')
+  info['format'] = 'ico'
+  best = (0,)
+  min_image_offset = 6 + 16 * image_count
+  for _ in xrange(image_count):
+    data = fread(16)
+    if len(data) < 16:
+      raise ValueError('EOF in ico image entry.')
+    width, height, color_count, reserved, color_plane_count, bits_per_pixel, image_size, image_offset = struct.unpack(
+        '<BBBBHHLL', data)
+    if reserved not in (0, 1):
+      raise ValueError('Bad ico reserved byte: %d' % reserved)
+    if color_plane_count > 4:
+      raise ValueError('Bad ico color_plane_count: %d' % color_plane_count)
+    if bits_per_pixel not in (0, 1, 2, 4, 8, 16, 24, 32):
+      raise ValueError('Bad ico bits_per_pixel: %d' % bits_per_pixel)
+    if not image_size:
+      raise ValueError('Bad ico image size.')
+    if image_offset < min_image_offset:
+      raise ValueError('Bad ico image_offset.')
+    width += (width == 0) << 8
+    height += (height == 0) << 8
+    best = max(best, (width * height, width, height))
+    # TODO(pts): Detect .png compression at image_offset.
+  assert best[0], 'Best width * height not found.'
+  _, info['width'], info['height'] = best  # Largest icon.
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -4158,8 +4193,7 @@ FORMAT_ITEMS = (
     ('xcf', (0, 'gimp xcf ', 9, ('file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007', 'v008', 'v009'))),
     # By Photoshop.
     ('psd', (0, '8BPS', 4, ('\0\1', '\0\2'), 6, '\0\0\0\0\0\0')),
-    # TODO(pts): Get width and height.
-    ('ico', (0, '\0\0\1\0', 5, '\0', 6, lambda header: (len(header) >= 6 and 1 <= ord(header[4]) <= 40, 240))),
+    ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
     # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
@@ -4173,7 +4207,7 @@ FORMAT_ITEMS = (
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
-    ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x20', '\x30'))),
+    ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
 
     # Audio.
 
@@ -4544,6 +4578,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_djvu(fread, info, fskip)
   elif format == 'art':
     analyze_art(fread, info, fskip)
+  elif format == 'ico':
+    analyze_ico(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
