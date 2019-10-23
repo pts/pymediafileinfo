@@ -4197,7 +4197,18 @@ FORMAT_ITEMS = (
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
     # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
-    # TODO(pts): Get width and height.
+    # https://libopenraw.freedesktop.org/formats/raf/
+    # http://fileformats.archiveteam.org/wiki/Fujifilm_RAF
+    # `memcmp (head,"FUJIFILM",8)' in https://www.dechifro.org/dcraw/dcraw.c
+    # Look at the `Output size:' of the `dcraw -i -v FILENAME.RAF' output.
+    # derived from dcraw.c: `memcmp (head,"FUJIFILM",8)' in dcraw.cc (part of ufraw-batch)
+    #
+    # Getting width= and height= is surprisingly complicated (as implemented
+    # in dcraw.c), the used pixel_aspect value depends on the camera model,
+    # and the entire calculation of fuji_width is hacky, brittle and prone
+    # to errors, to the point that that it would be unmaintainable here.
+    # Getting the dimensions of the JPEG thumbnail is easy though, but it's
+    # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
     # JPEG2000 container format.
