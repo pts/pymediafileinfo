@@ -259,6 +259,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jbig2, '\0\0\0\x000\0\1\0\0\0\x13\0\0\1\xa3\0\0\2\x16\0\0\0\0\0\0\0\0\1\0\0'),
                      {'codec': 'jbig2', 'format': 'jbig2', 'height': 534, 'width': 419, 'subformat': 'pdf'})
 
+  def test_analyze_djvu(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_djvu, 'AT&TFORM\0\0\x19bDJVUINFO\0\0\0\n\t\xf6\x0c\xe4'),
+                     {'format': 'djvu', 'height': 3300, 'width': 2550, 'subformat': 'djvu'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_djvu, 'AT&TFORM\0\0\1\0DJVMDIRM\0\0\0\5.....NAVM\0\0\0\6......FORM\0\0\0\7DJVI...FORM\0\0\0\4DJVUINFO\0\0\0\4\t\xf6\x0c\xe4'),
+                     {'format': 'djvu', 'height': 3300, 'width': 2550, 'subformat': 'djvm'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

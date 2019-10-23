@@ -3988,6 +3988,55 @@ def analyze_jbig2(fread, info, fskip):
     info['height'] = height
 
 
+def analyze_djvu(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/DjVu#File_structure
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for jdvu.')
+  if not (header.startswith('AT&TFORM') and header[12 : 15] == 'DJV' and
+          header[15] in 'UM'):
+    raise ValueError('djvu signature not found.')
+  info['format'] = 'djvu'
+  if header[15] == 'U':
+    info['subformat'] = 'djvu'
+  else:
+    info['subformat'] = 'djvm'
+    djvm_size, = struct.unpack('>L', header[8 : 12])
+    while 1:
+      if djvm_size < 8:
+        raise ValueError('djvu FORM:DJVM too short for member header.')
+      data = fread(8)
+      if len(data) < 8:
+        raise ValueError('EOF in djvu djvm member header.')
+      djvm_size -= 8
+      tag, size = struct.unpack('>4sL', data)
+      if djvm_size < size:
+        raise ValueError('djvu FORM:DJVM too short for member %r data.' % tag)
+      djvm_size -= size
+      if tag == 'FORM':
+        if size < 4:
+          raise ValueError('Bad djvu djvm member FORM size.')
+        tag += ':' + fread(4)
+        if len(tag) != 9:
+          raise ValueError('EOF in djvu djvm member FORM tag.')
+        size -= 4
+      #print (tag, size)
+      if tag == 'FORM:DJVU':
+        break
+      # Typical tags: 'DIRM', 'NAVM', 'FORM:DJVI'.
+      if not fskip(size):
+        raise ValueError('EOF in djvm member %r.' % tag)
+  data = fread(12)
+  if len(data) < 12:
+    raise ValueError('EOF in djvu INFO.')
+  tag, size, width, height = struct.unpack('>4sLHH', data)
+  if tag != 'INFO':
+    raise ValueError('Bad djvu INFO tag.')
+  if not 4 <= size < 256:
+    raise ValueError('Bad djvu INFO size: %d' % size)
+  info['width'], info['height'] = width, height
+
+
 def analyze_gif(fread, info, fskip):
   # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
@@ -4087,7 +4136,7 @@ FORMAT_ITEMS = (
     ('xpm', (0, '/* XPM */')),
     # sam2p can read it.
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
-    ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'I', 'M'))),
+    ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
@@ -4477,6 +4526,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_miff(fread, info, fskip)
   elif format in ('jbig2', 'jbig2-pdf'):
     analyze_jbig2(fread, info, fskip)
+  elif format == 'djvu':
+    analyze_djvu(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
