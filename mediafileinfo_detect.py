@@ -4278,6 +4278,7 @@ FORMAT_ITEMS = (
     # PDF-ready output of `jbig2 -p'.
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
+    # TODO(pts): Add FLIF, BPG, HEIF (based on MP4 container and HEVC), JPEG XR, JPEG 200, AVIF (based on AP1 and HEIF).
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
