@@ -3830,6 +3830,95 @@ def analyze_ps(fread, info, fskip):
       info['width'], info['height'] = (wd_ht[0] or 1, wd_ht[1] or 1)
 
 
+def is_vp8(header):
+  if len(header) < 10 or header[3 : 6] != '\x9d\x01\x2a':
+    return False
+  size, width, height = struct.unpack('<L2xHH', header[:10])
+  return ((size & 0xffffff) >> 5 and not size & 1 and ((size >> 1) & 7) <= 3 and
+          size & 16 and width & 0x3fff and height & 0x3ffff)
+
+
+def get_vp8_track_info(header):
+  # https://tools.ietf.org/html/rfc6386
+  if len(header) < 10:
+    raise ValueError('Too short for vp8.')
+  size, signature, width, height = struct.unpack('<LHHH', header[:10])
+  if size >> 24 != 157 or signature != 10753:  # \x9d\x01\x2a'.
+    raise ValueError('vp8 signature not found.')
+  size &= 0xffffff
+  if not size >> 5:
+    return ValueError('Bad vp8 frame size.')
+  if size & 1:
+    return ValueError('First vp8 frame must be keyframe.')
+  if ((size >> 1) & 7) > 3:
+    return ValueError('Bad vp8 frame version.')
+  if not size & 16:
+    return ValueError('Bad vp8 frame no-show.')
+  size >>= 5
+  width &= 0x1fff
+  height &= 0x1fff
+  if not (width and height):
+    raise ValueError('Bad vp8 frame dimensions.')
+  return {'type': 'video', 'codec': 'vp8', 'width': width, 'height': height}
+
+
+def analyze_vp8(fread, info, fskip):
+  header = fread(10)
+  track_info = get_vp8_track_info(header)
+  info['format'] = 'vp8'
+  info['tracks'] = [track_info]
+
+
+def is_webp(header):
+  if not (len(header) >= 26 and header.startswith('RIFF') and
+          header[8 : 15] == 'WEBPVP8' and header[15] in ' L'):
+    return False
+  if header[15] == ' ' and header[23 : 26] != '\x9d\x01\x2a':
+    return False
+  if header[15] == 'L' and header[20] != '\x2f':
+    return False
+  size1, size2 = struct.unpack('<4xL8xL', header[:20])
+  return size1 - size2 == 12 and size2 > 6
+
+
+def analyze_webp(fread, info, fskip):
+  header = fread(26)
+  if len(header) < 26:
+    raise ValueError('Too short for webp.')
+  if not (header.startswith('RIFF') and
+          header[8 : 15] == 'WEBPVP8' and header[15] in ' L'):
+    raise ValueError('webp signature not found.')
+  info['format'] = 'webp'
+  size1, size2 = struct.unpack('<4xL8xL', header[:20])
+  if size1 - size2 != 12:
+    raise ValueError('Bad webp size difference.')
+  if header[15] == ' ':
+    # https://tools.ietf.org/html/rfc6386
+    if header[23 : 26] != '\x9d\x01\x2a':
+      raise ValueError('webp lossy signature not found.')
+    if size2 < 10:
+      raise ValueError('webp lossy too short.')
+    header = header[20:]
+    if len(header) < 10:
+      header += fread(10 - len(header))
+    track_info = get_vp8_track_info(header)
+    for key in ('codec', 'width', 'height'):
+      info[key] = track_info[key]
+  elif header[15] == 'L':
+    # https://developers.google.com/speed/webp/docs/webp_lossless_bitstream_specification
+    if header[20] != '\x2f':
+      raise ValueError('webp losless signature not found.')
+    if size2 < 6:
+      raise ValueError('webp lossless too short.')
+    info['codec'] = 'web-lossless'
+    v, = struct.unpack('<L', header[21 : 25])
+    if (v >> 29) & 7:
+      raise ValueError('Bad webp lossless version.')
+    info['width'] = 1 + (v & 0x3fff)
+    info['height'] = 1 + ((v >> 14) & 0x3fff)
+    info['codec'] = 'webp-lossless'
+
+
 MIFF_CODEC_MAP = {
     'none': 'uncompressed',
     'bzip': 'bzip2',
@@ -4163,6 +4252,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
+    ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -4187,6 +4277,7 @@ FORMAT_ITEMS = (
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
+    ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4554,6 +4645,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_h264(fread, info, fskip)
   elif format == 'h265':
     analyze_h265(fread, info, fskip)
+  elif format == 'vp8':
+    analyze_vp8(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
@@ -4591,6 +4684,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_art(fread, info, fskip)
   elif format == 'ico':
     analyze_ico(fread, info, fskip)
+  elif format == 'webp':
+    analyze_webp(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':

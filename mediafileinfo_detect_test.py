@@ -273,6 +273,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
                      {'format': 'ico', 'height': 49, 'width': 48})
 
+  def test_analyze_webp(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_webp, '524946466876000057454250565038205c760000d2be019d012a26027001'.decode('hex')),
+                     {'codec': 'vp8', 'format': 'webp', 'height': 368, 'width': 550})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_webp, '524946460e6c0000574542505650384c026c00002f8181621078'.decode('hex')),
+                     {'codec': 'webp-lossless', 'format': 'webp', 'height': 395, 'width': 386})
+
+  def test_analyze_vp8(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp8, 'd2be019d012a26027001'.decode('hex')),
+                     {'format': 'vp8', 'tracks': [{'codec': 'vp8', 'height': 368, 'type': 'video', 'width': 550}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
