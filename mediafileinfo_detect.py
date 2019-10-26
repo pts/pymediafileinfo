@@ -4034,6 +4034,56 @@ def analyze_flif(fread, info, fskip):
   info['height'] = read_varint('height') + 1
 
 
+def is_bpg(header):
+  if len(header) < 6 or not header.startswith('BPG\xfb'):
+    return False
+  signature, b1, b2 = struct.unpack('>4sBB', buffer(header, 0, 6))
+  pixel_format, bit_depth_m8 = b1 >> 5, b1 & 15
+  color_space = b2 >> 4
+  return pixel_format <= 5 and bit_depth_m8 <= 6 and color_space <= 5
+
+
+def analyze_bpg(fread, info, fskip):
+  # https://bellard.org/bpg/bpg_spec.txt
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for bpg.')
+  signature, b1, b2 = struct.unpack('>4sBB', header)
+  pixel_format, alpha1_flag, bit_depth = b1 >> 5, (b1 >> 4) & 1, b1 & 15
+  color_space = b2 >> 4
+  bit_depth += 8
+  if signature != 'BPG\xfb':
+    raise ValueError('bpg signature not found.')
+  info['format'] = 'bpg'
+  info['codec'] = 'h265'
+  if pixel_format > 5:
+    raise ValueError('Bad bpg pixel_format: %d' % pixel_format)
+  if not 8 <= bit_depth <= 14:
+    raise ValueError('Bad bpg bit_depth: %d' % bit_depth)
+  if color_space > 5:
+    raise ValueError('Bad bpg color_space: %d' % color_space)
+
+  def read_varint32(name):
+    v, c, cc = 0, 128, 0
+    while c & 128:
+      if cc > 4:  # 35 bits maximum.
+        raise ValueError('bpg %s varint32 too long.' % name)
+      c = fread(1)
+      if not c:
+        raise ValueError('EOF in bpg %s.' % name)
+      c = ord(c)
+      if not cc and c == 128:
+        raise ValueError('Bad bpg %s varint32.' % name)
+      v = v << 7 | c & 127
+      cc += 1
+    if v >> 32:
+      raise ValueError('bpg %s varint32 too large.' % name)
+    return v
+
+  info['width'] = read_varint32('width')
+  info['height'] = read_varint32('height')
+
+
 MIFF_CODEC_MAP = {
     'none': 'uncompressed',
     'bzip': 'bzip2',
@@ -4395,7 +4445,8 @@ FORMAT_ITEMS = (
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
-    # TODO(pts): Add BPG, HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
+    ('bpg', (0, 'BPG\xfb', 6, lambda header: (is_bpg(header), 30))),
+    # TODO(pts): Add HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4808,6 +4859,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_jpegxr(fread, info, fskip)
   elif format == 'flif':
     analyze_flif(fread, info, fskip)
+  elif format == 'bpg':
+    analyze_bpg(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
