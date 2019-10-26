@@ -4250,8 +4250,8 @@ FORMAT_ITEMS = (
 
     ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
-    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(4, count_is_h264(header)))),
-    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(5, count_is_h265(header)))),
+    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))),
+    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
