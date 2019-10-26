@@ -3919,6 +3919,85 @@ def analyze_webp(fread, info, fskip):
     info['codec'] = 'webp-lossless'
 
 
+def count_is_jpegxr(header):
+  if len(header) >= 8 and header.startswith('WMPHOTO\0'):
+    return 800
+  if len(header) >= 8 and header.startswith('II\xbc\x01') and not ord(header[4]) & 1:
+    return 412
+
+
+def analyze_jpegxr(fread, info, fskip):
+  # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-T.832-201906-I!!PDF-E&type=items
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for jpegxr.')
+  if header.startswith('WMPHOTO\0'):
+    info['format'] = info['codec'] = 'jpegxr'
+    info['subformat'] = 'coded'
+    header = fread(8)
+    if len(header) < 8:
+      raise ValueError('EOF in jpegxr coded header.')
+    flags0, flags1, flags2, flags3, width, height = struct.unpack(
+        '>BBBBHH', header)
+    spatial_xfrm = (flags1 >> 3) & 7  # SPATIAL_XFRM_SUBORDINATE.
+    if (flags0 | 8) != 0x19:
+      raise ValueError('Bad jpegxr coded reserved0.')
+    if not flags2 & 128:  # SHORT_HEADER_FLAG.
+      header += fread(4)
+      if len(header) < 12:
+        raise ValueError('EOF in jpegxr coded long header.')
+      width, height = struct.unpack('>4xLL')
+    width += 1
+    height += 1
+  elif header.startswith('II\xbc\x01') and not ord(header[4]) & 1:
+    info['format'] = info['codec'] = 'jpegxr'
+    info['subformat'] = 'tagged'
+    ifd_ofs, = struct.unpack('<4xL', header)
+    if ifd_ofs < 8:
+      raise ValueError('Bad jpegxr ifd_ofs: %d' % ifd_ofs)
+    if not fskip(ifd_ofs - 8):
+      raise ValueError('EOF before jpegxr ifd_ofs.')
+    data = fread(2)
+    if len(data) < 2:
+      raise ValueError('EOF in jpegxr ifd_size.')
+    ifd_count, = struct.unpack('<H', data)
+    if ifd_count < 5:
+      raise ValueError('jpegxr ifd_count too small: %d' % ifd_count)
+    ifd_data = fread(12 * ifd_count)
+    if len(ifd_data) != 12 * ifd_count:
+      raise ValueError('EOF in jpegxr ifd_data.')
+    width, height, spatial_xfrm = None, None, 0
+    for i in xrange(0, len(ifd_data), 12):
+      ie_tag, ie_type, ie_count, ie_value = struct.unpack(
+          '<HHLL', buffer(ifd_data, i, 12))
+      if ie_count == 1 and ie_type in (1, 2, 4):  # (UBYTE, USHORT, ULONG).
+        if ie_type == 1:
+          ie_value &= 0xff
+        elif ie_type == 2:
+          ie_value &= 0xffff
+        #print ('0x%04x' % ie_tag, ie_type, ie_count, ie_value)
+        if ie_tag == 0xbc02:  # SPATIAL_XFRM_PRIMARY.
+          if ie_value > 7:
+            raise ValueError('Bad jpegxr SPATIAL_XFRM_PRIMARY.')
+          spatial_xfrm = ie_value
+          # If SPATIAL_XFRM_PRIMARY is missing, we may want to check
+          # SPATIAL_XFRM_SUBORDINATE in CODED_IMAGE.
+        elif ie_tag == 0xbc80:  # IMAGE_WIDTH.
+          width = ie_value
+        elif ie_tag == 0xbc81:  # IMAGE_HEIGHT.
+          height = ie_value
+    if width is None:
+      raise ValueError('Missing jpegxr width.')
+    if height is None:
+      raise ValueError('Missing jpegxr height.')
+  else:
+    raise ValueError('jpegxr signature not found.')
+  if spatial_xfrm & 4:
+    info['width'], info['height'] = height, width
+  else:
+    info['width'], info['height'] = width, height
+
+
 MIFF_CODEC_MAP = {
     'none': 'uncompressed',
     'bzip': 'bzip2',
@@ -4278,7 +4357,8 @@ FORMAT_ITEMS = (
     # PDF-ready output of `jbig2 -p'.
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
-    # TODO(pts): Add FLIF, BPG, HEIF (based on MP4 container and HEVC), JPEG XR, JPEG 200, AVIF (based on AP1 and HEIF).
+    ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
+    # TODO(pts): Add FLIF, BPG, HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4687,6 +4767,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ico(fread, info, fskip)
   elif format == 'webp':
     analyze_webp(fread, info, fskip)
+  elif format == 'jpegxr':
+    analyze_jpegxr(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
