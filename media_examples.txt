@@ -137,5 +137,99 @@ elements. Some elements are truncated.
       c172b46240
     0000014e01: nal_unit_type=39 supplemental enhancement information (SEI)
       05ffff...: data
+* example format=mif1
+  #assert 0, parse_h265_sps('01016000000300000300000300000300baa002d0803c1fe5f9246d9ed9a2000100074401c19095811200000014'.decode('hex').replace('\0\0\3', '\0\0'))
+  assert 0, parse_h265_sps('01016000000300000300000300000300baa01e20287f97e491b67b64a2000100074401c190958112'.decode('hex').replace('\0\0\3', '\0\0'))
+  https://gpac.github.io/mp4box.js/test/filereader.html
+  https://github.com/AOMediaCodec/av1-avif/wiki
+  https://github.com/m-hiki/isobmff
+  !! https://github.com/gpac/mp4box.js/blob/master/src/parsing/irot.js
+  !! 'hev1'/'hvc1' are code points used to signal different packaging of the stream in the container mp4 file.
+     -bsf:v hevc_mp4toannexb
+
+  Parsing strategy of mif1:
+
+  * Verify ftyp (=mif1 etc.).
+  * Get the primary item index from meta/pitm. (Default to 0?)
+  * Get item_type of the primary item from meta/iinf/infe. This will be the info['codec'].
+  * Parse item properties in meta/iprp/ipco.
+  * Get association_count for each item from meta/iprp/ipma.
+  * From the association_count values figure out which item properties belong to the primary item.
+  * Get item['width'] and item['height'] from the the ispe from the belonging meta/iprp/ipco range.
+
+  @0+24: ftyp
+     @8+16: (data) contains mif1 and heic
+  @24+510: meta
+    @32+4: (data)
+    @36+33: hdlr HandlerRefererence
+      @44+25: (data) contains pict
+    @69+14: pitm PrimaryItem
+      @77+6: (data)
+        00000000
+        03ea: primary_item_id=1002
+    @83+52: iloc ItemLocation
+      @91+44: (data)
+        {'base_offset': 534, 'extents': [{'extent_length': 289408, 'extent_offset': 8}], 'item_id': 1002, 'data_reference_index': 0}
+        {'base_offset': 534, 'extents': [{'extent_length': 3658, 'extent_offset': 289416}], 'item_id': 1005, 'data_reference_index': 0}
+    @135+76: iinf ItemInformationBox
+      @143+6: (data)
+      @149+31: infe ItemInformationEntry
+        @157+23: (data) contains item_type=hvc1 (for AV1, item_type=av01)
+      @180+31: infe
+        @188+23: (data) contains item_type=hvc1
+    @211+26: iref
+      @219+4: (data)
+      @223+14: thmb
+        @231+6: (data)
+    @237+297: iprp ItemProperties
+      @245+263: ipco ItemPropertyContainer
+        @253+108: hvcC
+          @261+100: (data) contains h265/sps
+            010160000000000000000000baf000fcfdf8f800000f03a00001
+            0018: nal_unit_length=24 byte_size=24+3 (because of 3x000003)
+            40010c01ffff0160000003002000300000300000300baf024a10001...?
+            001f: nal_unit_length=31
+            420101016000000300000300000300000300baa002d0803c1fe5f9246d9ed9a20001
+            0007: nal_unit_length=7
+            4401c190958112: h265/sps, needs .replace('\0\0\3', '\0\0'), width=1440 height=960
+        @361+20: ispe ItemSpatialExtents
+          @369+12: (data)
+            00000000
+            000005a0: width=1440
+            000003c0: height=960
+        @381+107: hvcC
+          @389+99: (data) contains h265/sps
+            010160000000000000000000baf000fcfdf8f80000: HEVDecoderConfigurationRecord
+            0f: length_size_minus_one=15 (16-bit nal_unit_length)
+            03: array_count
+            a0: array_completeness=1 nal_unit_type=0x20
+            0001: nal_unit_count
+            0018: nal_unit_length=24 +3??
+            40010c01ffff016000000300000300000300000300baf024
+            a1: array_completeness=1 nal_unit_type=0x21
+            0001: nal_unit_count
+            001e: nal_unit_length=30
+            420101016000000300000300000300000300baa01e20287f97e491b67b64
+            a2: array_complentess=1 nal_unit_type=0x22
+            0001: nal_unit_count
+            0007: nal_unit_length
+            4401c190958112: h265/sps, needs .replace('\0\0\3', '\0\0'), width=240 height=160 thumbnail
+        @488+20: ispe ItemSpatialExtents
+          @496+12: (data)
+             00000000
+             000000f0: width=240
+             000000a0: height=160
+      @508+26: ipma ItemPropertyAssociation
+        @516+18: (data)
+          00: version=0
+          000000: flags=0
+          00000002: association_count=2
+          03ea: item_id=1002
+          02: association_count=2
+          8102
+          03ed: item_id=1005
+          02: association_count=2
+          8304
+  @534+293074: mdat
 
 __END__
