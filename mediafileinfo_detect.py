@@ -3998,6 +3998,42 @@ def analyze_jpegxr(fread, info, fskip):
     info['width'], info['height'] = width, height
 
 
+def analyze_flif(fread, info, fskip):
+  # https://flif.info/spec.html
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for flif.')
+  signature, ia_nc, bpc = struct.unpack('>4sBB', header)
+  ia = ia_nc >> 4
+  channel_count = ia_nc & 15
+  bpc -= 48
+  if signature != 'FLIF':
+    raise ValueError('flif signature not found.')
+  info['format'] = info['codec'] = 'flif'
+  if ia not in (3, 4, 5, 6):
+    raise ValueError('Bad flif interlacing or animation.')
+  if channel_count not in (1, 3, 4):
+    raise ValueError('Bad flif channel_count.')
+  if bpc not in (0, 1, 2):
+    raise ValueError('Bad flif bpc.')
+
+  def read_varint(name):
+    v, c, cc = 0, 128, 0
+    while c & 128:
+      if cc > 8:  # 63 bits maximum.
+        raise ValueError('flif %s varint too long.' % name)
+      c = fread(1)
+      if not c:
+        raise ValueError('EOF in flif %s.' % name)
+      c = ord(c)
+      v = v << 7 | c & 127
+      cc += 1
+    return v
+
+  info['width'] = read_varint('width') + 1
+  info['height'] = read_varint('height') + 1
+
+
 MIFF_CODEC_MAP = {
     'none': 'uncompressed',
     'bzip': 'bzip2',
@@ -4358,7 +4394,8 @@ FORMAT_ITEMS = (
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
-    # TODO(pts): Add FLIF, BPG, HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
+    ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
+    # TODO(pts): Add BPG, HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4769,6 +4806,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_webp(fread, info, fskip)
   elif format == 'jpegxr':
     analyze_jpegxr(fread, info, fskip)
+  elif format == 'flif':
+    analyze_flif(fread, info, fskip)
   elif format == 'flac':
     analyze_flac(fread, info, fskip)
   elif format == 'ape':

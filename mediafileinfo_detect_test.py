@@ -289,6 +289,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxr, 'WMPHOTO\0\x11\x45\xc0\x71\x05\x9f\x00\x63'),
                      {'codec': 'jpegxr', 'format': 'jpegxr', 'subformat': 'coded', 'height': 100, 'width': 1440})
 
+  def test_analyze_flif(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flif, 'FLIF\x441\x83\x7f\x83\x7e'),
+                     {'format': 'flif', 'codec': 'flif', 'width': 512, 'height': 511})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
