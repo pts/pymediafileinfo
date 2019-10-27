@@ -590,6 +590,7 @@ MP4_VIDEO_CODECS = {
     'dvhc': 'h265',
     'hev1': 'h265',
     'hvc1': 'h265',
+    'av01': 'av1',
     'vc-1': 'vc1',
     'vp03': 'vp3',
     'vp04': 'vp4',
@@ -642,6 +643,78 @@ JP2_CODECS = {
 }
 
 
+ISOBMFF_IMAGE_SUBFORMATS = {
+    'hvc1': 'heif',  # *.heic.
+    'av01': 'avif',  # *.avif.
+}
+
+
+def is_mp4(header):
+  return len(header) >= 4 and header.startswith('\0\0\0') and ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0
+
+
+def parse_isobmff_ipma_box(version, flags, data):
+  # https://github.com/gpac/mp4box.js/blob/master/src/parsing/ipma.js
+  i, size = 0, len(data)
+  if i + 4 > size:
+    raise ValueError('EOD in isobmff ipma entry_count.')
+  entry_count, = struct.unpack('>L', buffer(data, i, 4))
+  i += 4
+  result = {}
+  for _ in xrange(entry_count):
+    assoc_id_size = 2 + (bool(version) << 1)
+    assoc_id_fmt = ('>H', '>L')[bool(version)]
+    if i + assoc_id_size > size:
+      raise ValueError('EOD in isobmff ipma assoc_id.')
+    assoc_id, = struct.unpack(assoc_id_fmt, buffer(data, i, assoc_id_size))
+    if assoc_id in result:
+      raise ValueError('Duplicate isobmff ipma assoc_id.')
+    i += assoc_id_size
+    if i >= size:
+      raise ValueError('EOD in isobmff ipma assoc_count.')
+    assoc_count = ord(data[i])
+    i += 1
+    assoc_property_indexes = []
+    for _ in xrange(assoc_count):
+      property_index_size = 1 + (flags & 1)
+      property_index_fmt = ('>B', '>H')[flags & 1]
+      if i + property_index_size > size:
+        raise ValueError('EOD in isobmff ipma property_index.')
+      property_index, = struct.unpack(property_index_fmt, buffer(data, i, property_index_size))
+      i += property_index_size
+      property_index = (property_index & (0x7f, 0x7fff)[flags & 1]) - 1
+      if property_index < 0:
+        raise ValueError('Bad isobmff ipma property_index.')
+      assoc_property_indexes.append(property_index)
+    if len(set(assoc_property_indexes)) != len(assoc_property_indexes):
+      raise ValueError('Bad isobmff ipma assoc_property_indexes, it has duplicates.')
+    result[assoc_id] = assoc_property_indexes
+  return result
+
+
+def parse_isobmff_infe_box(version, flags, data):
+  # https://github.com/gpac/mp4box.js/blob/master/src/parsing/infe.js
+  i, size = 0, len(data)
+  item_id_size = 2 + ((version == 3) << 1)
+  item_id_fmt = ('>H', '>L')[item_id_size > 2]
+  if i + item_id_size > size:
+    raise ValueError('EOD in isobmff infe item_id.')
+  item_id, = struct.unpack(item_id_fmt, buffer(data, i, item_id_size))
+  i += item_id_size
+  if i + 2 > size:
+    raise ValueError('EOD in isobmff infe item_protection_index.')
+  item_protection_index, = struct.unpack('>H', buffer(data, i, 2))
+  i += 2
+  if version >= 2:
+    if i + 4 > size:
+      raise ValueError('EOD in isobmff infe item_type.')
+    item_type = data[i : i + 4]
+    i += 4
+  else:
+    item_type = None
+  return {item_id: (item_protection_index, item_type)}
+
+
 def analyze_mp4(fread, info, fskip):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
   # Also apple.com has some .mov docs.
@@ -654,13 +727,20 @@ def analyze_mp4(fread, info, fskip):
   # Empty or contains the type of the last hdlr.
   last_hdlr_type_list = []
 
+  infe_count_ary = []
+  item_infos = {}
+  primary_item_id_ary = []
+  ipco_boxes = []
+  ipma_values = []
+
   def process_box(size):
     """Dumps the box, and must read it (size bytes)."""
     xtype = xtype_path[-1]
     xytype = '/'.join(xtype_path[-2:])
     # Only the composites we care about.
     is_composite = xytype in (
-        '/moov', '/jp2h', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl')
+        '/moov', '/jp2h', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl',
+        '/meta', 'meta/iprp', 'iprp/ipco', 'meta/iinf')
     if xtype == 'mdat':  # 816 of 2962 mp4 files have it.
       # Videos downloaded by youtube-dl (usually) don't have it: in the corpus
       # only 11 of 1418 videos have it, but maybe they were downloaded
@@ -672,6 +752,32 @@ def analyze_mp4(fread, info, fskip):
       # (because the interpretation of the mdat box depends on the contents
       # of the moov box).
       info['has_early_mdat'] = True
+    if xytype == '/meta' and info['format'] != 'isobmff-image':
+      is_composite = False
+    elif xytype in ('/meta', 'meta/iinf', 'meta/pitm', 'iprp/ipma', 'iinf/infe'):
+      if size < 4:
+        raise ValueError('mp4 full box too small.')
+      data = fread(4)
+      if len(data) < 4:
+        raise ValueError('EOF in mp4 full box header.')
+      version, = struct.unpack('>L', data)
+      flags = version & 0xffffff
+      version >>= 3
+      size -= 4
+    if xytype in ('meta/iinf', 'meta/pitm'):
+      if infe_count_ary:
+        raise ValueError('Multiple many %s boxes.' % xytype)
+      count_size = 2 + (bool(version) << 1)
+      if size < count_size:
+        raise ValueError('mp4 %s too small for count_size.' % xytype)
+      size -= count_size
+      data = fread(count_size)
+      if len(data) < count_size:
+        raise ValueError('EOF in mp4 %s count.' % xytype)
+      if count_size == 2:
+        count, = struct.unpack('>H', data)
+      else:
+        count, = struct.unpack('>L', data)
     if is_composite:
       if xytype == 'trak/mdia':
         if last_hdlr_type_list and 'd' not in last_hdlr_type_list:
@@ -681,14 +787,16 @@ def analyze_mp4(fread, info, fskip):
           elif last_hdlr_type_list[0] == 'soun':
             info['tracks'].append({'type': 'audio'})
         del last_hdlr_type_list[:]
+      elif xytype == 'meta/iinf':
+        infe_count_ary.append(count)
       ofs_limit = size
       while ofs_limit > 0:  # Dump sequences of boxes inside.
         if ofs_limit < 8:
-          raise ValueError('EOF in mp4 composite box size')
+          raise ValueError('EOF in mp4 composite box size.')
         size2, xtype2 = struct.unpack('>L4s', fread(8))
         if not (8 <= size2 <= ofs_limit):
           raise ValueError(
-              'EOF in mp4 cmposite box, size=%d ofs_limit=%d' %
+              'EOF in mp4 composite box, size=%d ofs_limit=%d' %
               (size2, ofs_limit))
         ofs_limit -= size2
         xtype_path.append(xtype2)
@@ -720,6 +828,9 @@ def analyze_mp4(fread, info, fskip):
             info['format'] = 'f4v'
           elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
             info['format'] = 'jp2'
+          elif major_brand == 'mif1':
+            # Contains items in /meta.
+            info['format'] = 'isobmff-image'
           else:
             info['format'] = 'mp4'
           info['subformat'] = major_brand.strip()
@@ -807,6 +918,21 @@ def analyze_mp4(fread, info, fskip):
             count -= 1
           if count:
             raise ValueError('Too many mp4 stsd items.')
+        elif xytype == 'iinf/infe':
+          for item_id, item_info in sorted(parse_isobmff_infe_box(version, flags, data).iteritems()):
+            if item_id in item_infos:
+              raise ValueError('Duplicate isobmff-image item_id.')
+            item_infos[item_id] = item_info
+        elif xytype == 'meta/pitm':
+          if primary_item_id_ary:
+            raise ValueError('Duplicate box meta/pitm.')
+          primary_item_id_ary.append(count)
+        elif xytype == 'iprp/ipma':
+          if ipma_values:
+            raise ValueError('Duplicate box iprp/ipma.')
+          ipma_values.append(parse_isobmff_ipma_box(version, flags, data))
+        elif xytype.startswith('ipco/'):
+          ipco_boxes.append((xtype, data))
 
   xtype_path = ['']
   toplevel_xtypes = set()
@@ -822,6 +948,7 @@ def analyze_mp4(fread, info, fskip):
         # This happens. The mdat can be any video, we could process
         # recursively. (But it's too late to seek back.)
         # TODO(pts): Convert this to bad_file_mdat_only error.
+        # TODO(pts): Allow mpeg file (from mac).
         raise ValueError('mov file with only an mdat box.')
       if 'moov' in toplevel_xtypes:  # Can't happen, see break below.
         raise AssertionError('moov forgotten.')
@@ -845,10 +972,63 @@ def analyze_mp4(fread, info, fskip):
     xtype_path.append(xtype)
     process_box(size)
     xtype_path.pop()
-    if xtype == 'moov':  # All track parameters already found, stop looking.
-      break
-    if xtype == 'jp2h':  # All JP2 track parameters already found, stop looking.
-      break
+    if info['format'] == 'jp2':
+      if xtype == 'jp2h':  # All JP2 track parameters already found, stop looking.
+        break
+    elif info['format'] == 'isobmff-image':
+      if xtype == 'meta':  # All mif1 image parameters already found, stop looking.
+        break
+    else:
+      if xtype == 'moov':  # All track parameters already found, stop looking.
+        break
+
+  if info['format'] == 'isobmff-image':
+    # https://standards.iso.org/ittf/PubliclyAvailableStandards/c068960_ISO_IEC_14496-12_2015.zip
+    # isobmff is technically incorrect, it doesn't have moov.
+    # https://github.com/m-hiki/isobmff
+    # https://mpeg.chiariglione.org/standards/mpeg-h/image-file-format/text-isoiec-cd-23008-12-image-file-format
+    # https://nokiatech.github.io/heif/technical.html
+    # https://gpac.github.io/mp4box.js/test/filereader.html
+    # https://www.w3.org/TR/mse-byte-stream-format-isobmff/
+    # https://aomediacodec.github.io/av1-isobmff/
+    # https://aomediacodec.github.io/av1-avif/
+    # https://github.com/AOMediaCodec/av1-avif/wiki
+    assert not info['tracks'], 'Unexpected tracks.'
+    del info['tracks']
+    if not infe_count_ary:
+      raise ValueError('Missing isobmff-image item information.')
+    if len(item_infos) != infe_count_ary[0]:
+      raise ValueError('Inconsistent isobmff-image infe box count.')
+    if not primary_item_id_ary:
+      raise ValueError('Missing isobmff-image primary_item_id.')
+    if not ipma_values:
+      raise ValueError('Missing isobmff-image ipma box.')
+    if not ipco_boxes:
+      raise ValueError('Missing isobmff-image ipco boxes.')
+    if primary_item_id_ary[0] not in item_infos:
+      raise ValueError('Missing isobmff-image item info for primary_item_id.')
+    if primary_item_id_ary[0] not in ipma_values[0]:
+      raise ValueError('Missing isobmff-image ipco for primary_item_id.')
+    primary_ispe_boxes = []
+    for ipco_idx in ipma_values[0][primary_item_id_ary[0]]:
+      if ipco_idx >= len(ipco_boxes):
+        raise ValueError('Bad isobmff-image ipco index for primary_item_id.')
+      if ipco_boxes[ipco_idx][0] == 'ispe':
+        primary_ispe_boxes.append(ipco_boxes[ipco_idx][1])
+    if not primary_ispe_boxes:
+      raise ValueError('Missing isobmff-image ispe for primary_item_id.')
+    if len(primary_ispe_boxes) > 1:
+      raise ValueError('Duplicate isobmff-image ispe for primary_item_id.')
+    if len(primary_ispe_boxes[0]) < 12:
+      raise ValueError('EOD in isobmff-image ispe.')
+    info['width'], info['height'] = struct.unpack('>LL', buffer(primary_ispe_boxes[0], 4, 8))
+    codec = item_infos[primary_item_id_ary[0]][1]
+    if codec is not None:
+      # Typically codec is 'hvc1' for .heic and 'av01' or .avif.
+      info['codec'] = MP4_VIDEO_CODECS.get(codec, codec)
+      subformat = ISOBMFF_IMAGE_SUBFORMATS.get(codec)
+      if subformat:
+        info['subformat'] = subformat
 
 
 def analyze_pnot(fread, info, fskip):
@@ -4379,8 +4559,9 @@ FORMAT_ITEMS = (
 
     # Can also be .webm as a subformat.
     ('mkv', (0, '\x1a\x45\xdf\xa3')),
-    # Can also be (new) .mov, .f4v etc. as a subformat.
-    ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (len(header) >= 4 and ord(header[3]) >= 16 and (ord(header[3]) & 3) == 0, 26))),
+    # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
+    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 4, lambda header: (is_mp4(header), 26))),
+    ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (is_mp4(header), 26))),
     # TODO(pts): Get media parameters.
     # https://en.wikipedia.org/wiki/Ogg#File_format
     # https://xiph.org/ogg/doc/oggstream.html
@@ -4446,7 +4627,6 @@ FORMAT_ITEMS = (
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
     ('bpg', (0, 'BPG\xfb', 6, lambda header: (is_bpg(header), 30))),
-    # TODO(pts): Add HEIF (based on MP4 container and HEVC), AVIF (based on AP1 and HEIF).
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -4876,7 +5056,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
     info['codec'] = 'lzma'
-  elif format in ('mp4', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
+  elif format in ('mp4', 'mp4-wellknown-brand', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
   elif format == 'swf':
     analyze_swf(fread, info, fskip)
