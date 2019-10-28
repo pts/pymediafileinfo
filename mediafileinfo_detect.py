@@ -1168,9 +1168,11 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_flac)
   elif header.startswith('BBCD\0\0\0\0'):
     return get_track_info_from_analyze_func(header, analyze_dirac)
+  elif header.startswith('PCM     \0\0\0'):
+    return get_track_info_from_analyze_func(header, analyze_oggpcm)
   else:
     # TODO(pts): Add detection and get media parameters of other xiph.org
-    # free codecs: Speex, Opus, OggPCM, Daala, Tarkin.
+    # free codecs: Speex, Opus, Daala, Tarkin.
     #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
@@ -1722,6 +1724,46 @@ def analyze_vorbis(fread, info, fskip):
     raise ValueError('Bad vorbis sample_rate: %d' % sample_rate)
   info['tracks'][0]['channel_count'] = channel_count
   info['tracks'][0]['sample_rate'] = sample_rate
+
+
+# --- oggpcm.
+
+
+def analyze_oggpcm(fread, info, fskip):
+  # https://wiki.xiph.org/index.php?title=OggPCM&mobileaction=toggle_view_desktop
+  header = fread(22)
+  if len(header) < 22:
+    raise ValueError('Too short for oggpcm.')
+  signature, major_version, minor_version, pcm_format, sample_rate, bit_count, channel_count = struct.unpack(
+      '>8sHHLLBB', header)
+  if signature != 'PCM     ':
+    raise ValueError('oggpcm signature not found.')
+  if major_version:
+    raise ValueError('Bad oggpcm major_version: %d' % major_version)
+  if minor_version > 255:
+    raise ValueError('Bad oggpcm minor_version: %d' % minor_version)
+  info['format'] = 'oggpcm'
+  info['tracks'] = [{'type': 'audio', 'codec': 'oggpcm'}]
+  if not 1 <= channel_count <= 15:
+    raise ValueError('Bad oggpcm channel_count: %d' % channel_count)
+  if not 1000 <= sample_rate <= 1000000:
+    raise ValueError('Bad oggpcm sample_rate: %d' % sample_rate)
+  info['tracks'][0]['channel_count'] = channel_count
+  info['tracks'][0]['sample_rate'] = sample_rate
+  if pcm_format < 8:
+    info['tracks'][0]['codec'], sample_size = 'pcm', ((pcm_format >> 1) + 1) << 3
+  elif pcm_format == 0x10:
+    info['tracks'][0]['codec'], sample_size = 'mulaw', 8
+  elif pcm_format == 0x11:
+    info['tracks'][0]['codec'], sample_size = 'alaw', 8
+  elif 0x20 <= pcm_format < 0x24:
+    info['tracks'][0]['codec'], sample_size, bit_count = 'float', ((pcm_format >> 1) - 0xf) << 5, 0
+  else:  # Unknown.
+    info['tracks'][0]['codec'], sample_size = 'unknown', bit_count
+  if 0 < bit_count < sample_size:
+    info['tracks'][0]['sample_size'] = bit_count
+  else:
+    info['tracks'][0]['sample_size'] = sample_size
 
 
 # --- H.264.
@@ -4859,6 +4901,7 @@ FORMAT_ITEMS = (
     ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80', '\x1f\xff\xe8\x00', '\xff\x1f\x00\xe8'), 6, lambda header: (is_dts(header), 1))),
     ('ape', (0, 'MAC ')),
     ('vorbis', (0, '\x01vorbis\0\0\0\0', 11, tuple(chr(c) for c in xrange(1, 16)))),
+    ('oggpcm', (0, 'PCM     \0\0\0')),
 
     # Document media.
 
