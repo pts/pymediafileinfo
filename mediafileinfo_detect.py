@@ -280,6 +280,7 @@ MKV_CODEC_IDS = {
     'V_REAL/RV30': 'rv9',
     'V_QUICKTIME': 'qt',  # Sorenson or Cinepak, more info in CodecPrivate.
     'V_THEORA': 'theora',
+    'V_DAALA': 'daala',
     'V_PRORES': 'prores',
     'V_VP3': 'vp3',
     'V_VP4': 'vp4',
@@ -1164,6 +1165,8 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_vorbis)
   elif header.startswith('\x80theora'):
     return get_track_info_from_analyze_func(header, analyze_theora)
+  elif header.startswith('\x80daala'):
+    return get_track_info_from_analyze_func(header, analyze_daala)
   elif header.startswith('fLaC'):
     return get_track_info_from_analyze_func(header, analyze_flac)
   elif header.startswith('BBCD\0\0\0\0'):
@@ -1172,7 +1175,7 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_oggpcm)
   else:
     # TODO(pts): Add detection and get media parameters of other xiph.org
-    # free codecs: Speex, Opus, Daala, Tarkin.
+    # free codecs: Speex, Opus, Tarkin.
     #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
@@ -4327,6 +4330,27 @@ def analyze_theora(fread, info, fskip):
   set_video_dimens(info['tracks'][0], picw | picw_h << 16, pich | pich_h << 16)
 
 
+def analyze_daala(fread, info, fskip):
+  # daala_decode_header_in in src/infodec.c in 	https://git.xiph.org/daala.git
+  # https://en.wikipedia.org/wiki/Daala
+  header = fread(17)
+  if len(header) < 17:
+    raise ValueError('Too short for daala.')
+  signature, vmaj, vmin, vrev, width, height = struct.unpack(
+      '>6sBBBLL', header)
+  if signature != '\x80daala':
+    raise ValueError('daala signature not found.')
+  if vmaj > 7:  # Major version.
+    raise ValueError('Bad daala vmaj: %d' % vmaj)
+  if width > 0x7fffffff:
+    raise ValueError('Bad daala width: %d' % width)
+  if height > 0x7fffffff:
+    raise ValueError('Bad daala height: %d' % width)
+  info['format'] = 'daala'
+  info['tracks'] = [{'type': 'video', 'codec': 'daala'}]
+  set_video_dimens(info['tracks'][0], width, height)
+
+
 def count_is_jpegxr(header):
   if len(header) >= 8 and header.startswith('WMPHOTO\0'):
     return 800
@@ -4822,6 +4846,7 @@ FORMAT_ITEMS = (
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
+    ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
 
     # TODO(pts): Get width and height.
     ('mng', (0, '\212MNG\r\n\032\n')),
@@ -5227,6 +5252,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_dirac(fread, info, fskip)
   elif format == 'theora':
     analyze_theora(fread, info, fskip)
+  elif format == 'daala':
+    analyze_daala(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':

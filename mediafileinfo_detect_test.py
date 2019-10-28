@@ -323,6 +323,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_theora, '\x80theora\x03\2\0\0\x14\0\x0f\0\x01@\0\0\xf0\0\0\0\0\0\x1e\0\0\0\1\0\0\0\0\0\0\1\0\0\x00e\x00'),
                      {'format': 'theora', 'tracks': [{'type': 'video', 'codec': 'theora', 'width': 320, 'height': 240}]})
 
+  def test_analyze_daala(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_daala, '\x80daala\0\0\0\0\0\1\2\0\0\3\4'),
+                     {'format': 'daala', 'tracks': [{'type': 'video', 'codec': 'daala', 'width': 258, 'height': 772}]})
+
   def test_analyze_vorbis(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vorbis, '\x01vorbis\0\0\0\0\x01D\xac\0\0'),
                      {'format': 'vorbis', 'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
