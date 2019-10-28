@@ -230,5 +230,20 @@ elements. Some elements are truncated.
           02: association_count=2
           8304
   @534+293074: mdat
+* example vcodec=dirac
+    42424344: parse_info_prefix='BBCD'
+    00: parse_code=0(sequence_header)
+    00000012: next_parse_offset=18  (next parse_info_prefix at 18)
+    00000000: previous_parse_offset=0
+    6c1c1a10c2d0: sequence_header bits
+      011: version_major(uint)=2
+      011: version_minor(uint)=2
+      0000011: profile(uint)=8
+      1: level(uint)=0
+      0000011: base_video_format(uint)=8
+      0: custom_dimensions_flag=0
+      : width(uint)=720 (from base_video_format)
+      : height(uint)=576 (from base_video_format)
+      10000100001100001011100000:...
 
 __END__

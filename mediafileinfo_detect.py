@@ -2826,7 +2826,8 @@ def get_mpeg_ts_es_track_info(header, stream_type):
   elif stream_type == 0x52:
     return {'type': 'video', 'codec': 'chinese-video'}
   elif stream_type == 0xd1:
-    return {'type': 'video', 'codec': 'bbc-dirac'}
+    return get_track_info_from_analyze_func(
+        header, analyze_dirac, {'type': 'video', 'codec': 'dirac'})
   elif stream_type == 0xea:
     return {'type': 'video', 'codec': 'vc1'}
   elif stream_type in (0x03, 0x04):
@@ -4089,6 +4090,87 @@ def analyze_webp(fread, info, fskip):
     info['codec'] = 'webp-lossless'
 
 
+def is_dirac(header):
+  return (len(header) >= 14 and header.startswith( 'BBCD\0\0\0\0') and
+          header[9 : 13] == '\0\0\0\0' and ord(header[8]) >= 14)
+
+
+DIRAC_VIDEO_DIMENSIONS = (
+    (640, 480),
+    (176, 120),
+    (176, 144),
+    (352, 240),
+    (352, 288),
+    (704, 480),
+    (704, 576),
+    (720, 480),
+    (720, 576),
+    (1280, 720),
+    (1280, 720),
+    (1920, 1080),
+    (1920, 1080),
+    (1920, 1080),
+    (1920, 1080),
+    (2048, 1080),
+    (4096, 2160),
+)
+
+
+def analyze_dirac(fread, info, fskip):
+  # https://web.archive.org/web/20150503015104im_/http://diracvideo.org/download/specification/dirac-spec-latest.pdf
+  # https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
+  header = fread(14)
+  if len(header) < 14:
+    raise ValueError('Too short for dirac.')
+  signature, parse_code, next_parse_offset, previous_parse_offset = struct.unpack(
+      '>4sBLLx', header)
+  if signature != 'BBCD':
+    raise ValueError('dirac signature not found.')
+  if not 14 <= next_parse_offset <= 255:  # Maximum 140 bytes.
+    raise ValueError('Bad dirac next_parse_offset: %d' % next_parse_offset)
+  if previous_parse_offset:
+    raise ValueError('Bad dirac previous_parse_offset.')
+  if parse_code:
+    raise ValueError('Bad dirac parse_code, expecting sequence_header: 0x%02x' % parse_code) 
+  info['format'] = 'dirac'
+  info['tracks'] = [{'type': 'video', 'codec': 'dirac'}]
+  header = header[13] + fread(next_parse_offset - 14)
+  bitstream = get_bitstream(header)
+  def read_1():
+    return int(bitstream.next() == '1')
+  def read_n(n):
+    r = 0
+    for _ in xrange(n):
+      r = r << 1 | (bitstream.next() == '1')
+    return r
+  def read_varuint32():
+    v, c = 1, 0
+    while not read_1():
+      if c >= 32:
+        raise ValueError('dirac varuint32 too long.')
+      c += 1
+      v <<= 1
+      if read_1():
+        v += 1
+    return v - 1
+  try:
+    version_major = read_varuint32()  # 2.
+    version_minor  = read_varuint32()  # 2.
+    profile = read_varuint32() # 8.
+    level = read_varuint32()  # 0.
+    base_video_format = read_varuint32()
+    if read_1():  # custom_dimensions_flag.
+      width = read_varuint32()
+      height = read_varuint32()
+    else:
+      if base_video_format >= len(DIRAC_VIDEO_DIMENSIONS):
+        raise ValueError('Bad base_video_format: %d' % base_video_format)
+      width, height = DIRAC_VIDEO_DIMENSIONS[base_video_format]
+  except StopIteration:
+    raise ValueError('EOF in dirac sequence_header bitstream.')
+  set_video_dimens(info['tracks'][0], width, height)
+
+
 def count_is_jpegxr(header):
   if len(header) >= 8 and header.startswith('WMPHOTO\0'):
     return 800
@@ -4589,6 +4671,7 @@ FORMAT_ITEMS = (
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
+    ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -4986,6 +5069,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_h265(fread, info, fskip)
   elif format == 'vp8':
     analyze_vp8(fread, info, fskip)
+  elif format == 'dirac':
+    analyze_dirac(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
