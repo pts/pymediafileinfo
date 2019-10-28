@@ -143,9 +143,8 @@ elements. Some elements are truncated.
   https://gpac.github.io/mp4box.js/test/filereader.html
   https://github.com/AOMediaCodec/av1-avif/wiki
   https://github.com/m-hiki/isobmff
-  !! https://github.com/gpac/mp4box.js/blob/master/src/parsing/irot.js
-  !! 'hev1'/'hvc1' are code points used to signal different packaging of the stream in the container mp4 file.
-     -bsf:v hevc_mp4toannexb
+  https://github.com/gpac/mp4box.js/blob/master/src/parsing/irot.js
+  'hev1'/'hvc1' are code points used to signal different packaging of the stream in the container mp4 file. -bsf:v hevc_mp4toannexb
 
   Parsing strategy of mif1:
 

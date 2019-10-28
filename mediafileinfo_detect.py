@@ -1062,10 +1062,18 @@ def analyze_pnot(fread, info, fskip):
 # --- swf
 
 
-def analyze_swf(
-    fread, info, fskip,
+def get_bitstream(
+    data,
     _hextable='0123456789abcdef',
     _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+  if not isinstance(data, (str, buffer)):
+    raise TypeError
+  return iter(''.join(  # Convert to binary.
+      _hex_to_bits[_hextable.find(c)]
+      for c in data[:].encode('hex')))
+
+
+def analyze_swf(fread, info, fskip):
   # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
   header = fread(8)
   if len(header) < 8:
@@ -1121,9 +1129,7 @@ def analyze_swf(
   else:
     data = fread(read_size)
 
-  bitstream = iter(''.join(  # Convert to binary.
-      _hex_to_bits[_hextable.find(c)]
-      for c in data[:17].encode('hex')))
+  bitstream = get_bitstream(buffer(data, 0, 17))
   def read_1():
     return int(bitstream.next() == '1')
   def read_n(n):
@@ -1663,11 +1669,7 @@ def count_is_h264(header):
   return i * 100
 
 
-def parse_h264_sps(
-    data, expected_sps_id=0,
-    _hextable='0123456789abcdef',
-    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split(),
-    ):
+def parse_h264_sps(data, expected_sps_id=0):
   """Parses a H.264 sequence parameter set (SPS) NAL unit data."""
   # Based on function read_seq_parameter_set_rbsp in
   # https://github.com/aizvorski/h264bitstream/blob/29489957c016c95b495f1cce6579e35040c8c8b0/h264_stream.c#L356
@@ -1688,9 +1690,7 @@ def parse_h264_sps(
   io['level'] = ord(data[2])
   io['residual_color_transform_flag'] = 0
   # TODO(pts): Maybe bit shifting is faster.
-  data = iter(''.join(  # Convert to binary.
-      _hex_to_bits[_hextable.find(c)]
-      for c in str(buffer(data, 3)).encode('hex')))
+  data = get_bitstream(buffer(data, 3))
   def read_1():
     return int(data.next() == '1')
   def read_n(n):
@@ -1852,10 +1852,7 @@ def count_is_h265(header):
   return i * 100
 
 
-def parse_h265_sps(
-    data,
-    _hextable='0123456789abcdef',
-    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+def parse_h265_sps(data):
   """Parses H.256 sequence_parameter_set.
 
   Args:
@@ -1868,9 +1865,7 @@ def parse_h265_sps(
   #
   # Maximum byte size we scan of the sps is 165, with hugely overestimating
   # the allowed read_ue() sizes.
-  bitstream = iter(''.join(  # Convert to binary.
-      _hex_to_bits[_hextable.find(c)]
-      for c in data[:165].encode('hex')))
+  bitstream = get_bitstream(buffer(data, 0, 165))
   def read_1():
     return int(bitstream.next() == '1')
   def read_n(n):
@@ -2331,10 +2326,7 @@ def find_mpeg_video_mpeg4_video_object_layer_start(header, visual_object_start_o
   return i + 4
 
 
-def parse_mpeg_video_mpeg4_video_object_layer_start(
-    data, profile_level,
-    _hextable='0123456789abcdef',
-    _hex_to_bits='0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111'.split()):
+def parse_mpeg_video_mpeg4_video_object_layer_start(data, profile_level):
   # https://gitlab.bangl.de/crackling-dev/android_frameworks_base/blob/a979ad6739d573b3823b0fe7321f554ef5544753/media/libstagefright/rtsp/APacketSource.cpp#L268
   # https://github.com/MediaArea/MediaInfoLib/blob/3f4052e3ad4de45f68e715eb6f5746e2ca626ffe/Source/MediaInfo/Video/File_Mpeg4v.cpp#L1
   # https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-mp4ves.c
@@ -2342,9 +2334,7 @@ def parse_mpeg_video_mpeg4_video_object_layer_start(
   # Extension of: https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.263-200501-I!!PDF-E&type=items
   #
   # 24 bytes of bitstream is enough for the rest.
-  bitstream = iter(''.join(  # Convert to binary.
-      _hex_to_bits[_hextable.find(c)]
-      for c in data[:24].encode('hex')))
+  bitstream = get_bitstream(buffer(data, 0, 24))
   def read_1():
     return int(bitstream.next() == '1')
   def read_n(n):
