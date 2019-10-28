@@ -4171,6 +4171,23 @@ def analyze_dirac(fread, info, fskip):
   set_video_dimens(info['tracks'][0], width, height)
 
 
+def analyze_theora(fread, info, fskip):
+  # https://theora.org/doc/Theora.pdf
+  # https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
+  header = fread(20)
+  if len(header) < 20:
+    raise ValueError('Too short for theora.')
+  signature, vmaj, vmin, vrev, fmbw, fmbh, picw_h, picw, pich_h, pich = struct.unpack(
+      '>7sBBBHHBHBH', header)
+  if signature != '\x80theora':
+    raise ValueError('theora signature not found.')
+  if vmaj > 7:  # Major version.
+    raise ValueError('Bad theora vmaj: %d' % vmaj)
+  info['format'] = 'theora'
+  info['tracks'] = [{'type': 'video', 'codec': 'theora'}]
+  set_video_dimens(info['tracks'][0], picw | picw_h << 16, pich | pich_h << 16)
+
+
 def count_is_jpegxr(header):
   if len(header) >= 8 and header.startswith('WMPHOTO\0'):
     return 800
@@ -4638,7 +4655,6 @@ FORMAT_ITEMS = (
     # https://en.wikipedia.org/wiki/Ogg#File_format
     # https://xiph.org/ogg/doc/oggstream.html
     # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
-    # Theora: identification header in https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
     # Can contain other codecs as well, each with codec-specific identification header.
     # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
     ('ogg', (0, 'OggS')),
@@ -4672,6 +4688,9 @@ FORMAT_ITEMS = (
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
+    ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
+
+    # TODO(pts): Get width and height.
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -5071,6 +5090,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_vp8(fread, info, fskip)
   elif format == 'dirac':
     analyze_dirac(fread, info, fskip)
+  elif format == 'theora':
+    analyze_theora(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':

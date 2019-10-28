@@ -319,6 +319,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dirac, 'BBCD\0\0\0\0\x12\0\0\0\0\x6c\x1c\x1a'),
                      {'format': 'dirac', 'tracks': [{'type': 'video', 'codec': 'dirac', 'width': 720, 'height': 576}]})
 
+  def test_analyze_theora(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_theora, '\x80theora\x03\2\0\0\x14\0\x0f\0\x01@\0\0\xf0\0\0\0\0\0\x1e\0\0\0\1\0\0\0\0\0\0\1\0\0\x00e\x00'),
+                     {'format': 'theora', 'tracks': [{'type': 'video', 'codec': 'theora', 'width': 320, 'height': 240}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
