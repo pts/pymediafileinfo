@@ -1627,6 +1627,30 @@ def analyze_ape(fread, info, fskip, header=''):
   info['tracks'][-1]['channel_count'], info['tracks'][-1]['sample_rate'] = struct.unpack('<HH', data)
 
 
+# --- vorbis.
+
+
+def analyze_vorbis(fread, info, fskip):
+  # https://xiph.org/vorbis/doc/Vorbis_I_spec.html
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for vorbis.')
+  signature, version, channel_count, sample_rate = struct.unpack(
+      '<7sLBL', header)
+  if signature != '\x01vorbis':
+    raise ValueError('vorbis signature not found.')
+  if version:
+    raise ValueError('Bad vorbis version: %d' % version)
+  info['format'] = 'vorbis'
+  info['tracks'] = [{'type': 'audio', 'codec': 'vorbis', 'sample_size': 16}]
+  if not 1 <= channel_count <= 15:
+    raise ValueError('Bad vorbis channel_count: %d' % channel_count)
+  if not 1000 <= sample_rate <= 1000000:
+    raise ValueError('Bad vorbis sample_rate: %d' % sample_rate)
+  info['tracks'][0]['channel_count'] = channel_count
+  info['tracks'][0]['sample_rate'] = sample_rate
+
+
 # --- H.264.
 
 
@@ -4654,7 +4678,6 @@ FORMAT_ITEMS = (
     # TODO(pts): Get media parameters.
     # https://en.wikipedia.org/wiki/Ogg#File_format
     # https://xiph.org/ogg/doc/oggstream.html
-    # Vorbis: identification header in https://xiph.org/vorbis/doc/Vorbis_I_spec.html
     # Can contain other codecs as well, each with codec-specific identification header.
     # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
     ('ogg', (0, 'OggS')),
@@ -4767,6 +4790,7 @@ FORMAT_ITEMS = (
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
     ('dts', (0, ('\x7f\xfe\x80\x01', '\xfe\x7f\x01\x80', '\x1f\xff\xe8\x00', '\xff\x1f\x00\xe8'), 6, lambda header: (is_dts(header), 1))),
     ('ape', (0, 'MAC ')),
+    ('vorbis', (0, '\x01vorbis\0\0\0\0', 11, tuple(chr(c) for c in xrange(1, 16)))),
 
     # Document media.
 
@@ -5141,6 +5165,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_flac(fread, info, fskip)
   elif format == 'ape':
     analyze_ape(fread, info, fskip)
+  elif format == 'vorbis':
+    analyze_vorbis(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
