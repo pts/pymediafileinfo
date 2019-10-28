@@ -1059,7 +1059,7 @@ def analyze_pnot(fread, info, fskip):
   analyze_mp4(fread, info, fskip)
 
 
-# --- swf
+# --- swf.
 
 
 def get_bitstream(
@@ -1153,6 +1153,79 @@ def analyze_swf(fread, info, fskip):
     raise ValueError('Bad swf FrameSize y order.')
   info['width'], info['height'] =  (
       (xmax - xmin + 10) // 20, (ymax - ymin + 10) // 20)
+
+
+# --- ogg.
+
+
+def get_ogg_es_track_info(header):
+  """Returns track info dict or None if unknown."""
+  if header.startswith('\x01vorbis\0\0\0\0'):
+    return get_track_info_from_analyze_func(header, analyze_vorbis)
+  elif header.startswith('\x80theora'):
+    return get_track_info_from_analyze_func(header, analyze_theora)
+  elif header.startswith('fLaC'):
+    return get_track_info_from_analyze_func(header, analyze_flac)
+  elif header.startswith('BBCD\0\0\0\0'):
+    return get_track_info_from_analyze_func(header, analyze_dirac)
+  else:
+    # TODO(pts): Add detection and get media parameters of other xiph.org
+    # free codecs: Speex, Opus, OggPCM, Daala, Tarkin.
+    #
+    # TODO(pts): Add detection of many other codecs with a known prefix.
+    return None
+
+
+def analyze_ogg(fread, info, fskip):
+  # https://xiph.org/ogg/
+  # https://xiph.org/ogg/doc/oggstream.html
+  # https://en.wikipedia.org/wiki/Ogg#File_format
+  packets = {}
+  page_sequences = {}
+  # It seems that all the elementary stream headers are in the beginning of
+  # the ogg file, with flag == 2.
+  while 1:
+    header = fread(27)  # Read ogg page header.
+    if len(header) < 27:
+      if packets and not header:
+        break
+      raise ValueError('Too short for ogg.')
+    signature, version, flag, granule_position, stream_id, page_sequence, checksum, segment_count = struct.unpack(
+        '<4sBBQLLlB', header)
+    info['format'] = 'ogg'
+    if signature != 'OggS':
+      raise ValueError('ogg signature not found.')
+    if version:
+      raise ValueError('Bad ogg version: %d' % version)
+    #print (flag, granule_position, stream_id, page_sequence, segment_count)
+    if flag != 2:
+      if not (packets and 0 <= flag <= 7):
+        raise ValueError('Bad flag: 0x%02x' % flag)
+    if page_sequence != page_sequences.get(stream_id, 0):
+      raise ValueError('Bad page_sequence, expecting %d: %d' %
+                       (page_sequences.get(stream_id, 0), page_sequence))
+    if flag != 2:  # End of stream headers.
+      break
+    if segment_count != 1:
+      raise ValueError('Bad segment_count: %d' % segment_count)
+    if stream_id in packets:
+      raise ValueError('Multiple ogg first page.')
+    header = fread(1)
+    if not header:
+      raise ValueError('EOF in ogg segment_table.')
+    packet_size = ord(header)
+    if not 1 <= packet_size <= 254:
+      raise ValueError('Bad packet_size: %d' % packet_size)
+    data = fread(packet_size)
+    if len(data) < packet_size:
+      raise ValueError('EOF in ogg packet.')
+    packets[stream_id] = data
+    page_sequences[stream_id] = 1 + page_sequences.get(stream_id, 0)
+  info['tracks'] = []
+  for _, header in sorted(packets.iteritems()):
+    track_info = get_ogg_es_track_info(header)
+    if track_info is not None:
+      info['tracks'].append(track_info)
 
 
 # --- Windows
@@ -1561,7 +1634,7 @@ def analyze_asf(fread, info, fskip):
     info['format'] = 'asf'
 
 
-# --- flac
+# --- flac.
 
 
 def analyze_flac(fread, info, fskip, header=''):
@@ -4675,12 +4748,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
     ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 4, lambda header: (is_mp4(header), 26))),
     ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (is_mp4(header), 26))),
-    # TODO(pts): Get media parameters.
-    # https://en.wikipedia.org/wiki/Ogg#File_format
-    # https://xiph.org/ogg/doc/oggstream.html
-    # Can contain other codecs as well, each with codec-specific identification header.
-    # ... e.g. Dirac https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
-    ('ogg', (0, 'OggS')),
+    ('ogg', (0, 'OggS\0')),
     # Also 'wma' and 'wmv'.
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
     ('avi', (0, 'RIFF', 8, 'AVI ')),
@@ -5182,6 +5250,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mp4(fread, info, fskip)
   elif format == 'swf':
     analyze_swf(fread, info, fskip)
+  elif format == 'ogg':
+    analyze_ogg(fread, info, fskip)
   elif format == 'pnot':
     analyze_pnot(fread, info, fskip)
   elif format == 'ac3':

@@ -329,6 +329,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vorbis, '\x01vorbis\0\0\0\0\x01"V\0\0'),
                      {'format': 'vorbis', 'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 22050, 'sample_size': 16}]})
 
+  def test_analyze_ogg(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ogg, '4f67675300020000000000000000f6c8465100000000eb0c16bd012a807468656f72610302000014000f0001400000f000000000001e000000010000000000000100000065004f676753000200000000000000002c36d36d00000000dbc8fb60011e01766f72626973000000000122560000fffffffff0550000ffffffffaa01'.decode('hex')),
+                     {'format': 'ogg', 'tracks': [{'codec': 'theora', 'height': 240, 'type': 'video', 'width': 320}, {'channel_count': 1, 'codec': 'vorbis', 'sample_rate': 22050, 'sample_size': 16, 'type': 'audio'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ogg, '4f6767530002000000000000000063bb451200000000f480dc43011e01766f72626973000000000144ac0000000000008038010000000000b8014f6767530000000000000000000063bb45120100000087abaad202030461626364656667'.decode('hex')),
+                     {'format': 'ogg', 'tracks': [{'channel_count': 1, 'codec': 'vorbis', 'sample_rate': 44100, 'sample_size': 16, 'type': 'audio'}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
