@@ -5278,6 +5278,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ape(fread, info, fskip)
   elif format == 'vorbis':
     analyze_vorbis(fread, info, fskip)
+  elif format == 'oggpcm':
+    analyze_oggpcm(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
