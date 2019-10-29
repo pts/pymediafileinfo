@@ -1173,6 +1173,7 @@ def analyze_swf(fread, info, fskip):
 
 def get_ogg_es_track_info(header):
   """Returns track info dict or None if unknown."""
+  # --- xiph.org free codecs:
   if header.startswith('\x01vorbis\0\0\0\0'):
     return get_track_info_from_analyze_func(header, analyze_vorbis)
   elif header.startswith('\x80theora'):
@@ -1189,6 +1190,11 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_opus)
   elif header.startswith('Speex   1.'):
     return get_track_info_from_analyze_func(header, analyze_speex)
+  # --- Other possible codecs:
+  elif header.startswith('YUV4MPEG2 '):
+    track_info = get_track_info_from_analyze_func(header, analyze_yuv4mpeg2)
+    if track_info['codec'] == 'uncompressed':
+      track_info['subformat'] = 'yuv4mpeg2'
   else:
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
@@ -4406,6 +4412,55 @@ def analyze_daala(fread, info, fskip):
   set_video_dimens(info['tracks'][0], width, height)
 
 
+def analyze_yuv4mpeg2(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/YUV4MPEG2
+  # https://www.systutorials.com/docs/linux/man/5-yuv4mpeg/
+  header = fread(10)
+  if len(header) < 10:
+    raise ValueError('Too short for yuv4mpeg2.')
+  if header != 'YUV4MPEG2 ':
+    raise ValueError('yuv4mpeg2 signature not found.')
+  info['format'] = 'yuv4mpeg2'
+  info['tracks'] = [{'type': 'video', 'codec': 'uncompressed', 'subformat': 'yuv4mpeg2'}]
+  tags = {}
+  header = ''
+  while 1:
+    data = fread(max(len(header), 32))
+    if not data:
+      raise ValueError('EOF in yuv4mpeg2 tags.')
+    header += data
+    del data  # Save memory.
+    if '\n' in header:
+      break
+  header, data = header.split('\n', 1)
+  if len(data) < 6:
+    data += fread(6 - len(data))
+  if not data.startswith('FRAME') and data[5] in ' \n':
+    raise ValueError('Bad yuv4mpeg2 data frame.')
+  if header.startswith(' ') or header.endswith(' ') or '  ' in header:
+    raise ValueError('Bad yuv4mpeg2 header, contains too many spaces.')
+  for item in header.split(' '):
+    key, value = item[0], item[1:]
+    if key not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+      raise ValueError('Bad yuv4mpeg2 tag key: %r' % key)
+    if key in tags:
+      raise ValueError('Duplicate yuv4mpeg2 tag key: %r' % key)
+    if key in 'HW':
+      try:
+        value = int(value)
+      except ValueError:
+        value = -1
+      if value < 0:
+        raise ValueError('Bad yuv4mpeg2 tag %s value: %r' % (key, value))
+    tags[key] = value
+  if 'W' not in tags:
+    raise ValueError('Missing yuv4mpeg2 tag W.')
+  if 'H' not in tags:
+    raise ValueError('Missing yuv4mpeg2 tag H.')
+  info['tracks'][0]['colorspace'] = tags.get('C', '420jpeg')
+  set_video_dimens(info['tracks'][0], tags['W'], tags['H'])
+
+
 def count_is_jpegxr(header):
   if len(header) >= 8 and header.startswith('WMPHOTO\0'):
     return 800
@@ -4902,6 +4957,7 @@ FORMAT_ITEMS = (
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
+    ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
 
     # TODO(pts): Get width and height.
     ('mng', (0, '\212MNG\r\n\032\n')),
@@ -5311,6 +5367,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_theora(fread, info, fskip)
   elif format == 'daala':
     analyze_daala(fread, info, fskip)
+  elif format == 'yuv4mpeg2':
+    analyze_yuv4mpeg2(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
