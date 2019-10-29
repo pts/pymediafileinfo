@@ -1185,9 +1185,11 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_dirac)
   elif header.startswith('PCM     \0\0\0'):
     return get_track_info_from_analyze_func(header, analyze_oggpcm)
+  elif header.startswith('OpusHead'):
+    return get_track_info_from_analyze_func(header, analyze_opus)
   else:
     # TODO(pts): Add detection and get media parameters of other xiph.org
-    # free codecs: Speex, Opus.
+    # free codecs: Speex.
     #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
@@ -1771,6 +1773,26 @@ def analyze_oggpcm(fread, info, fskip):
     info['tracks'][0]['sample_size'] = bit_count
   else:
     info['tracks'][0]['sample_size'] = sample_size
+
+
+# --- opus.
+
+
+def analyze_opus(fread, info, fskip):
+  # https://tools.ietf.org/html/rfc7845.html
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for opus.')
+  signature, version, channel_count, pre_skip, sample_rate = struct.unpack(
+      '<8sBBHL', header)
+  if signature != 'OpusHead':
+    raise ValueError('opus signature not found.')
+  info['format'] = 'opus'
+  if not 1 <= version <= 15:
+    raise ValueError('Bad opus version: %d' % version)
+  info['tracks'] = [{'type': 'audio', 'codec': 'opus', 'sample_size': 16}]
+  set_channel_count(info['tracks'][0], 'opus', channel_count)
+  set_sample_rate(info['tracks'][0], 'opus', sample_rate)
 
 
 # --- H.264.
@@ -4931,6 +4953,7 @@ FORMAT_ITEMS = (
     ('ape', (0, 'MAC ')),
     ('vorbis', (0, '\x01vorbis\0\0\0\0', 11, tuple(chr(c) for c in xrange(1, 16)))),
     ('oggpcm', (0, 'PCM     \0\0\0')),
+    ('opus', (0, 'OpusHead', 8, tuple(chr(c) for c in xrange(1, 16)))),
 
     # Document media.
 
@@ -5311,6 +5334,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_vorbis(fread, info, fskip)
   elif format == 'oggpcm':
     analyze_oggpcm(fread, info, fskip)
+  elif format == 'opus':
+    analyze_opus(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
