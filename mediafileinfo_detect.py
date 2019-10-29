@@ -1173,6 +1173,9 @@ def analyze_swf(fread, info, fskip):
 
 def get_ogg_es_track_info(header):
   """Returns track info dict or None if unknown."""
+  # The .startswith(...) checks below must be mutually exclusive, so that
+  # the order of the `if's doesn't matter.
+
   # --- xiph.org free codecs:
   if header.startswith('\x01vorbis\0\0\0\0'):
     return get_track_info_from_analyze_func(header, analyze_vorbis)
@@ -1192,10 +1195,67 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_speex)
   # --- Other possible codecs:
   elif header.startswith('YUV4MPEG2 '):
-    track_info = get_track_info_from_analyze_func(header, analyze_yuv4mpeg2)
-    if track_info['codec'] == 'uncompressed':
-      track_info['subformat'] = 'yuv4mpeg2'
+    return get_track_info_from_analyze_func(header, analyze_yuv4mpeg2)
+  elif (header.startswith('\0\0\1\xb3') or
+        header.startswith('\0\0\1\xb5') or
+        (header.startswith('\0\0\1\xb0') and header[5 : 9] == '\0\0\1\xb5')):
+    return get_track_info_from_analyze_func(header, analyze_mpeg_video)
+  elif header.startswith('\xff\xd8\xff'):
+    track_info = {'type': 'video', 'codec': 'mjpeg'}
+    track_info['width'], track_info['height'] = get_jpeg_dimensions(
+        get_string_fread(header))
+    return track_info
+  elif header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0'):
+    return get_track_info_from_analyze_func(buffer(header, 12), analyze_mp4)
+  elif (header.startswith('\0\0\0\1\x09') or
+        header.startswith('\0\0\0\1\x27') or
+        header.startswith('\0\0\0\1\x47') or
+        header.startswith('\0\0\0\1\x67') or
+        header.startswith('\0\0\1\x09') or
+        header.startswith('\0\0\1\x27') or
+        header.startswith('\0\0\1\x47') or
+        header.startswith('\0\0\1\x67')):
+    return get_track_info_from_analyze_func(header, analyze_h264)
+  elif (header.startswith('\0\0\0\1\x46\1') or
+        header.startswith('\0\0\0\1\x40\1') or
+        header.startswith('\0\0\0\1\x42\1') or
+        header.startswith('\0\0\1\x46\1') or
+        header.startswith('\0\0\1\x40\1') or
+        header.startswith('\0\0\1\x42\1')):
+    return get_track_info_from_analyze_func(header, analyze_h265)
+  elif header.startswith('MAC '):
+    return get_track_info_from_analyze_func(header, analyze_ape)
+  elif header.startswith('\x0b\x77'):
+    # TODO(pts): Use get_ac3_track_info here and etc. elsewhere for speed.
+    return get_track_info_from_analyze_func(header, analyze_ac3)
+  elif (header.startswith('\x1f\xff\xe8\x00') or
+        header.startswith('\xff\x1f\x00\xe8') or
+        header.startswith('\x7f\xfe\x80\x01') or
+        header.startswith('\xfe\x7f\x01\x80')):
+    return get_track_info_from_analyze_func(header, analyze_dts)
+  elif (header.startswith('\xff\xe2') or
+        header.startswith('\xff\xe3') or
+        header.startswith('\xff\xf2') or
+        header.startswith('\xff\xf3') or
+        header.startswith('\xff\xf4') or
+        header.startswith('\xff\xf5') or
+        header.startswith('\xff\xf6') or
+        header.startswith('\xff\xf7') or
+        header.startswith('\xff\xfa') or
+        header.startswith('\xff\xfb') or
+        header.startswith('\xff\xfc') or
+        header.startswith('\xff\xfd') or
+        header.startswith('\xff\xfe') or
+        header.startswith('\xff\xff') or
+        header.startswith('\xff\xf0') or
+        header.startswith('\xff\xf1') or
+        header.startswith('\xff\xf8') or
+        header.startswith('\xff\xf9')):  # Includes mp3 and aac.
+    return get_track_info_from_analyze_func(header, analyze_mpeg_adts)
   else:
+    # We can't detect vcodec=vp8 here, because its 3-byte prefix can be
+    # anything.
+    #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
 
@@ -2348,7 +2408,7 @@ def get_dts_track_info(header):
     raise ValueError('Too short for dts.')
   if header.startswith('\x1f\xff\xe8\x00') and 4 <= ord(header[4]) <= 7:
     header = ''.join(yield_convert_uint14s_to_bytes(yield_uint14s(buffer(header, 0, 18))))
-  elif header[:4] == '\xff\x1f\x00\xe8' and 4 <= ord(header[5]) <= 7:
+  elif header.startswith('\xff\x1f\x00\xe8') and 4 <= ord(header[5]) <= 7:
     header = ''.join(yield_convert_uint14s_to_bytes(yield_uint14s(''.join(yield_swapped_bytes(buffer(header, 0, 18))))))
   elif header.startswith('\x7f\xfe\x80\x01'):
     pass
