@@ -1320,6 +1320,135 @@ def analyze_ogg(fread, info, fskip):
       info['tracks'].append(track_info)
 
 
+def is_mime_type(data):
+  i, size = 1, len(data)
+  if size == 0 or not data[0].isalpha():
+    return False
+  while i < size and (data[i].isalnum() or data[i] == '-'):
+    i += 1
+  if i + 1 >= size or data[i] != '/' or not data[i - 1].isalnum() or not data[i + 1].isalpha():
+    return False
+  i += 2
+  while i < size and (data[i].isalnum() or data[i] == '-'):
+    i += 1
+  if i != size or not data[i - 1].isalnum():
+    return False
+  return True
+
+
+def analyze_realmedia(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/RealMedia
+  # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp
+  # http://samples.mplayerhq.hu/real/
+  data = fread(8)
+  if len(data) < 8:
+    raise ValueError('Too short for realmedia.')
+  signature, chunk_size = struct.unpack('>4sL', data)
+  if signature != '.RMF':
+    raise ValueError('realmedia signature not found.')
+  if not 8 <= chunk_size <= 255:
+    raise ValueError('Bad realmedia rmf chunk size: %d' % chunk_size)
+  if not fskip(chunk_size - 8):
+    raise ValueError('EOF in realmedia rmf header.')
+  info['format'], info['tracks'] = 'realmedia', []
+  while 1:
+    data = fread(8)
+    if not data:
+      break
+    if len(data) < 8:
+      raise ValueError('EOF in realmedia chunk header')
+    chunk_type, chunk_size = struct.unpack('>4sL', data)
+    if chunk_type in ('RMMD', 'RJMD', 'RMJE') or chunk_type.startswith('TAG'):
+      # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L111
+      # These don't seem to be present in sample files.
+      raise ValueError('Irregular realmedia chunk %r size.' % chunk_type)
+    if chunk_size < 8:
+      raise ValueError('Bad realmedia chunk %r size: %d' % (chunk_type, chunk_size))
+    # * signature == '.RMF' contains file version info.
+    # * chunk_type == 'CONT' contains title and performer.
+    # * chunk_type == 'DATA' contains all audio and video data in packets.
+    # * chunk_type == 'INDX' contains (timestamp, file_offset) pairs, for
+    #    seeking.
+    # * chunk_type == 'MDPR' contains media properties (including codec, video
+    #   height, audio sampling rate), one MDPR per track.
+    if chunk_type in ('DATA', 'INDX'):
+      break
+    if chunk_type != 'MDPR':
+      if not fskip(chunk_size - 8):
+        raise ValueError('EOF in realmedia chunk %r.' % chunk_type)
+      continue
+    if chunk_size > 8192:
+      raise ValueError('realmedia chunk %r too long.' % chunk_type)
+    data = fread(chunk_size - 8)
+    if len(data) != chunk_size - 8:
+      raise ValueError('EOF in realmedia chunk %r.' % chunk_type)
+    #print (chunk_type, data)
+    i = 32
+    if i >= len(data):
+      raise ValueError('realmedia mdpr too short for stream_name_size.')
+    if not data.startswith('\0\0'):
+      raise ValueError('Bad realmedia mdpr chunk_version.')
+    stream_name_size = ord(data[i])
+    i += 1
+    if i + stream_name_size > len(data):
+      raise ValueError('realmedia mdpr too short for stream_name.')
+    stream_name = data[i : i + stream_name_size]
+    i += stream_name_size
+    if i >= len(data):
+      raise ValueError('realmedia mdpr too short for mime_type_size.')
+    mime_type_size = ord(data[i])
+    i += 1
+    if i + mime_type_size > len(data):
+      raise ValueError('realmedia mdpr too short for mime_type.')
+    mime_type = data[i : i + mime_type_size]
+    i += mime_type_size
+    if i + 4 > len(data):
+      raise ValueError('realmedia mdpr too short for codec_data_size.')
+    codec_data_size, = struct.unpack('>L', buffer(data, i, 4))
+    i += 4
+    if i + codec_data_size > len(data):
+      raise ValueError('realmedia mdpr too short for codec_data.')
+    if i + codec_data_size < len(data):
+      raise ValueError('Extra data after realmedia mdpr codec_data.')
+    if mime_type == 'logical-fileinfo':
+      pass  # With invalid mime type (not is_mime_type(mime_type)).
+    elif mime_type == 'logical-audio/x-pn-multirate-realaudio':
+      # Multiple audio streams.
+      info['tracks'].append({'type': 'audio', 'codec': 'multirate-realaudio'})
+    elif mime_type in ('audio/x-pn-realaudio',
+                       'audio/x-pn-multirate-realaudio',
+                       'audio/x-pn-realaudio-encrypted'):
+      info['tracks'].append(get_realaudio_track_info(buffer(data, i)))
+    elif mime_type == 'logical-video/x-pn-multirate-realvideo':
+      # Multiple video streams.
+      info['tracks'].append({'type': 'audio', 'codec': 'multirate-realvideo'})
+    elif mime_type in ('video/x-pn-realvideo',
+                       'video/x-pn-multirate-realvideo',
+                       'video/x-pn-realvideo-encrypted'):
+      if i + 4 > len(data):
+        raise ValueError('realmedia mdpr too short for codec_data_size2.')
+      codec_data_size2, = struct.unpack('>L', buffer(data, i, 4))
+      i += 4
+      if codec_data_size != codec_data_size:
+        raise ValueError('Bad realmedia mdpr codec_data_size2.')
+      codec_data_size -= 4
+      info['tracks'].append(get_realvideo_track_info(buffer(data, i)))
+    elif mime_type == 'audio/X-MP3-draft-00':
+      # codec_data was empty.
+      # TODO(pts): Extract first few audio frames from chunk_type == 'DATA'
+      # in MP3 ADU frame format (https://tools.ietf.org/html/rfc3119).
+      info['tracks'].append({'type': 'audio', 'codec': 'mp3'})
+    elif mime_type in ('audio/x-ralf-mpeg4',
+                       'audio/x-ralf-mpeg4-generic'):
+      info['tracks'].append(get_ralf_track_info(buffer(data, i)))
+    else:
+      if not is_mime_type(mime_type):
+        raise ValueError('Bad realmedia mdpr mime_type: %r' % mime_type)
+      # Other mime-type found: application/x-pn-imagemap
+      # Other mime-type found: logical-application/x-pn-multirate-imagemap
+      # Other mime-type found: application/x-pn-multirate-imagemap
+
+
 # --- Windows
 
 # See some on: http://www.fourcc.org/
@@ -1901,38 +2030,79 @@ def analyze_speex(fread, info, fskip):
 # --- RealAudio ra.
 
 
-def analyze_realaudio(fread, info, fskip):
+def get_realaudio_track_info(header):
   # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L450
+  # http://samples.mplayerhq.hu/real/
+  # https://wiki.multimedia.cx/index.php/RealMedia
+  if len(header) < 6:
+    raise ValueError('Too short for realaudio.')
+  signature, version = struct.unpack('>4sH', buffer(header, 0, 6))
+  if signature != '.ra\xfd':
+    raise ValueError('realaudio signature not found.')
+  if version not in (3, 4, 5):
+    raise ValueError('Bad realaudio version: %d' % version)
+  size = (0, 0, 0, 10, 56, 62)[version]
+  if len(header) < size:
+    raise ValueError('EOF in realaudio header.')
+  audio_track_info = {
+      'type': 'audio', 'codec': 'realaudio', 'subformat': 'ra%d' % version}
+  # TODO(pts): Get the fourcc codec value.
+  if version == 3:
+    sample_rate, sample_size = 8000, 16
+    channel_count, = struct.unpack('>H', buffer(header, 8, 2))
+  else:
+    sample_rate, sample_size, channel_count = struct.unpack(
+        '>H2xHH', buffer(header, 48 + 6 * (version == 5), 8))
+  set_channel_count(audio_track_info, 'realaudio', channel_count)
+  set_sample_rate(audio_track_info, 'realaudio', sample_rate)
+  set_sample_size(audio_track_info, 'realaudio', sample_size)
+  return audio_track_info
+
+
+def analyze_realaudio(fread, info, fskip):
   header = fread(6)
   if len(header) < 6:
-    raise ValueError('Too short for ra.')
+    raise ValueError('Too short for realaudio.')
   signature, version = struct.unpack('>4sH', header)
   if signature != '.ra\xfd':
     raise ValueError('realaudio signature not found.')
   info['format'] = 'realaudio'
-  if version not in (3, 4, 5):
-    raise ValueError('Bad realaudio version: %d' % version)
-  info['tracks'] = [{
-      'type': 'audio', 'codec': 'realaudio', 'subformat': 'ra%d' % version}]
-  if version == 3:
-    sample_rate, sample_size = 8000, 16
-    if not fskip(2):
-      raise ValueError('EOF in realaudio ra3 header_size.')
-    data = fread(2)
-    if len(data) < 2:
-      raise ValueError('EOF in realaudio ra3 channel_count.')
-    channel_count, = struct.unpack('>H', data)
-  else:
-    if not fskip(42 + 6 * (version == 5)):
-      raise ValueError('EOF in realaudio ra34 audio header.')
-    data = fread(8)
-    if len(data) < 8:
-      raise ValueError('EOF in realaudio ra34 audio parameters.')
-    sample_rate, sample_size, channel_count = struct.unpack(
-        '>H2xHH', data)
-  set_channel_count(info['tracks'][0], 'realaudio', channel_count)
-  set_sample_rate(info['tracks'][0], 'realaudio', sample_rate)
-  set_sample_size(info['tracks'][0], 'realaudio', sample_size)
+  size = (0, 0, 0, 4, 50, 56)[min(version, 5)]
+  data = fread(size)
+  if len(data) < size:
+    raise ValueError('EOF in realaudio header.')
+  header += data
+  info['tracks'] = [get_realaudio_track_info(header)]
+
+
+# --- RealAudio lossless ralf.
+
+
+def get_ralf_track_info(header):
+  if len(header) < 16:
+    raise ValueError('Too short for ralf.')
+  signature, version, version2, channel_count, sample_size, sample_rate = struct.unpack(
+      '>4sBB2xHHL', buffer(header, 0, 16))
+  if signature != 'LSD:':
+    raise ValueError('ralf signature not found.')
+  if version not in (1, 2, 3):
+    raise ValueError('Bad ralf version: %d' % version)
+  audio_track_info = {'type': 'audio', 'codec': 'ralf'}
+  set_channel_count(audio_track_info, 'ralf', channel_count)
+  set_sample_rate(audio_track_info, 'ralf', sample_rate)
+  set_sample_size(audio_track_info, 'ralf', sample_size)
+  return audio_track_info
+
+
+def analyze_ralf(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/Real_Lossless_Codec
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for ralf.')
+  if not header.startswith('LSD:'):
+    raise ValueError('ralf signature not found.')
+  info['format'] = 'ralf'
+  info['tracks'] = [get_ralf_track_info(header)]
 
 
 # --- H.264.
@@ -4566,6 +4736,50 @@ def analyze_yuv4mpeg2(fread, info, fskip):
   set_video_dimens(info['tracks'][0], tags['W'], tags['H'])
 
 
+# https://en.wikipedia.org/wiki/RealVideo
+REALVIDEO_CODECS = {
+  'CLV1': 'clearvideo',
+  'RV10': 'h263-rv10',
+  'RV13': 'h263-rv13',
+  'RV20': 'h263+-rv20',
+  'RVTR': 'h263+-rvtr',
+  'RV30': 'h264-rv30',
+  'RVTR': 'h264-rvt2',
+  'RV40': 'h264-rv40',
+  'RV60': 'h265-rv60',
+}
+
+
+def get_realvideo_track_info(header):
+  # https://en.wikipedia.org/wiki/RealVideo
+  # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L414
+  if header[:3] == '\0\0\0':
+    header = buffer(header, 4)
+  if len(header) < 12:
+    raise ValueError('Too short for realvideo.')
+  signature, codec, width, height = struct.unpack('>4s4sHH', buffer(header, 0, 12))
+  if signature != 'VIDO':
+    raise ValueError('realvideo signature not found.')
+  if not ((codec.startswith('RV') and codec[2] in '123456789T' and codec[3].isalnum()) or codec == 'CLV1'):
+    raise ValueError('Bad realvideo codec: %r' % codec)
+  video_track_info = {'type': 'video', 'codec': REALVIDEO_CODECS.get(codec, codec.lower())}
+  set_video_dimens(video_track_info, width, height)
+  return video_track_info
+
+
+def analyze_realvideo(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/RealVideo
+  # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L414
+  header = fread(4)
+  if header.startswith('\0\0\0') and ord(header[3]) >= 32:
+    header = fread(12)
+  else:
+    header += fread(8)
+  if header.startswith('VIDO') and len(header) >= 12:
+    info['format'] = 'realvideo'
+  info['tracks'] = [get_realvideo_track_info(header)]
+
+
 def count_is_jpegxr(header):
   if len(header) >= 8 and header.startswith('WMPHOTO\0'):
     return 800
@@ -5063,6 +5277,8 @@ FORMAT_ITEMS = (
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
+    ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
+    ('realvideo-size', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
 
     # TODO(pts): Get width and height.
     ('mng', (0, '\212MNG\r\n\032\n')),
@@ -5146,6 +5362,7 @@ FORMAT_ITEMS = (
     ('opus', (0, 'OpusHead', 8, tuple(chr(c) for c in xrange(1, 16)))),
     ('speex', (0, 'Speex   1.')),
     ('realaudio', (0, '.ra\xfd')),
+    ('ralf', (0, 'LSD:', 4, ('\1', '\2', '\3'))),
 
     # Document media.
 
@@ -5475,6 +5692,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_daala(fread, info, fskip)
   elif format == 'yuv4mpeg2':
     analyze_yuv4mpeg2(fread, info, fskip)
+  elif format in ('realvideo', 'realvideo-size'):
+    analyze_realvideo(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
   elif format == 'gif':
@@ -5534,6 +5753,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_speex(fread, info, fskip)
   elif format == 'realaudio':
     analyze_realaudio(fread, info, fskip)
+  elif format == 'ralf':
+    analyze_ralf(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
@@ -5551,6 +5772,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_swf(fread, info, fskip)
   elif format == 'ogg':
     analyze_ogg(fread, info, fskip)
+  elif format == 'realmedia':
+    analyze_realmedia(fread, info, fskip)
   elif format == 'pnot':
     analyze_pnot(fread, info, fskip)
   elif format == 'ac3':
