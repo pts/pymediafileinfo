@@ -16,6 +16,18 @@ def set_video_dimens(video_track_info, width, height):
       raise ValueError('Unreasonable height: %d' % height)
 
 
+def set_channel_count(audio_track_info, codec, channel_count):
+  if not 1 <= channel_count <= 15:
+    raise ValueError('Unreasonable %s channel_count: %d' % (codec, channel_count))
+  audio_track_info['channel_count'] = channel_count
+
+
+def set_sample_rate(audio_track_info, codec, sample_rate):
+  if not 1000 <= sample_rate <= 1000000:
+    raise ValueError('Unreasonable %s sample_rate: %d' % (codec, sample_rate))
+  audio_track_info['sample_rate'] = sample_rate
+
+
 # --- flv
 
 
@@ -1721,12 +1733,8 @@ def analyze_vorbis(fread, info, fskip):
     raise ValueError('Bad vorbis version: %d' % version)
   info['format'] = 'vorbis'
   info['tracks'] = [{'type': 'audio', 'codec': 'vorbis', 'sample_size': 16}]
-  if not 1 <= channel_count <= 15:
-    raise ValueError('Bad vorbis channel_count: %d' % channel_count)
-  if not 1000 <= sample_rate <= 1000000:
-    raise ValueError('Bad vorbis sample_rate: %d' % sample_rate)
-  info['tracks'][0]['channel_count'] = channel_count
-  info['tracks'][0]['sample_rate'] = sample_rate
+  set_channel_count(info['tracks'][0], 'vorbis', channel_count)
+  set_sample_rate(info['tracks'][0], 'vorbis', sample_rate)
 
 
 # --- oggpcm.
@@ -1747,12 +1755,8 @@ def analyze_oggpcm(fread, info, fskip):
     raise ValueError('Bad oggpcm minor_version: %d' % minor_version)
   info['format'] = 'oggpcm'
   info['tracks'] = [{'type': 'audio', 'codec': 'oggpcm'}]
-  if not 1 <= channel_count <= 15:
-    raise ValueError('Bad oggpcm channel_count: %d' % channel_count)
-  if not 1000 <= sample_rate <= 1000000:
-    raise ValueError('Bad oggpcm sample_rate: %d' % sample_rate)
-  info['tracks'][0]['channel_count'] = channel_count
-  info['tracks'][0]['sample_rate'] = sample_rate
+  set_channel_count(info['tracks'][0], 'oggpcm', channel_count)
+  set_sample_rate(info['tracks'][0], 'oggpcm', sample_rate)
   if pcm_format < 8:
     info['tracks'][0]['codec'], sample_size = 'pcm', ((pcm_format >> 1) + 1) << 3
   elif pcm_format == 0x10:
