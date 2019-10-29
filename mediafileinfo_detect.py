@@ -1259,7 +1259,12 @@ def get_ogg_es_track_info(header):
         header.startswith('\xff\xf9')):  # Includes mp3 and aac.
     return get_track_info_from_analyze_func(header, analyze_mpeg_adts)
   elif header.startswith('.ra\xfd'):
-    return get_track_info_from_analyze_func(header, analyze_realaudio)
+    return get_realaudio_track_info(header)
+  elif (header.startswith('VIDORV') or
+        header.startswith('VIDOCLV1')):
+    return get_realvideo_track_info(header)
+  elif header.startswith('LSD:'):
+    return get_ralf_track_info(header)
   else:
     # We can't detect vcodec=vp8 here, because its 3-byte prefix can be
     # anything.
@@ -2115,6 +2120,7 @@ def get_ralf_track_info(header):
 
 
 def analyze_ralf(fread, info, fskip):
+  # RealAudio lossless.
   # https://wiki.multimedia.cx/index.php/Real_Lossless_Codec
   header = fread(16)
   if len(header) < 16:
