@@ -325,12 +325,12 @@ MKV_CODEC_IDS = {
     'A_VORBIS': 'vorbis',
     'A_FLAC': 'flac',
     #'A_REAL/$(TYPE)',
-    'A_REAL/14_4': 'ra1',
-    'A_REAL/28_8': 'ra2',
+    'A_REAL/14_4': 'vslp-ra1',
+    'A_REAL/28_8': 'ld-celp-ra2',
     'A_REAL/COOK': 'cook',
     'A_REAL/SIPR': 'sipro',
-    'A_REAL/RALF': 'ra-lossless',
-    'A_REAL/ATRC': 'altrac3',
+    'A_REAL/RALF': 'ralf',
+    'A_REAL/ATRC': 'atrac3',
     'A_MS/ACM': 'acm',
     #'A_AAC/$(TYPE)/$(SUBTYPE)',
     'A_AAC': 'aac',
@@ -2029,6 +2029,23 @@ def analyze_speex(fread, info, fskip):
 
 # --- RealAudio ra.
 
+REALAUDIO_CODECS = {
+    'lpcJ': 'vslp-ra1',
+    '14_4': 'vslp-ra1',
+    '28_8': 'ld-celp-ra2',
+    'dnet': 'ac3',
+    'sipr': 'sipro',
+    'cook': 'cook',
+    'atrc': 'atrac3',
+    'ralf': 'ralf',
+    'raac': 'aac',
+    'racp': 'aac-he',
+}
+
+
+def is_fourcc(data):
+  return len(data) == 4 and not sum(not (c.isalnum() or c == '_') for c in data.rstrip(' '))
+
 
 def get_realaudio_track_info(header):
   # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L450
@@ -2041,18 +2058,21 @@ def get_realaudio_track_info(header):
     raise ValueError('realaudio signature not found.')
   if version not in (3, 4, 5):
     raise ValueError('Bad realaudio version: %d' % version)
-  size = (0, 0, 0, 10, 56, 62)[version]
+  size = (0, 0, 0, 10, 66, 70)[version]
   if len(header) < size:
     raise ValueError('EOF in realaudio header.')
-  audio_track_info = {
-      'type': 'audio', 'codec': 'realaudio', 'subformat': 'ra%d' % version}
+  audio_track_info = {'type': 'audio', 'subformat': 'ra%d' % version}
   # TODO(pts): Get the fourcc codec value.
   if version == 3:
-    sample_rate, sample_size = 8000, 16
+    sample_rate, sample_size, fourcc = 8000, 16, 'lpcJ'
     channel_count, = struct.unpack('>H', buffer(header, 8, 2))
   else:
     sample_rate, sample_size, channel_count = struct.unpack(
         '>H2xHH', buffer(header, 48 + 6 * (version == 5), 8))
+    fourcc = buffer(header, 62 + 4 * (version == 5), 4)[:]
+  if not is_fourcc(fourcc):
+    raise ValueError('Bad realaudio fourcc: %r' % fourcc)
+  audio_track_info['codec'] = REALAUDIO_CODECS.get(fourcc, fourcc)
   set_channel_count(audio_track_info, 'realaudio', channel_count)
   set_sample_rate(audio_track_info, 'realaudio', sample_rate)
   set_sample_size(audio_track_info, 'realaudio', sample_size)
@@ -2067,7 +2087,7 @@ def analyze_realaudio(fread, info, fskip):
   if signature != '.ra\xfd':
     raise ValueError('realaudio signature not found.')
   info['format'] = 'realaudio'
-  size = (0, 0, 0, 4, 50, 56)[min(version, 5)]
+  size = (0, 0, 0, 4, 60, 64)[min(version, 5)]
   data = fread(size)
   if len(data) < size:
     raise ValueError('EOF in realaudio header.')

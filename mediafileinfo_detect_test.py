@@ -359,11 +359,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_realaudio(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\3\0\x3a\0\1'),
-                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra3'}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x04\0\x00.ra4\0\1\x16\x1c\0\x04\0\0\x009\0\x02\0\0\x00&\0\1\x15\xe0\0\1\xbdP\0\1\xbdP\0\x0c\0\xe4\0\0\0\0\x1f@\0\0\0\x10\0\1'),
-                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra4'}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x05\0\x00.ra5\0\0\0\0\0\x05\0\0\x00F\0\x08\0\0\x01 \0\0\x1b\0\0\0\xaf\xc8\0\0\xaf\xc8\0\x06\x01 \0\x18\0\0\0\0\x1f@\0\0\x1f@\0\0\0\x10\0\1'),
-                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra5'}]})
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'vslp-ra1', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra3'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x04\0\x00.ra4\0\1\x16\x1c\0\x04\0\0\x009\0\x02\0\0\x00&\0\1\x15\xe0\0\1\xbdP\0\1\xbdP\0\x0c\0\xe4\0\0\0\0\x1f@\0\0\0\x10\0\1\x04Int4\x0428_8'),
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'ld-celp-ra2', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra4'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x05\0\x00.ra5\0\0\0\0\0\x05\0\0\x00F\0\x08\0\0\x01 \0\0\x1b\0\0\0\xaf\xc8\0\0\xaf\xc8\0\x06\x01 \0\x18\0\0\0\0\x1f@\0\0\x1f@\0\0\0\x10\0\x01genrcook'),
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'cook', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra5'}]})
 
   def test_analyze_realvideo(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realvideo, '\0\0\0\x20VIDORV20\0\xb0\x00p'),
@@ -378,7 +378,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_realmedia(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realmedia, '2e524d46000000120000000000000000000650524f5000000032000000036ee700036ee7000003fe0000031b00019b90002b939e00000e8204d85593000001a700020000434f4e5400000043000000205469636b6c652048656c6c204d6f766965206f6620546865205765656b206200000c5469636b6c652048656c6c000005a93230303400004d445052000000ac000000000000ac440000ac4400000280000002800000000000000e82002b94580c417564696f2053747265616d14617564696f2f782d706e2d7265616c617564696f0000005e2e7261fd000500002e726135660561c700050000004e0016000002800127f00000050bfe00050bfe00100280008000000000ac440000ac4400000010000267656e72636f6f6b0102000000000010010000030800002000000000000500054d44505200000074000000010002c2a30002c2a3000003fe0000031b0000000000000c33002b93ad0c566964656f2053747265616d14766964656f2f782d706e2d7265616c766964656f00000026000000265649444f52563330014000f0000c00000000001df854010a9030302020023c2c2820444154410542480b'.decode('hex')),
                      {'format': 'realmedia',
-                      'tracks': [{'channel_count': 2, 'codec': 'realaudio', 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'ra5', 'type': 'audio'},
+                      'tracks': [{'channel_count': 2, 'codec': 'cook', 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'ra5', 'type': 'audio'},
                                  {'codec': 'h264-rv30', 'height': 240, 'type': 'video', 'width': 320}]})
 
 
