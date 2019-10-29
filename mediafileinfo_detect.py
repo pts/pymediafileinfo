@@ -1175,7 +1175,7 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_oggpcm)
   else:
     # TODO(pts): Add detection and get media parameters of other xiph.org
-    # free codecs: Speex, Opus, Tarkin.
+    # free codecs: Speex, Opus.
     #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
