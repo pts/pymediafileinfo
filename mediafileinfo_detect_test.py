@@ -343,6 +343,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_opus, 'OpusHead\1\x02d\x01D\xac\0\0'),
                      {'format': 'opus', 'tracks': [{'type': 'audio', 'codec': 'opus', 'channel_count': 2, 'sample_rate': 44100, 'sample_size': 16}]})
 
+  def test_analyze_speex(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_speex, 'Speex   1.0.4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\0\0\x00P\0\0\0\x80\xbb\0\0\x02\0\0\0\x04\0\0\0\1\0\0\0'),
+                     {'format': 'speex', 'tracks': [{'type': 'audio', 'codec': 'speex', 'channel_count': 1, 'sample_rate': 48000, 'sample_size': 16}]})
+
   def test_analyze_ogg(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ogg, '4f67675300020000000000000000f6c8465100000000eb0c16bd012a807468656f72610302000014000f0001400000f000000000001e000000010000000000000100000065004f676753000200000000000000002c36d36d00000000dbc8fb60011e01766f72626973000000000122560000fffffffff0550000ffffffffaa01'.decode('hex')),
                      {'format': 'ogg', 'tracks': [{'codec': 'theora', 'height': 240, 'type': 'video', 'width': 320}, {'channel_count': 1, 'codec': 'vorbis', 'sample_rate': 22050, 'sample_size': 16, 'type': 'audio'}]})

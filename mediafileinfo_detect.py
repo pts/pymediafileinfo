@@ -1187,10 +1187,9 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_oggpcm)
   elif header.startswith('OpusHead'):
     return get_track_info_from_analyze_func(header, analyze_opus)
+  elif header.startswith('Speex   1.'):
+    return get_track_info_from_analyze_func(header, analyze_speex)
   else:
-    # TODO(pts): Add detection and get media parameters of other xiph.org
-    # free codecs: Speex.
-    #
     # TODO(pts): Add detection of many other codecs with a known prefix.
     return None
 
@@ -1793,6 +1792,36 @@ def analyze_opus(fread, info, fskip):
   info['tracks'] = [{'type': 'audio', 'codec': 'opus', 'sample_size': 16}]
   set_channel_count(info['tracks'][0], 'opus', channel_count)
   set_sample_rate(info['tracks'][0], 'opus', sample_rate)
+
+
+# --- speex.
+
+
+def analyze_speex(fread, info, fskip):
+  # Based on speex-1.2.0/include/speex/speex_header.h in
+  # http://downloads.us.xiph.org/releases/speex/speex-1.2.0.tar.gz
+  header = fread(52)
+  if len(header) < 52:
+    raise ValueError('Too short for speex.')
+  signature, version_str, version, header_size, sample_rate, mode, mode_bitstream_version, channel_count = struct.unpack(
+      '<8s20sLLLLLL', header)
+  if signature != 'Speex   ':
+    raise ValueError('speex signature not found.')
+  info['format'] = 'speex'
+  version_str = version_str.rstrip('\0')
+  if not version_str.startswith('1.'):
+    raise ValueError('Bad speex version_str: %r' % version_str)
+  if version != 1:
+    raise ValueError('Bad speex version: %d' % version)
+  if not 80 <= header_size <= 255:  # 80 is found on the wire.
+    raise ValueError('Bad speex header_size: %d' % header_size)
+  if mode > 7:  # 0, 1 and 2 are found on the wire.
+    raise ValueError('Bad speex mode: %d' % mode)
+  if mode_bitstream_version > 255:  # 4 is found on the wire.
+    raise ValueError('Bad speex mode_bitstream_version: %d' % mode_bitstream_version)
+  info['tracks'] = [{'type': 'audio', 'codec': 'speex', 'sample_size': 16}]
+  set_channel_count(info['tracks'][0], 'speex', channel_count)
+  set_sample_rate(info['tracks'][0], 'speex', sample_rate)
 
 
 # --- H.264.
@@ -4954,6 +4983,7 @@ FORMAT_ITEMS = (
     ('vorbis', (0, '\x01vorbis\0\0\0\0', 11, tuple(chr(c) for c in xrange(1, 16)))),
     ('oggpcm', (0, 'PCM     \0\0\0')),
     ('opus', (0, 'OpusHead', 8, tuple(chr(c) for c in xrange(1, 16)))),
+    ('speex', (0, 'Speex   1.')),
 
     # Document media.
 
@@ -5336,6 +5366,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_oggpcm(fread, info, fskip)
   elif format == 'opus':
     analyze_opus(fread, info, fskip)
+  elif format == 'speex':
+    analyze_speex(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)
