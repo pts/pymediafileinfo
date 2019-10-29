@@ -1259,7 +1259,7 @@ def get_ogg_es_track_info(header):
         header.startswith('\xff\xf9')):  # Includes mp3 and aac.
     return get_track_info_from_analyze_func(header, analyze_mpeg_adts)
   elif header.startswith('.ra\xfd'):
-    return get_track_info_from_analyze_func(header, analyze_ra)
+    return get_track_info_from_analyze_func(header, analyze_realaudio)
   else:
     # We can't detect vcodec=vp8 here, because its 3-byte prefix can be
     # anything.
@@ -1901,38 +1901,38 @@ def analyze_speex(fread, info, fskip):
 # --- RealAudio ra.
 
 
-def analyze_ra(fread, info, fskip):
+def analyze_realaudio(fread, info, fskip):
   # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp#L450
   header = fread(6)
   if len(header) < 6:
     raise ValueError('Too short for ra.')
   signature, version = struct.unpack('>4sH', header)
   if signature != '.ra\xfd':
-    raise ValueError('ra signature not found.')
-  info['format'] = 'ra'
+    raise ValueError('realaudio signature not found.')
+  info['format'] = 'realaudio'
   if version not in (3, 4, 5):
-    raise ValueError('Bad ra version: %d' % version)
+    raise ValueError('Bad realaudio version: %d' % version)
   info['tracks'] = [{
-      'type': 'audio', 'codec': 'ra', 'subformat': 'ra%d' % version}]
+      'type': 'audio', 'codec': 'realaudio', 'subformat': 'ra%d' % version}]
   if version == 3:
     sample_rate, sample_size = 8000, 16
     if not fskip(2):
-      raise ValueError('EOF in ra3 header_size.')
+      raise ValueError('EOF in realaudio ra3 header_size.')
     data = fread(2)
     if len(data) < 2:
-      raise ValueError('EOF in ra3 channel_count.')
+      raise ValueError('EOF in realaudio ra3 channel_count.')
     channel_count, = struct.unpack('>H', data)
   else:
     if not fskip(42 + 6 * (version == 5)):
-      raise ValueError('EOF in ra34 audio header.')
+      raise ValueError('EOF in realaudio ra34 audio header.')
     data = fread(8)
     if len(data) < 8:
-      raise ValueError('EOF in ra34 audio parameters.')
+      raise ValueError('EOF in realaudio ra34 audio parameters.')
     sample_rate, sample_size, channel_count = struct.unpack(
         '>H2xHH', data)
-  set_channel_count(info['tracks'][0], 'ra', channel_count)
-  set_sample_rate(info['tracks'][0], 'ra', sample_rate)
-  set_sample_size(info['tracks'][0], 'ra', sample_size)
+  set_channel_count(info['tracks'][0], 'realaudio', channel_count)
+  set_sample_rate(info['tracks'][0], 'realaudio', sample_rate)
+  set_sample_size(info['tracks'][0], 'realaudio', sample_size)
 
 
 # --- H.264.
@@ -5039,7 +5039,7 @@ FORMAT_ITEMS = (
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
-    ('rm', (0, '.RMF\0\0\0')),
+    ('realmedia', (0, '.RMF\0\0\0')),
     # .bup and .ifo files on a video DVD.
     ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
     # DIF DV (digital video).
@@ -5145,7 +5145,7 @@ FORMAT_ITEMS = (
     ('oggpcm', (0, 'PCM     \0\0\0')),
     ('opus', (0, 'OpusHead', 8, tuple(chr(c) for c in xrange(1, 16)))),
     ('speex', (0, 'Speex   1.')),
-    ('ra', (0, '.ra\xfd')),
+    ('realaudio', (0, '.ra\xfd')),
 
     # Document media.
 
@@ -5532,8 +5532,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_opus(fread, info, fskip)
   elif format == 'speex':
     analyze_speex(fread, info, fskip)
-  elif format == 'ra':
-    analyze_ra(fread, info, fskip)
+  elif format == 'realaudio':
+    analyze_realaudio(fread, info, fskip)
   elif format == 'brn':
     info['codec'] = 'brn'
     info['width'], info['height'] = get_brn_dimensions(fread)

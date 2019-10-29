@@ -357,13 +357,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_yuv4mpeg2, 'YUV4MPEG2 W384 H288 F25:1 Ip A0:0\nFRAME\n'),
                      {'format': 'yuv4mpeg2', 'tracks': [{'type': 'video', 'codec': 'uncompressed', 'width': 384, 'height': 288, 'colorspace': '420jpeg', 'subformat': 'yuv4mpeg2'}]})
 
-  def test_analyze_ra(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ra, '.ra\xfd\0\3\0\x3a\0\1'),
-                     {'format': 'ra', 'tracks': [{'type': 'audio', 'codec': 'ra', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra3'}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ra, '.ra\xfd\0\x04\0\x00.ra4\0\1\x16\x1c\0\x04\0\0\x009\0\x02\0\0\x00&\0\1\x15\xe0\0\1\xbdP\0\1\xbdP\0\x0c\0\xe4\0\0\0\0\x1f@\0\0\0\x10\0\1'),
-                     {'format': 'ra', 'tracks': [{'type': 'audio', 'codec': 'ra', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra4'}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ra, '.ra\xfd\0\x05\0\x00.ra5\0\0\0\0\0\x05\0\0\x00F\0\x08\0\0\x01 \0\0\x1b\0\0\0\xaf\xc8\0\0\xaf\xc8\0\x06\x01 \0\x18\0\0\0\0\x1f@\0\0\x1f@\0\0\0\x10\0\1'),
-                     {'format': 'ra', 'tracks': [{'type': 'audio', 'codec': 'ra', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra5'}]})
+  def test_analyze_realaudio(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\3\0\x3a\0\1'),
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra3'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x04\0\x00.ra4\0\1\x16\x1c\0\x04\0\0\x009\0\x02\0\0\x00&\0\1\x15\xe0\0\1\xbdP\0\1\xbdP\0\x0c\0\xe4\0\0\0\0\x1f@\0\0\0\x10\0\1'),
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra4'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_realaudio, '.ra\xfd\0\x05\0\x00.ra5\0\0\0\0\0\x05\0\0\x00F\0\x08\0\0\x01 \0\0\x1b\0\0\0\xaf\xc8\0\0\xaf\xc8\0\x06\x01 \0\x18\0\0\0\0\x1f@\0\0\x1f@\0\0\0\x10\0\1'),
+                     {'format': 'realaudio', 'tracks': [{'type': 'audio', 'codec': 'realaudio', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 16, 'subformat': 'ra5'}]})
 
 
 if __name__ == '__main__':
