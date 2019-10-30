@@ -4177,6 +4177,20 @@ def analyze_flic(fread, info, fskip):
   set_video_dimens(video_track_info, width, height)
 
 
+def analyze_mng(fread, info, fskip):
+  # http://www.libpng.org/pub/mng/spec/
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for mng.')
+  if not header.startswith('\212MNG\r\n\032\n\0\0\0'):
+    raise ValueError('mng signature not found.')
+  info['format'] = 'mng'
+  info['tracks'] = [{'codec': 'jpeg+png'}]
+  if header[12 : 16] == 'MHDR':
+    width, height = struct.unpack('>LL', header[16 : 24])
+    set_video_dimens(info['tracks'][0], width, height)
+
+
 def analyze_png(fread, info, fskip):
   # https://tools.ietf.org/html/rfc2083
   header = fread(24)
@@ -5326,7 +5340,6 @@ FORMAT_ITEMS = (
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
     ('realvideo-size', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
 
-    # TODO(pts): Get width and height.
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -5841,6 +5854,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_bmp(fread, info, fskip)
   elif format == 'flic':
     analyze_flic(fread, info, fskip)
+  elif format == 'mng':
+    analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
 
