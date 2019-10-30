@@ -4178,10 +4178,12 @@ def analyze_flic(fread, info, fskip):
 
 
 def analyze_png(fread, info, fskip):
-  # This function doesn't do any file format detection.
+  # https://tools.ietf.org/html/rfc2083
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for png.')
+  if not header.startswith('\211PNG\r\n\032\n\0\0\0'):
+    raise ValueError('png signature not found.')
   info['format'] = 'png'
   info['codec'] = 'flate'
   if header[12 : 16] == 'IHDR':
@@ -5318,6 +5320,10 @@ FORMAT_ITEMS = (
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
 
     # Image.
+    #
+    # TODO(pts): Add detection and analyzing of OpenEXR, DNG, CR2.
+    # XnView MP supports even more: https://www.xnview.com/en/xnviewmp/#formats
+    # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
     # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
