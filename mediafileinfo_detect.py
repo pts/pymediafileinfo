@@ -4190,6 +4190,19 @@ def analyze_png(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
 
 
+def analyze_jng(fread, info, fskip):
+  # http://www.libpng.org/pub/mng/spec/jng.html
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for jng.')
+  if not header.startswith('\213JNG\r\n\032\n\0\0\0'):
+    raise ValueError('jng signature not found.')
+  info['format'] = 'jng'
+  info['codec'] = 'jpeg'
+  if header[12 : 16] == 'JHDR':
+    info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
+
+
 def analyze_lbm(fread, info, fskip):
   # https://en.wikipedia.org/wiki/ILBM
   header = fread(24)
@@ -5329,6 +5342,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
     ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
+    ('jng', (0, '\213JNG\r\n\032\n\0\0\0')),
     # JPEG reencoded by Dropbox lepton. Getting width and height is complicated.
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
@@ -5740,6 +5754,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['width'], info['height'] = get_jpeg_dimensions(fread)
   elif format == 'png':
     analyze_png(fread, info, fskip)
+  elif format == 'jng':
+    analyze_jng(fread, info, fskip)
   elif format == 'lbm':
     analyze_lbm(fread, info, fskip)
   elif format == 'pcx':
