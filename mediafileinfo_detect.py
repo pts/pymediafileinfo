@@ -5190,7 +5190,12 @@ def analyze_art(fread, info, fskip):
     raise ValueError('art signature not found.')
   # Usually header[8 : 13] == '\7\0\x40\x15\x03'.
   info['format'] = info['codec'] = 'art'
-  info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
+  # This is mostly an educated guess based on samples, the file format is
+  # not documented. Not even XnView MP or IrfanView can open them.
+  if header[8 : 13] == '\7\0\x40\x15\3':
+    info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
+  else:
+    pass  # Example: P50374Bc.art has header[8 : 13] == '\x8c\x16\0\0\x7d'.
 
 
 def analyze_ico(fread, info, fskip):

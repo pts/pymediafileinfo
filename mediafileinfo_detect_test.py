@@ -268,6 +268,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_art(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_art, 'JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xdd\1\xe0\1'),
                      {'format': 'art', 'codec': 'art', 'height': 480, 'width': 477})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_art, 'JG\4\x0e\0\0\0\0\8\0\x40\x15\3\xdd\1\xe0\1'),
+                     {'format': 'art', 'codec': 'art'})
 
   def test_analyze_ico(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
