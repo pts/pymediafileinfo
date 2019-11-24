@@ -5929,6 +5929,9 @@ def mediafileinfo_detect():
   return locals()
 
 
+import os
+import os.path
+import stat
 import struct
 import sys
 
@@ -5964,81 +5967,195 @@ def format_info(info):
   return ''.join(output)
 
 
-def main(argv):
-  if len(argv) < 2 or argv[1] == '--help':
-    print >>sys.stderr, (
-        'mediafileinfo.py: Get parameters and dimension of media files.\n'
-        'This is free software, GNU GPL >=2.0. '
-        'There is NO WARRANTY. Use at your risk.\n'
-        'Usage: %s <filename> [...]' % argv[0])
-    sys.exit(1)
-  if len(argv) > 1 and argv[1] in ('--info', '--mode=info'):
-    # For compatibility with media_scan.py.
-    del argv[1]
-  if len(argv) > 1 and argv[1] == '--':
-    del argv[1]
-  had_error = False
-  for filename in argv[1:]:
-    try:
-      f = open(filename, 'rb')
-    except IOError, e:
-      had_error = True
-      print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
-      continue
-    filesize = None
+def get_file_info(filename, stat_obj):
+  try:
+    f = open(filename, 'rb')
+  except IOError, e:
+    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+    return None, True
+  if stat_obj:
+    filesize, filemtime = stat_obj.st_size, int(stat_obj.st_mtime)
+  else:
+    filesize = filemtime = None
     try:
       f.seek(0, 2)
       filesize = int(f.tell())
       f.seek(0)
     except (IOError, OSError, ValueError, AttributeError):
       pass
+  try:
+    had_error_here, info = True, {'f': filename}
     try:
-      had_error_here, info = True, {'f': filename}
-      if filesize is not None:
-        info['size'] = filesize
-      try:
-        info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
-        had_error_here = False
-      except ValueError, e:
-        #raise
-        info['error'] = 'bad_data'
-        if e.__class__ == ValueError:
-          print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
-        else:
-          print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
-              filename, e.__class__.__module__, e.__class__.__name__, e)
-      except IOError, e:
-        info['error'] = 'bad_read'
-        print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+      info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
+      had_error_here = False
+    except ValueError, e:
+      #raise
+      info['error'] = 'bad_data'
+      if e.__class__ == ValueError:
+        print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
+      else:
+        print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
             filename, e.__class__.__module__, e.__class__.__name__, e)
-      except AssertionError, e:
-        info['error'] = 'assert'
-        print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
-            filename, e.__class__.__module__, e.__class__.__name__, e)
-      except (KeyboardInterrupt, SystemExit):
-        raise
-      except Exception, e:
-        #raise
-        info['error'] = 'error'
-        print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
-            filename, e.__class__.__module__, e.__class__.__name__, e)
-      if had_error_here:
-        had_error = True
-      if not info.get('format'):
-        info['format'] = '?'
-      try:
-        # header_end_offset, hdr_done_at: Offset we reached after parsing
-        # headers.
-        info['hdr_done_at'] = int(f.tell())
-      except (IOError, OSError, ValueError, AttributeError):
-        pass
-      sys.stdout.write(format_info(info))
-      sys.stdout.flush()
-      if not had_error_here and info['format'] == '?':
-        print >>sys.stderr, 'warning: unknown file format: %r' % filename
-        had_error = True
-    finally:
-      f.close()
+    except IOError, e:
+      info['error'] = 'bad_read'
+      print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
+          filename, e.__class__.__module__, e.__class__.__name__, e)
+    except AssertionError, e:
+      info['error'] = 'assert'
+      print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
+          filename, e.__class__.__module__, e.__class__.__name__, e)
+    except (KeyboardInterrupt, SystemExit):
+      raise
+    except Exception, e:
+      #raise
+      info['error'] = 'error'
+      print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
+          filename, e.__class__.__module__, e.__class__.__name__, e)
+    if not info.get('format'):
+      info['format'] = '?'
+    try:
+      # header_end_offset, hdr_done_at: Offset we reached after parsing
+      # headers.
+      info['hdr_done_at'] = int(f.tell())
+    except (IOError, OSError, ValueError, AttributeError):
+      pass
+    if filesize is not None:
+      info.setdefault('size', filesize)
+    if filemtime is not None:
+      info.setdefault('mtime', int(filemtime))
+    return info, had_error_here
+  finally:
+    f.close()
+
+
+# --- From quick_scan.py .
+
+
+def get_quick_info(filename, stat_obj):
+  return {'mtime': int(stat_obj.st_mtime), 'size': stat_obj.st_size,
+          'f': filename}, False
+
+
+def get_symlink_info(filename, stat_obj):
+  info = {'format': 'symlink', 'mtime': int(stat_obj.st_mtime), 'f': filename}
+  try:
+    info['symlink'] = os.readlink(filename)
+    info['size'] = len(info['symlink'])
+  except OSError, e:
+    print >>sys.stderr, 'error: readlink: %s' % (filename, e)
+    return info, True
+  return info, False
+
+
+def info_scan(dirname, outf, get_file_info_func):
+  """Prints results sorted by filename."""
+  had_error = False
+  try:
+    entries = os.listdir(dirname)
+  except OSError, e:
+    print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
+    had_error = True
+    entries = ()
+  files, subdirs = [], []
+  for entry in entries:
+    if dirname == '.':
+      filename = entry
+    else:
+      filename = os.path.join(dirname, entry)
+    try:
+      stat_obj = os.lstat(filename)
+    except OSError, e:
+      print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
+      stat_obj = None
+    if stat_obj is None:
+      had_error = True
+    elif stat.S_ISDIR(stat_obj.st_mode):
+      subdirs.append(filename)
+    elif (stat.S_ISREG(stat_obj.st_mode) or
+          stat.S_ISLNK(stat_obj.st_mode)):
+      files.append((filename, stat_obj))
+  for filename, stat_obj in sorted(files):
+    if stat.S_ISLNK(stat_obj.st_mode):
+      info, had_error_here = get_symlink_info(filename, stat_obj)
+    else:
+      info, had_error_here = get_file_info_func(filename, stat_obj)
+    if had_error_here:
+      had_error = True
+    elif info.get('format') == '?':
+      print >>sys.stderr, 'warning: unknown file format: %r' % filename
+      had_error = True
+    outf.write(format_info(info))
+    outf.flush()
+  for filename in sorted(subdirs):
+    had_error |= info_scan(filename, outf, get_file_info_func)
+  return had_error
+
+
+def process(filename, outf, get_file_info_func):
+  """Prints results sorted by filename."""
+  try:
+    stat_obj = os.lstat(filename)
+  except OSError, e:
+    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+    return True
+  if stat.S_ISDIR(stat_obj.st_mode):
+    return info_scan(filename, outf, get_file_info_func)
+  elif stat.S_ISREG(stat_obj.st_mode):
+    info, had_error = get_file_info_func(filename, stat_obj)
+    outf.write(format_info(info))
+    outf.flush()
+    if not had_error and info.get('format') == '?':
+      print >>sys.stderr, 'warning: unknown file format: %r' % filename
+      had_error = True
+    return had_error
+  elif stat.S_ISLNK(stat_obj.st_mode):
+    info, had_error = get_symlink_info(filename, stat_obj)
+    outf.write(format_info(info))
+    outf.flush()
+    return had_error
+  else:
+    return False
+
+
+# ---
+
+
+def main(argv):
+  if len(argv) < 2 or argv[1] == '--help':
+    print >>sys.stderr, (
+        'mediafileinfo.py: Get parameters and dimension of media files.\n'
+        'This is free software, GNU GPL >=2.0. '
+        'There is NO WARRANTY. Use at your risk.\n'
+        'Usage: %s [<flag> ...] <filename> [...]' % argv[0])
+    sys.exit(1)
+  mode = 'info'
+  i = 1
+  while i < len(argv):
+    arg = argv[i]
+    i += 1
+    if arg == '--':
+      break
+    if arg == '-' or not arg.startswith('-'):
+      i -= 1
+      break
+    if arg in ('--info', '--mode=info'):
+      mode = 'info'  # For compatibility with media_scan.py.
+    elif arg in ('--quick', '--mode=quick'):
+      mode = 'quick'
+    elif arg.startswith('--mode='):
+      sys.exit('Invalid flag value: %s' % arg)
+    else:
+      sys.exit('Unknown flag: %s' % arg)
+
+  outf = sys.stdout
+  prefix = '.' + os.sep
+  had_error = False
+  get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
+  # Keep the original argv order, don't sort.
+  for filename in argv[i:]:
+    if filename.startswith(prefix):
+      filename = filename[len(prefix):]
+    had_error |= process(filename, outf, get_file_info_func)
   if had_error:
     sys.exit(2)
 
