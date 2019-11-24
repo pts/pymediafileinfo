@@ -1119,25 +1119,26 @@ def main(argv):
   if do_tags:
     tags_impl = lambda filename, getxattr=xattr_detect()()['getxattr']: (
         getxattr(filename, 'user.mmfs.tags', True) or '')
+  had_error = False
   if mode == 'scan':
     # Files are yielded in deterministic (sorted) order, not in original argv
     # order. This is for *.jpg.
     for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
       outf.write(format_info(info))  # Files with some errors are skipped.
       outf.flush()
+    # TODO(pts): Detect had_error in scan.
   elif mode in ('quick', 'info'):
     prefix = '.' + os.sep
-    had_error = False
     get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
     # Keep the original argv order, don't sort.
     for filename in argv[i:]:
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
       had_error |= process(filename, outf, get_file_info_func)
-    if had_error:
-      sys.exit(2)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
+  if had_error:
+    sys.exit(2)
 
 
 if __name__ == '__main__':
