@@ -31,7 +31,14 @@ except ImportError:
   if sys.version_info < (2, 5):
     sys.exit('fatal: Install hashlib from PyPI or use Python >=2.5.')
 
-# --- Image fingerprinting for similarity with findimagedupes.
+# --- Image fingerprinting for similarity with findimagedupes.pl.
+#
+# The output is bit-by-bit identical to findimagedupes.pl by Rob Kudla
+# (checked with 2.18-4build3 in Debian). (Please note that the Go program
+# called findimagedupes is incompatible.)
+#
+# The relevant function is in `sub getfingerrpint' in
+# http://www.ostertag.name/HowTo/findimagedupes.pl
 #
 # Clients should call fingerprint_image.
 #
@@ -47,7 +54,7 @@ def fix_gm_filename(filename):
 
 
 # by pts@fazekas.hu at Thu Dec  1 21:07:48 CET 2016
-# Bit-by-bit identical output to the findimagedupes Perl script's.
+# Bit-by-bit identical output to findimagedupes.pl.
 def fingerprint_image_with_pgmagick(filename, _half_threshold_ary=[]):
   # Dependency: sudo apt-get install python-pgmagick
   # Dependency (alt): pip install pgmagick
@@ -654,7 +661,8 @@ class FileWithHash(object):
       self.read(ofs - self.ofs)
 
 
-def detect_file(filename, filesize, do_fp, do_sha256):
+def detect_file(filename, filesize, do_fp, do_sha256, filemtime):
+  had_error = False
   f, info = None, {}
   try:
     try:
@@ -703,8 +711,11 @@ def detect_file(filename, filesize, do_fp, do_sha256):
         info['hdr_done_at'] = int(f.tell())
       except (IOError, OSError, AttributeError):
         pass
-      if not had_error_here and info['format'] == '?':
+      if had_error_here:
+        had_error = True
+      elif info['format'] == '?':
         print >>sys.stderr, 'warning: unknown file format: %r' % filename
+        had_error = True
 
     if info.get('error') in (None, 'bad_data'):
       try:
@@ -742,10 +753,12 @@ def detect_file(filename, filesize, do_fp, do_sha256):
           'warning: file size mismatch for %r: '
           'from_fileobj=%d from_stat=%d' %
           (filename, info['size'], filesize))
+      had_error = True
+  if filemtime is not None:
+    info.setdefault('mtime', int(filemtime))
 
   if (info.get('error') in (None, 'bad_data') and do_fp and
       info['format'] in FINGERPRINTABLE_FORMATS):
-      # xfidfp: extra findimagedupes fingerprint.
       try:
         info['xfidfp'] = fingerprint_image(filename)
       except IOError, e:
@@ -754,9 +767,12 @@ def detect_file(filename, filesize, do_fp, do_sha256):
           if e.endswith(suffix):
             e = e[:-len(suffix)]
         print >>sys.stderr, 'warning: fingerprint_image %s: %s' % (filename, e)
+        had_error = True
         info['xfidfp'] = 'err'
 
-  return info
+  if info.get('error'):
+    had_error = True
+  return info, had_error
 
 
 def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
@@ -855,7 +871,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
           info = {'format': 'symlink', 'f': path, 'symlink': symlink,
                   'size': len(symlink)}
         else:
-          info = detect_file(path, int(st.st_size), do_fp, do_sha256)
+          info, _ = detect_file(path, int(st.st_size), do_fp, do_sha256, None)
           if tags is not None:
             info['tags'] = tags  # Save '', don't save None.
           if symlink is not None:
@@ -942,6 +958,104 @@ def format_info(info):
   return ''.join(output)
 
 
+def get_file_info(filename, stat_obj):
+  do_fp = do_sha256 = False
+  return detect_file(filename, stat_obj.st_size, do_fp, do_sha256,
+                     stat_obj.st_mtime)
+
+
+# --- From quick_scan.py .
+
+
+def get_quick_info(filename, stat_obj):
+  return {'mtime': int(stat_obj.st_mtime), 'size': stat_obj.st_size,
+          'f': filename}, False
+
+
+def get_symlink_info(filename, stat_obj):
+  info = {'format': 'symlink', 'mtime': int(stat_obj.st_mtime), 'f': filename}
+  try:
+    info['symlink'] = os.readlink(filename)
+    info['size'] = len(info['symlink'])
+  except OSError, e:
+    print >>sys.stderr, 'error: readlink: %s' % (filename, e)
+    return info, True
+  return info, False
+
+
+def info_scan(dirname, outf, get_file_info_func):
+  """Prints results sorted by filename."""
+  had_error = False
+  try:
+    entries = os.listdir(dirname)
+  except OSError, e:
+    print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
+    had_error = True
+    entries = ()
+  files, subdirs = [], []
+  for entry in entries:
+    if dirname == '.':
+      filename = entry
+    else:
+      filename = os.path.join(dirname, entry)
+    try:
+      stat_obj = os.lstat(filename)
+    except OSError, e:
+      print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
+      stat_obj = None
+    if stat_obj is None:
+      had_error = True
+    elif stat.S_ISDIR(stat_obj.st_mode):
+      subdirs.append(filename)
+    elif (stat.S_ISREG(stat_obj.st_mode) or
+          stat.S_ISLNK(stat_obj.st_mode)):
+      files.append((filename, stat_obj))
+  for filename, stat_obj in sorted(files):
+    if stat.S_ISLNK(stat_obj.st_mode):
+      info, had_error_here = get_symlink_info(filename, stat_obj)
+    else:
+      info, had_error_here = get_file_info_func(filename, stat_obj)
+    if had_error_here:
+      had_error = True
+    elif info.get('format') == '?':
+      print >>sys.stderr, 'warning: unknown file format: %r' % filename
+      had_error = True
+    outf.write(format_info(info))
+    outf.flush()
+  for filename in sorted(subdirs):
+    had_error |= info_scan(filename, outf, get_file_info_func)
+  return had_error
+
+
+def process(filename, outf, get_file_info_func):
+  """Prints results sorted by filename."""
+  try:
+    stat_obj = os.lstat(filename)
+  except OSError, e:
+    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+    return True
+  if stat.S_ISDIR(stat_obj.st_mode):
+    return info_scan(filename, outf, get_file_info_func)
+  elif stat.S_ISREG(stat_obj.st_mode):
+    info, had_error = get_file_info_func(filename, stat_obj)
+    outf.write(format_info(info))
+    outf.flush()
+    if not had_error and info.get('format') == '?':
+      print >>sys.stderr, 'warning: unknown file format: %r' % filename
+      had_error = True
+    return had_error
+  elif stat.S_ISLNK(stat_obj.st_mode):
+    info, had_error = get_symlink_info(filename, stat_obj)
+    outf.write(format_info(info))
+    outf.flush()
+    return had_error
+  else:
+    return False
+
+
+# ---
+
+
 def main(argv):
   outf = None
   old_files = {}  # Maps paths to (size, mtime) pairs.
@@ -973,6 +1087,8 @@ def main(argv):
       mode = 'scan'
     elif arg in ('--info', '--mode=info'):
       mode = 'info'
+    elif arg in ('--quick', '--mode=quick'):
+      mode = 'quick'
     elif arg.startswith('--mode='):
       sys.exit('Invalid flag value: %s' % arg)
     elif arg.startswith('--th='):
@@ -1005,13 +1121,17 @@ def main(argv):
     for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
       outf.write(format_info(info))  # Files with some errors are skipped.
       outf.flush()
-  elif mode == 'info':
-    # Same as mediafileinfo.py, except that this one always succeeds
-    # (sys.exit(0)).
-    for filename in argv[i:]:  # Original filenames.
-      info = detect_file(filename, filesize=None, do_fp=False, do_sha256=False)
-      outf.write(format_info(info))  # Emits all errors.
-      outf.flush()
+  elif mode in ('quick', 'info'):
+    prefix = '.' + os.sep
+    had_error = False
+    get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
+    # Keep the original argv order, don't sort.
+    for filename in argv[i:]:
+      if filename.startswith(prefix):
+        filename = filename[len(prefix):]
+      had_error |= process(filename, outf, get_file_info_func)
+    if had_error:
+      sys.exit(2)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
 

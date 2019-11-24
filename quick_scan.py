@@ -1,7 +1,8 @@
 #! /bin/sh
-# by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
+# by pts@fazekas.hu at Sun Nov 24 12:08:24 CET 2019
+#
 
-""":" # mediafileinfo.py: Get codecs and dimension of media files.
+""":" # quick_scan.py: Get size and mtime of files.
 
 type python2.7 >/dev/null 2>&1 && exec python2.7 -- "$0" ${1+"$@"}
 type python2.6 >/dev/null 2>&1 && exec python2.6 -- "$0" ${1+"$@"}
@@ -11,23 +12,15 @@ exec python -- ${1+"$@"}; exit 1
 
 This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
 
-Typical usage: mediafileinfo.py *.mp4
+Typical usage: quick_scan.py .
+
+The quick scan doesn't compute sha256= (so no need to read the whole file)
+or format= (so no need to read the file header).
 """
-
-# Vocabulary:
-#
-# * analyze: use only in function names, with meaning: get media parameters.
-# * extract: don't use, use ``get'' instead.
-# * retrieve: don't use, use ``get'' instead.
-# * parameters: use as ``media parameters''.
-# * size: for width and height, use ``dimensions'' instead.
-
-import mediafileinfo_detect
 
 import os
 import os.path
 import stat
-import struct
 import sys
 
 
@@ -60,67 +53,6 @@ def format_info(info):
     output.append(' f=%s' % filename)  # Emit ` f=' last.
   output.append('\n')
   return ''.join(output)
-
-
-def get_file_info(filename, stat_obj):
-  try:
-    f = open(filename, 'rb')
-  except IOError, e:
-    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
-    return None, True
-  if stat_obj:
-    filesize, filemtime = stat_obj.st_size, int(stat_obj.st_mtime)
-  else:
-    filesize = filemtime = None
-    try:
-      f.seek(0, 2)
-      filesize = int(f.tell())
-      f.seek(0)
-    except (IOError, OSError, ValueError, AttributeError):
-      pass
-  try:
-    had_error_here, info = True, {'f': filename}
-    try:
-      info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
-      had_error_here = False
-    except ValueError, e:
-      #raise
-      info['error'] = 'bad_data'
-      if e.__class__ == ValueError:
-        print >>sys.stderr, 'error: bad data in file %r: %s' % (filename, e)
-      else:
-        print >>sys.stderr, 'error: bad data in file %r: %s.%s: %s' % (
-            filename, e.__class__.__module__, e.__class__.__name__, e)
-    except IOError, e:
-      info['error'] = 'bad_read'
-      print >>sys.stderr, 'error: error reading from file %r: %s.%s: %s' % (
-          filename, e.__class__.__module__, e.__class__.__name__, e)
-    except AssertionError, e:
-      info['error'] = 'assert'
-      print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
-          filename, e.__class__.__module__, e.__class__.__name__, e)
-    except (KeyboardInterrupt, SystemExit):
-      raise
-    except Exception, e:
-      #raise
-      info['error'] = 'error'
-      print >>sys.stderr, 'error: error detecting in %r: %s.%s: %s' % (
-          filename, e.__class__.__module__, e.__class__.__name__, e)
-    if not info.get('format'):
-      info['format'] = '?'
-    try:
-      # header_end_offset, hdr_done_at: Offset we reached after parsing
-      # headers.
-      info['hdr_done_at'] = int(f.tell())
-    except (IOError, OSError, ValueError, AttributeError):
-      pass
-    if filesize is not None:
-      info.setdefault('size', filesize)
-    if filemtime is not None:
-      info.setdefault('mtime', int(filemtime))
-    return info, had_error_here
-  finally:
-    f.close()
 
 
 # --- From quick_scan.py .
@@ -218,13 +150,13 @@ def process(filename, outf, get_file_info_func):
 def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
     print >>sys.stderr, (
-        'mediafileinfo.py: Get parameters and dimension of media files.\n'
+        'quick_scan.py: Get size and mtime of files.\n'
         'This is free software, GNU GPL >=2.0. '
         'There is NO WARRANTY. Use at your risk.\n'
         'Usage: %s [<flag> ...] <filename> [...]' % argv[0])
     sys.exit(1)
-  mode = 'info'
   i = 1
+  mode = 'quick'
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -233,9 +165,8 @@ def main(argv):
     if arg == '-' or not arg.startswith('-'):
       i -= 1
       break
-    if arg in ('--info', '--mode=info'):
-      mode = 'info'  # For compatibility with media_scan.py.
-    elif arg in ('--quick', '--mode=quick'):
+    if arg in ('--quick', '--mode=quick'):
+      # For compatibility with mediafileinfo.py and media_scan.py.
       mode = 'quick'
     elif arg.startswith('--mode='):
       sys.exit('Invalid flag value: %s' % arg)
@@ -245,7 +176,7 @@ def main(argv):
   outf = sys.stdout
   prefix = '.' + os.sep
   had_error = False
-  get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
+  get_file_info_func = get_quick_info
   # Keep the original argv order, don't sort.
   for filename in argv[i:]:
     if filename.startswith(prefix):
