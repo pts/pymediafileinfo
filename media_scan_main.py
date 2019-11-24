@@ -882,7 +882,11 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
           yield info
   while dir_paths:
     path = dir_paths.pop()
-    subpaths = os.listdir(path)
+    try:
+      subpaths = os.listdir(path)
+    except OSError, e:
+      print >>sys.stderr, 'error: listdir %r: %s' % (path, e)
+      subpaths = []
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
