@@ -903,7 +903,7 @@ def add_old_files(line_source, old_files):
     line = line.rstrip('\r\n')
     i = line.find(' f=')
     if i < 0:
-      raise ValueError('f= not found.')
+      raise ValueError('f= not found: %d' % line_source.tell())
     info = {'f': line[line.find('=', i) + 1:]}
     for item in line[:i].split(' '):
       kv = item.split('=', 1)
