@@ -24,6 +24,7 @@ import os
 import os.path
 import stat
 import sys
+import time
 
 try:
   from hashlib import sha256  # Needs Python 2.5 or later.
@@ -775,11 +776,12 @@ def detect_file(filename, filesize, do_fp, do_sha256, filemtime):
   return info, had_error
 
 
-def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
+def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, skip_recent_sec):
   dir_paths = []
   file_items = []  # List of (path, st, tags, symlink, is_symlink).
   symlink = None
-  if getattr(os, 'lstat', None):
+  if callable(getattr(os, 'lstat', None)):
+    stat_func = os.lstat
     for path in path_iter:
       try:
         st = os.lstat(path)
@@ -836,6 +838,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
       elif stat.S_ISDIR(st.st_mode):
         dir_paths.append(path)
   else:  # Running on a system which doesn't support symlinks.
+    stat_func = os.stat
     for path in path_iter:
       try:
         st = os.stat(path)
@@ -856,6 +859,14 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
   file_items.reverse()
   while file_items:
     path, st, tags, symlink, is_symlink = file_items.pop()
+    if skip_recent_sec is not None:
+      try:
+        st = stat_func(path)
+      except OSError, e:
+        print >>sys.stderr, 'warning: restat %r: %s' % (path, e)
+        continue
+      if st.st_mtime + skip_recent_sec >= time.time():
+        continue
     old_item = old_files.get(path)
     #assert path != 'blah.pl', [old_item, (st.st_size, int(st.st_mtime), tags, symlink, is_symlink)]
     if (not old_item or old_item[0] != st.st_size or
@@ -890,7 +901,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
     if path != '.':
       for i in xrange(len(subpaths)):
         subpaths[i] = os.path.join(path, subpaths[i])
-    for info in scan(subpaths, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
+    for info in scan(subpaths, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, skip_recent_sec):
       yield info
 
 
@@ -987,7 +998,7 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func):
+def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
   """Prints results sorted by filename."""
   had_error = False
   try:
@@ -1018,6 +1029,15 @@ def info_scan(dirname, outf, get_file_info_func):
     if stat.S_ISLNK(stat_obj.st_mode):
       info, had_error_here = get_symlink_info(filename, stat_obj)
     else:
+      if skip_recent_sec is not None:
+        try:
+          stat_obj = os.lstat(filename)
+        except OSError, e:
+          print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
+          had_error = True
+          continue
+        if stat_obj.st_mtime + skip_recent_sec >= time.time():
+          continue
       info, had_error_here = get_file_info_func(filename, stat_obj)
     if had_error_here:
       had_error = True
@@ -1027,11 +1047,11 @@ def info_scan(dirname, outf, get_file_info_func):
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func)
+    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec)
   return had_error
 
 
-def process(filename, outf, get_file_info_func):
+def process(filename, outf, get_file_info_func, skip_recent_sec):
   """Prints results sorted by filename."""
   try:
     stat_obj = os.lstat(filename)
@@ -1039,8 +1059,11 @@ def process(filename, outf, get_file_info_func):
     print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
     return True
   if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func)
+    return info_scan(filename, outf, get_file_info_func, skip_recent_sec)
   elif stat.S_ISREG(stat_obj.st_mode):
+    if (skip_recent_sec is not None and
+        stat_obj.st_mtime + skip_recent_sec >= time.time()):
+      return True
     info, had_error = get_file_info_func(filename, stat_obj)
     outf.write(format_info(info))
     outf.flush()
@@ -1070,6 +1093,9 @@ def main(argv):
   do_sha256 = True
   do_mtime = True
   mode = 'scan'
+  # If not None, skip scanning files whose mtime is more recent than the
+  # specified amount in seconds (relative to now).
+  skip_recent_sec = None
   while i < len(argv):
     arg = argv[i]
     i += 1
@@ -1110,6 +1136,8 @@ def main(argv):
     elif arg.startswith('--fp=') or arg.startswith('--xfidfp='):
       value = arg[arg.find('=') + 1:].lower()
       do_fp = value in ('1', 'yes', 'true', 'on')
+    elif arg.startswith('--skip-recent-sec='):
+      skip_recent_sec = int(arg[arg.find('=') + 1:].lower())
     else:
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:
@@ -1123,7 +1151,7 @@ def main(argv):
   if mode == 'scan':
     # Files are yielded in deterministic (sorted) order, not in original argv
     # order. This is for *.jpg.
-    for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl):
+    for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, skip_recent_sec):
       outf.write(format_info(info))  # Files with some errors are skipped.
       outf.flush()
     # TODO(pts): Detect had_error in scan.
@@ -1134,7 +1162,7 @@ def main(argv):
     for filename in argv[i:]:
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
-      had_error |= process(filename, outf, get_file_info_func)
+      had_error |= process(filename, outf, get_file_info_func, skip_recent_sec)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
   if had_error:
