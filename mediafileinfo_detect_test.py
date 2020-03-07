@@ -443,6 +443,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_brunsli, '0a0442d2d54e120a08810410800418022011'.decode('hex')),
                      {'format': 'jpegxl-brunsli', 'subformat': 'brunsli', 'codec': 'brunsli', 'height': 512, 'width': 513})
 
+  def test_analyze_fuif(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('FUIF3.')[0], 'fuif')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuif, '46554946332e84017e'.decode('hex')),
+                     {'format': 'fuif', 'subformat': 'fuif', 'codec': 'fuif', 'component_count': 3, 'bpc': 8, 'height': 127, 'width': 514})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

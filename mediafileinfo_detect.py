@@ -5148,6 +5148,41 @@ def analyze_flif(fread, info, fskip):
   info['component_count'], info['bpc'] = component_count, bpc
 
 
+def analyze_fuif(fread, info, fskip):
+  # https://github.com/cloudinary/fuif/blob/3ed48249a9cbe68740aa4ea58098ab0cd4b87eaa/encoding/encoding.cpp#L456-L466
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for fuif.')
+  signature, component_count, bpc = struct.unpack('>4sBB', header)
+  component_count -= 0x30
+  bpc -= 0x26
+  if signature not in ('FUIF', 'FUAF'):
+    raise ValueError('fuif signature not found.')
+  info['format'] = info['codec'] = 'fuif'
+  info['subformat'] = ('fuif', 'fuaf')[signature == 'FUAF']
+  if not 1 <= component_count <= 5:
+    raise ValueError('Bad fuif component_count.')
+  if not 1 <= bpc <= 16:
+    raise ValueError('Bad fuif bpc.')
+
+  def read_varint(name):
+    v, c, cc = 0, 128, 0
+    while c & 128:
+      if cc > 8:  # 63 bits maximum.
+        raise ValueError('fuif %s varint too long.' % name)
+      c = fread(1)
+      if not c:
+        raise ValueError('EOF in fuif %s.' % name)
+      c = ord(c)
+      v = v << 7 | c & 127
+      cc += 1
+    return v
+
+  info['width'] = read_varint('width') + 1
+  info['height'] = read_varint('height') + 1
+  info['component_count'], info['bpc'] = component_count, bpc
+
+
 def is_bpg(header):
   if len(header) < 6 or not header.startswith('BPG\xfb'):
     return False
@@ -5571,6 +5606,7 @@ FORMAT_ITEMS = (
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
+    ('fuif', (0, ('FUIF', 'FUAF'), 4, ('\x31', '\x32', '\x33', '\x34', '\x35'), 5, tuple(chr(c) for c in xrange(0x26 + 1, 0x26 + 16)))),
     ('bpg', (0, 'BPG\xfb', 6, lambda header: (is_bpg(header), 30))),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
@@ -6016,6 +6052,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_jpegxr(fread, info, fskip)
   elif format == 'flif':
     analyze_flif(fread, info, fskip)
+  elif format == 'fuif':
+    analyze_fuif(fread, info, fskip)
   elif format == 'bpg':
     analyze_bpg(fread, info, fskip)
   elif format == 'flac':
