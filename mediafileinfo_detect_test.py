@@ -395,6 +395,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                       'tracks': [{'channel_count': 2, 'codec': 'cook', 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'ra5', 'type': 'audio'},
                                  {'codec': 'h264-rv30', 'height': 240, 'type': 'video', 'width': 320}]})
 
+  def test_detect_xml(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')[0], 'xml')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

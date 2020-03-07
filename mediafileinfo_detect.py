@@ -5458,7 +5458,7 @@ FORMAT_ITEMS = (
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
     # Or DOS .bat file.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
-    ('xml', (0, '<?xml', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+    ('xml', (0, '<?xml', 5, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # TODO(pts): Ignore whitespace in the beginning above.
@@ -5559,13 +5559,24 @@ assert len(LOG2_SUB) == 1084, 'Unexpected LOG2_SUB size.'
 def detect_format(f):
   """Detects the file format.
 
+  Args:
+    f: A .read(...) method of a file-like object, a file-like object, or
+        an str.
   Returns:
     (format, header), where format is a non-empty string (can be '?'),
     header is a string containing the prefix of f, and exactly this many
     bytes were read from f.
   """
   format_db, log2_sub, lmi = FORMAT_DB, LOG2_SUB, len(LOG2_SUB) - 1
-  header = f.read(format_db.header_preread_size)
+  size = format_db.header_preread_size
+  if isinstance(f, (str, buffer)):
+    header = f[:size]
+  elif callable(getattr(f, 'read', None)):
+    header = f.read(size)
+  else:
+    header = f(size)
+  if not isinstance(header, str):
+    raise TypeError
   matches = []
   fbp = format_db.formats_by_prefix
   for j in xrange(min(len(header), 4), -1, -1):
