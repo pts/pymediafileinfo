@@ -5118,16 +5118,16 @@ def analyze_flif(fread, info, fskip):
     raise ValueError('Too short for flif.')
   signature, ia_nc, bpc = struct.unpack('>4sBB', header)
   ia = ia_nc >> 4
-  channel_count = ia_nc & 15
-  bpc -= 48
+  component_count = ia_nc & 15
+  bpc = (bpc - 48) * 8
   if signature != 'FLIF':
     raise ValueError('flif signature not found.')
   info['format'] = info['codec'] = 'flif'
   if ia not in (3, 4, 5, 6):
     raise ValueError('Bad flif interlacing or animation.')
-  if channel_count not in (1, 3, 4):
-    raise ValueError('Bad flif channel_count.')
-  if bpc not in (0, 1, 2):
+  if component_count not in (1, 3, 4):
+    raise ValueError('Bad flif component_count.')
+  if bpc not in (0, 8, 16):
     raise ValueError('Bad flif bpc.')
 
   def read_varint(name):
@@ -5145,6 +5145,7 @@ def analyze_flif(fread, info, fskip):
 
   info['width'] = read_varint('width') + 1
   info['height'] = read_varint('height') + 1
+  info['component_count'], info['bpc'] = component_count, bpc
 
 
 def is_bpg(header):

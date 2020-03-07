@@ -293,7 +293,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_flif(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flif, 'FLIF\x441\x83\x7f\x83\x7e'),
-                     {'format': 'flif', 'codec': 'flif', 'width': 512, 'height': 511})
+                     {'format': 'flif', 'codec': 'flif', 'width': 512, 'height': 511, 'component_count': 4, 'bpc': 8})
 
   def test_analyze_bpg(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bpg, 'BPG\xfb\x20\x00\x8b\x1c\x85\x5a'),
