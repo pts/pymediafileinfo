@@ -438,6 +438,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<svg xmlns="http://www.w3.org/2000/svg">\n  <view id="normal" viewBox="0 0 17 19"/>'),
                      {'format': 'svg', 'height': 19, 'width': 17})
 
+  def test_analyze_brunsli(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\x0a\x04B\xd2\xd5N')[0], 'jpegxl-brunsli')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_brunsli, '0a0442d2d54e120a08810410800418022011'.decode('hex')),
+                     {'format': 'jpegxl-brunsli', 'subformat': 'brunsli', 'codec': 'brunsli', 'height': 512, 'width': 513})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

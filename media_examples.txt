@@ -245,5 +245,20 @@ elements. Some elements are truncated.
       : width(uint)=720 (from base_video_format)
       : height(uint)=576 (from base_video_format)
       10000100001100001011100000:...
+* example format=jpegxl-brunsli
+    0a: tag=1(signature) type=2(bytes)
+      04: size=4
+      42d2d54e: signature='B\xd2\xd5N'
+    12: tag=2(header) type=2(bytes)
+      0a: size=10
+      08: tag=1(width) type=0(int)
+        8004: int_value=512: 4 * 128
+      10: tag=2(height) type=0(int)
+        8004: int_value=512: 4 * 128
+      18: tag=3(version_comp) type=0(int)
+        02: int_value=2: components=3 version=0
+      20: tag=4(subsampling) type=0(int)
+        11: int_value=17: 1,1,1,1,2,2
+    22: tag=4(jpeg_internals) type=2(bytes)
 
 __END__

@@ -4022,24 +4022,15 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
   return frame_count > 1
 
 
-def get_brn_dimensions(fread):
-  """Returns (width, height) of a BRN file.
-
-  Args:
-    f: An object supporting the .read(size) method. Should be seeked to the
-        beginning of the file.
-    header: The first few bytes already read from fread.
-  Returns:
-    (width, height) pair of integers.
-  Raises:
-    ValueError: If not a BRN file or there is a syntax error in the BRN file.
-    IOError: If raised by fread(size).
-  """
+def analyze_brunsli(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/JPEG_XL
+  # Brunsli is lossless-reencoded JPEG, with an option to convert it back to
+  # the original JPEG file.
   def read_all(size):
     data = fread(size)
     if len(data) != size:
       raise ValueError(
-          'Short read in BRN: wanted=%d got=%d' % (size, len(data)))
+          'Short read in brunsli: wanted=%d got=%d' % (size, len(data)))
     return data
 
   def read_base128():
@@ -4058,14 +4049,19 @@ def get_brn_dimensions(fread):
       shift += 7
 
   data = fread(7)
-  if len(data) < 7 or not data.startswith('\x0a\x04B\xd2\xd5N\x12'):
-    raise ValueError('Not a BRN file.')
+  if len(data) < 6:
+    raise ValueError('Too short for brunsli.')
+  if not data.startswith('\x0a\x04B\xd2\xd5N'):
+    raise ValueError('brunsli signature not found.')
+  info['format'], info['subformat'], info['codec'] = 'jpegxl-brunsli', 'brunsli', 'brunsli'
+  if len(data) < 7 or data[6] != '\x12':
+    return
 
   header_remaining, _ = read_base128()
   width = height = None
   while header_remaining:
     if header_remaining < 0:
-      raise ValueError('BRN header spilled over.')
+      raise ValueError('brunsli header spilled over.')
     marker = ord(read_all(1))
     header_remaining -= 1
     if marker & 0x80 or marker & 0x5 or marker <= 2:
@@ -4087,9 +4083,9 @@ def get_brn_dimensions(fread):
         read_all(val)
         header_remaining -= val
   if width is not None and height is not None:
-    return width, height
+    info['width'], info['height'] = width, height
   else:
-    raise ValueError('Dimensions not found in BRN.')
+    raise ValueError('Dimensions not found in brunsli.')
 
 
 def analyze_wav(fread, info, fskip):
@@ -5598,7 +5594,7 @@ FORMAT_ITEMS = (
     # Getting the dimensions of the JPEG thumbnail is easy though, but it's
     # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
-    ('brn', (0, '\x0a\x04B\xd2\xd5N\x12')),
+    ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     # JPEG2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # .mov preview image.
@@ -6037,9 +6033,6 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_realaudio(fread, info, fskip)
   elif format == 'ralf':
     analyze_ralf(fread, info, fskip)
-  elif format == 'brn':
-    info['codec'] = 'brn'
-    info['width'], info['height'] = get_brn_dimensions(fread)
   elif format == 'lepton':
     info['codec'] = 'lepton'
   elif format == 'fuji-raf':
@@ -6076,6 +6069,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_exe(fread, info, fskip)
   elif format in ('xml', 'svg'):  # Also generates format=svg.
     analyze_xml(fread, info, fskip)
+  elif format == 'jpegxl-brunsli':
+    analyze_brunsli(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
