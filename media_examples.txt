@@ -266,5 +266,22 @@ elements. Some elements are truncated.
   2e: bpc=8
   8401: width=514
   7e: height=127
+* example format=jpegxl
+  ff0ab881a209: bits in reverse byte order:
+    ?? 0010011010001 01 000 000110111 00 0 00001010 11111111:
+      width=(0b0010011010001 + 1)=1234 width_u32_selector=1(13)
+      ratio=0
+      height=(0b000110111) + 1)==56 height_u32_selector=0(9)
+      small=0 type=10 ff=255
+* example format=jpegxl
+  ff0af81f: bits in reverse byte order:
+    ? 001 111111111 00 0 00001010 11111111:
+      ratio=1 width=height=(0b111111111 + 1)==512 height_u32_selector=0(9)
+      small=0 type=10 ff=255
+* example format=jpegxl
+  ff0a7f0?: bits in reverse byte order:
+    ??????? 001 11111 1 00001010 11111111:
+      ratio=1 width=height=((0b11111 + 1) * 8)==256
+      small=1 type=10 ff=255
 
 __END__

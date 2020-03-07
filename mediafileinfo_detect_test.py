@@ -448,6 +448,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuif, '46554946332e84017e'.decode('hex')),
                      {'format': 'fuif', 'subformat': 'fuif', 'codec': 'fuif', 'component_count': 3, 'bpc': 8, 'height': 127, 'width': 514})
 
+  def test_analyze_jpegxl(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\xff\x0a--')[0], 'jpegxl')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0af81f'.decode('hex')),
+                     {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 512, 'width': 512})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0a7f00'.decode('hex')),
+                     {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 256, 'width': 256})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0ab881a209'.decode('hex')),
+                     {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 56, 'width': 1234})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

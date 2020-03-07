@@ -1092,6 +1092,16 @@ def get_bitstream(
       for c in data[:].encode('hex')))
 
 
+def yield_bits_lsbfirst(fread):
+  while 1:
+    c = fread(1)
+    if not c:
+      break
+    c = ord(c)
+    for i in xrange(8):
+      yield (c >> i) & 1
+
+
 def analyze_swf(fread, info, fskip):
   # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
   header = fread(8)
@@ -4088,6 +4098,55 @@ def analyze_brunsli(fread, info, fskip):
     raise ValueError('Dimensions not found in brunsli.')
 
 
+def analyze_jpegxl(fread, info, fskip):
+  # https://arxiv.org/pdf/1908.03565.pdf
+  # cjpegxl.exe and djpegxl.exe:
+  #   https://mega.nz/#!opJwGaaK!9PvdLVknqZPgVpMJ9LbEG5_POgEAaDZTtWnx2jYtsz8
+  # web encoder: http://libwebpjs.appspot.com/jpegxl/
+
+  header = fread(2)
+  if len(header) < 2:
+    raise ValueError('Too short for jpegxl.')
+  if not header.startswith('\xff\x0a'):
+    raise ValueError('jpegxl signature not found.')
+  info['format'] = info['subformat'] = info['codec'] = 'jpegxl'
+  bits = yield_bits_lsbfirst(fread)
+
+  def read_1():
+    for b in bits:
+      return b
+    raise ValueError('EOF in jpegxl.')
+
+  def read_u(n):
+    result = i = 0
+    if n > 0:
+      for b in bits:
+        result |= b << i
+        i += 1
+        if i == n:
+          break
+      if i != n:
+        raise ValueError('EOF in jpegxl.')
+    return result
+
+  def read_u32(bs):
+    return read_u(bs[read_u(2)])
+
+  is_small = read_1()  # Start of SizeHeader.
+  if is_small:
+    height = (read_u(5) + 1) << 3
+  else:
+    height = read_u32((9, 13, 18, 30)) + 1
+  ratio = read_u(3)
+  if ratio:
+    width = height * (1, 1, 12, 4, 3, 16, 5, 2)[ratio] // (1, 1, 10, 3, 2, 9, 4, 1)[ratio]
+  elif is_small:
+    width = (read_u(5) + 1) << 3
+  else:
+    width = read_u32((9, 13, 18, 30)) + 1
+  info['width'], info['height'] = width, height
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5631,6 +5690,7 @@ FORMAT_ITEMS = (
     # Getting the dimensions of the JPEG thumbnail is easy though, but it's
     # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
+    ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     # JPEG2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
@@ -6110,6 +6170,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xml(fread, info, fskip)
   elif format == 'jpegxl-brunsli':
     analyze_brunsli(fread, info, fskip)
+  elif format == 'jpegxl':
+    analyze_jpegxl(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
