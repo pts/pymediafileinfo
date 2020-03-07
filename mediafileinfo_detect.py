@@ -4664,7 +4664,7 @@ def analyze_dirac(fread, info, fskip):
   if previous_parse_offset:
     raise ValueError('Bad dirac previous_parse_offset.')
   if parse_code:
-    raise ValueError('Bad dirac parse_code, expecting sequence_header: 0x%02x' % parse_code) 
+    raise ValueError('Bad dirac parse_code, expecting sequence_header: 0x%02x' % parse_code)
   info['format'] = 'dirac'
   info['tracks'] = [{'type': 'video', 'codec': 'dirac'}]
   header = header[13] + fread(next_parse_offset - 14)
