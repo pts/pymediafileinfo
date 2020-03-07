@@ -4143,6 +4143,199 @@ def analyze_exe(fread, info, fskip):
         info['format'] = 'dotnetexe'  # .NET executable assembly.
 
 
+def parse_svg_dimen(data):
+  whitespace = '\t\n\x0b\x0c\r '
+  data = data.lower().strip(whitespace)
+  # https://www.w3.org/TR/SVG11/coords.html
+  if data.endswith('px'):
+    multiplier, data = 1, data[:-2].rstrip(whitespace)
+  elif data.endswith('pt'):
+    multiplier, data = 1.25, data[:-2].rstrip(whitespace)
+  elif data.endswith('pc'):
+    multiplier, data = 15, data[:-2].rstrip(whitespace)
+  elif data.endswith('mm'):
+    multiplier, data = 3.543307, data[:-2].rstrip(whitespace)
+  elif data.endswith('cm'):
+    multiplier, data = 35.43307, data[:-2].rstrip(whitespace)
+  elif data.endswith('in'):
+    multiplier, data = 90, data[:-2].rstrip(whitespace)
+  else:
+    multiplier = 1
+  if ('e' in data or '.' in data) and (data[0].isdigit() or data[0] == '.') and data[-1].isdigit():  # Floating point, e.g. 2e3.
+    data = float(data) * multiplier
+  elif data and data.isdigit():
+    data = int(data) * multiplier
+  else:
+    # This also disallows negative.
+    raise ValueError('Bad SVG dimension: %r' % data)
+  if isinstance(data, float):
+    data = int(data + .5)  # Round to neariest integer.
+  return data
+
+
+def analyze_xml(fread, info, fskip):
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for xml.')
+  whitespace = '\t\n\x0b\x0c\r '
+  if header.startswith('<?xml') and header[5] in whitespace:
+    info['format'], data = 'xml', ''
+  elif header.startswith('<svg:'):
+    if len(header) < 9:
+      header += fread(9 - len(header))
+      if len(header) < 9:
+        raise ValueError('Too short for svg.')
+    if header.startswith('<svg:svg') and header[8] in whitespace:
+      info['format'], data = 'svg', ''
+      data = '?><svg' + header[8:]
+    else:
+      raise ValueError('svg signature not found.')
+  elif header.startswith('<svg') and header[4] in whitespace:
+    info['format'], data = 'svg', ''
+    data = '?>' + header
+  else:
+    raise ValueError('xml signature not found.')
+
+  def parse_attrs(data):
+    attrs, i = {}, 0
+    while i < len(data):
+      c = data[i]
+      if c in whitespace:
+        i += 1
+        continue
+      if not c.isalpha():
+        raise ValueError('Bad xml attr name start.')
+      j = i
+      while i < len(data) and (data[i].isalpha() or data[i] in '-:_'):
+        i += 1
+      if i == len(data):
+        raise ValueError('EOF in attr name.')
+      attr_name = data[j : i]
+      while data[i : i + 1] in whitespace:
+        i += 1
+      if data[i : i + 1] != '=':
+        raise ValueError('Expected attr eq: %r' % data[j : i + 1])
+      i += 1
+      while data[i : i + 1] in whitespace:
+        i += 1
+      cq = data[i : i + 1]
+      if cq not in '"\'':
+        raise ValueError('Expected attr quote start.')
+      i += 1
+      j = i
+      cnq = '<>' + cq
+      while i < len(data) and data[i] not in cnq:
+        i += 1
+      if data[i : i + 1] != cq:
+        raise ValueError('Missing attr quote end.')
+      # TODO(pts): Replace &lt; with <, &apos; etc. in attr_value.
+      attr_value = data[j : i]
+      i += 1
+      attrs[attr_name] = attr_value
+    return attrs
+
+  def populate_svg_dimens(attrs, info):
+    if ('width' in attrs and 'height' in attrs and
+        not attrs['width'].endswith('%') and
+        not attrs['height'].endswith('%')):
+      info['width'] = parse_svg_dimen(attrs['width'])
+      info['height'] = parse_svg_dimen(attrs['height'])
+    elif 'viewBox' in attrs:
+      # https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/viewBox
+      items = attrs['viewBox'].strip(whitespace)
+      for w in whitespace:
+        items = items.replace(w, ' ')
+      items = items.split(' ')
+      if len(items) >= 4:
+        info['width'] = parse_svg_dimen(items[2])
+        info['height'] = parse_svg_dimen(items[3])
+
+  def process(data):  # Reads and parses the first real XML tag.
+    i = data.find('?>') + 2
+    if i < 2:
+      raise EOFError('End-of-xml-header not found.')
+    had_doctype = False
+    while 1:
+      if len(data) <= i:
+        raise EOFError
+      if data[i] in whitespace:
+        i += 1
+      elif data[i] == '<':
+        i = j = i + 1
+        if i == len(data):
+          raise EOFError
+        if data[i] == '!':
+          if i + 3 > len(data):
+            raise EOFError
+          if data[i + 1 : i + 3] == '--':  # XML comment.
+            i = data.find('-->', i + 3) + 3
+            if i < 3:
+              raise EOFError
+            continue
+        elif not data[i].isalpha():
+          raise ValueError('Bad xml tag name start.')
+        i += 1
+        while i < len(data) and (data[i].isalpha() or data[i] == '-'):
+          i += 1
+        tag_name = data[j : i]
+        j = i
+        i = data.find('>', j) + 1
+        if i <= 0:
+          raise EOFError
+        if tag_name.startswith('!'):
+          if tag_name == '!DOCTYPE':
+            if had_doctype:
+              raise ValueError('Duplicate xml doctype.')
+            had_doctype = True
+            j0 = j
+            j += data[j : i].find('[')
+            if j >= j0:
+              i = data.find(']>', j + 1) + 2
+              if i < 2:
+                raise EOFError
+            continue
+          raise ValueError('Unknown xml special tag: %s' % tag_name)
+        elif tag_name == 'svg':
+          info['format'] = 'svg'
+          # Typical: attrs['xmlns'] == 'http://www.w3.org/2000/svg'.
+          attrs = parse_attrs(buffer(data, j, i - j - 1))
+          populate_svg_dimens(attrs, info)
+          if 'width' not in info:  # Look for a '<view ...>' tag.
+            # TODO(pts): Also ignore XML comments here.
+            while i < len(data) and data[i] in whitespace:
+              i += 1
+            if i == len(data):
+              raise EOFError
+            if data[i] == '<':
+              j = i + 1
+              i = data.find('>', j) + 1
+              if i <= 0:
+                raise EOFError
+              if data[j : j + 4] == 'view' and data[j + 4 : j + 5] in whitespace:
+                j += 5
+                if data[i - 2] == '/':
+                  i -= 1
+                attrs = parse_attrs(buffer(data, j, i - j - 1))
+                populate_svg_dimens(attrs, info)
+        break
+      else:
+        raise ValueError('xml tag expected.')
+
+  data += fread(1024 - len(data))
+  try:
+    process(data)
+  except EOFError:  # Read more, up to 32 KiB.
+    while 1:
+      size = len(data) + 1024
+      data += fread(1024)
+      try:
+        process(data)
+        break
+      except EOFError:
+        if len(data) >= 32768 or len(data) != size:
+          break
+
+
 def analyze_bmp(fread, info, fskip):
   header = fread(26)
   if len(header) < 26:
@@ -5468,6 +5661,9 @@ FORMAT_ITEMS = (
     # Or DOS .bat file.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
     ('xml', (0, '<?xml', 5, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+    # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
+    ('svg', (0, '<svg', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+    ('svg', (0, '<svg:svg', 8, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # TODO(pts): Ignore whitespace in the beginning above.
@@ -5878,6 +6074,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
+  elif format in ('xml', 'svg'):  # Also generates format=svg.
+    analyze_xml(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

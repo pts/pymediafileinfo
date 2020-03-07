@@ -398,6 +398,46 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_xml(self):
     self.assertEqual(mediafileinfo_detect.detect_format('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')[0], 'xml')
 
+  def test_parse_svg_dimen(self):
+    f = mediafileinfo_detect.parse_svg_dimen
+    self.assertRaises(ValueError, f, '')
+    self.assertRaises(ValueError, f, '.')
+    self.assertRaises(ValueError, f, '-5')
+    self.assertEqual(f('0'), 0)
+    self.assertEqual(f('00092'), 92)
+    self.assertEqual(f('42.0'), 42)
+    self.assertEqual(f('42.40000'), 42)
+    self.assertEqual(f('42.5'), 43)  # Rounded up.
+    self.assertEqual(f('2e3'), 2000)
+    self.assertEqual(f('23456789e-3'), 23457)
+    self.assertEqual(f('10 in'), 900)
+    self.assertEqual(f('10 px'), 10)
+    self.assertEqual(f('10 pt'), 13)  # 12.5 rounded up to 13.
+    self.assertEqual(f('100pt'), 125)
+    self.assertEqual(f('10pc'), 150)
+    self.assertEqual(f('10.2pc'), 153)
+    self.assertEqual(f('10mm'), 35)
+    self.assertEqual(f('10cm'), 354)
+    self.assertRaises(ValueError, f, '10sp')  # TeX unit sp not supported by SVG.
+    self.assertRaises(ValueError, f, '10em')  # Font-based unit em not supported.
+    self.assertRaises(ValueError, f, '10ex')  # Font-based unit ex not supported.
+
+  def test_analyze_xml_svg(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!-- Created with Sodipodi ("http://www.sodipodi.com/") -->\n<svg\n   xmlns:xml="http://www.w3.org/XML/1998/namespace"\n   xmlns:dc="http://purl.org/dc/elements/1.1/"\n   xmlns:cc="http://web.resource.org/cc/"\n   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"\n   xmlns:svg="http://www.w3.org/2000/svg"\n   xmlns="http://www.w3.org/2000/svg"\n   xmlns:xlink="http://www.w3.org/1999/xlink"\n   xmlns:sodipodi="http://inkscape.sourceforge.net/DTD/sodipodi-0.dtd"\n   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n   id="svg602"\n   sodipodi:version="0.32"\n   width="100.00000pt"\n   height="100.00000pt"\n   xml:space="preserve"\n   sodipodi:docname="english.svg"\n   sodipodi:docbase="/home/terry/.icons/nabi"\n   inkscape:version="0.41"\n   inkscape:export-filename="/home/terry/images/icon/png/NewDir/txtfile.png"\n   inkscape:export-xdpi="200.00000"\n   inkscape:export-ydpi="200.00000"><foo'),
+                     {'format': 'svg', 'height': 125, 'width': 125})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" standalone="no"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<!--\n    Designed after data from http://www.wacom-asia.com/download/manuals/BambooUsersManual.pdf\n    Size and positions of controls may not be accurate\n -->\n<svg\n   xmlns="http://www.w3.org/2000/svg"\n   version="1.1"\n   style="color:#000000;stroke:#7f7f7f;fill:none;stroke-width:.25;font-size:8"\n   id="bamboo-2fg"\n   width="208"\n   height="136">\n  <title'),
+                     {'format': 'svg', 'height': 136, 'width': 208})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<svg xmlns = \'http://www.w3.org/2000/svg\' width="099" height="0009px">'),
+                     {'format': 'svg', 'height': 9, 'width': 99})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<svg:svg xmlns = \'http://www.w3.org/2000/svg\' width="2e3" height="0009px">'),
+                     {'format': 'svg', 'height': 9, 'width': 2000})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [\r\n	<!ENTITY ns_svg "http://www.w3.org/2000/svg">\r\n	<!ENTITY ns_xlink "http://www.w3.org/1999/xlink">\r\n]>\n<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="129" viewBox="0 0 128 129" overflow="visible" enable-background="new 0 0 128 129" xml:space="preserve">'),
+                     {'format': 'svg', 'height': 129, 'width': 128})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0"?>\n<svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 -200 800 700">\n  <title>'),
+                     {'format': 'svg', 'height': 700, 'width': 800})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<svg xmlns="http://www.w3.org/2000/svg">\n  <view id="normal" viewBox="0 0 17 19"/>'),
+                     {'format': 'svg', 'height': 19, 'width': 17})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
