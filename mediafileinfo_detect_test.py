@@ -457,6 +457,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0ab881a209'.decode('hex')),
                      {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 56, 'width': 1234})
 
+  def test_analyze_pik(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('P\xccK\x0a')[0], 'pik')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, '50cc4b0a51319400'.decode('hex')),
+                     {'format': 'pik', 'subformat': 'pik1', 'codec': 'pik', 'height': 404, 'width': 550})
+    self.assertEqual(mediafileinfo_detect.detect_format('\xd7LM\x0a')[0], 'pik')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'd74c4d0a45931b00'.decode('hex')),
+                     {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik', 'height': 56, 'width': 1234})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'd74c4d0afce73f0e'.decode('hex')),
+                     {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik', 'height': 512, 'width': 512})
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

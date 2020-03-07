@@ -1102,6 +1102,16 @@ def yield_bits_lsbfirst(fread):
       yield (c >> i) & 1
 
 
+def yield_bits_msbfirst(fread):
+  while 1:
+    c = fread(1)
+    if not c:
+      break
+    c = ord(c)
+    for i in xrange(7, -1, -1):
+      yield (c >> i) & 1
+
+
 def analyze_swf(fread, info, fskip):
   # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
   header = fread(8)
@@ -4147,6 +4157,55 @@ def analyze_jpegxl(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_pik(fread, info, fskip):
+  # subformat=pik1: http://libwebpjs.hohenlimburg.org/pik-in-javascript/
+  # subformat=pik1: http://libwebpjs.hohenlimburg.org/pik-in-javascript/images/2.pik
+  # subformat=pik1: https://github.com/google/pik/blob/52f2d45cc8e35e45278da54615bb8b11b5066f16/header.h#L62-L65
+  # subformat=pik1: https://github.com/google/pik/blob/52f2d45cc8e35e45278da54615bb8b11b5066f16/header.cc#L232
+  # subformat=pik2: https://github.com/google/pik/blob/b4866ff9332fe13b7f7f70e55de02459f5fbb3b3/pik/headers.h#L366-L372
+  header = fread(4)
+  if len(header) < 4:
+    raise ValueError('Too short for pik.')
+  if header == 'P\xccK\x0a':
+    info['subformat'] = 'pik1'
+    bits = yield_bits_msbfirst(fread)
+    def read_u(n):
+      result = i = 0
+      if n > 0:
+        for b in bits:
+          result = result << 1 | b
+          i += 1
+          if i == n:
+            break
+        if i != n:
+          raise ValueError('EOF in pik.')
+      return result
+    def read_dimen():
+      return read_u((9, 11, 13, 32)[read_u(2)])
+  elif header == '\xd7LM\x0a':
+    info['subformat'] = 'pik2'
+    bits = yield_bits_lsbfirst(fread)
+    def read_u(n):
+      result = i = 0
+      if n > 0:
+        for b in bits:
+          result |= b << i
+          i += 1
+          if i == n:
+            break
+        if i != n:
+          raise ValueError('EOF in pik.')
+      return result
+    def read_dimen():
+      return read_u((9, 11, 13, 32)[read_u(2)]) + 1
+  else:
+    raise ValueError('pik signature not found.')
+  info['format'] = info['codec'] = 'pik'
+  width = read_dimen()
+  height = read_dimen()
+  info['width'], info['height'] = width, height
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5692,6 +5751,7 @@ FORMAT_ITEMS = (
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
+    ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
     # JPEG2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # .mov preview image.
@@ -6172,6 +6232,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_brunsli(fread, info, fskip)
   elif format == 'jpegxl':
     analyze_jpegxl(fread, info, fskip)
+  elif format == 'pik':
+    analyze_pik(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

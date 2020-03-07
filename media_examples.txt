@@ -283,5 +283,24 @@ elements. Some elements are truncated.
     ??????? 001 11111 1 00001010 11111111:
       ratio=1 width=height=((0b11111 + 1) * 8)==256
       small=1 type=10 ff=255
+* example format=pik subformat=pik2 data=d74c4d0a45931b00 width=1234 height=56
+  d74c4d0a: signature subformat=pik2
+  45931b00: each byte in lsbfirst bit order:
+    10 10001011001; width=1234 == 0b10011010001 + 1
+    00 111011000; height=56 = 0b000110111 + 1
+    00000000
+* example format=pik subformat=pik2 data=d74c4d0afce73f0e width=512 height=512
+  d74c4d0a: signature subformat=pik2
+  fce73f0e: each byte in lsbfirst bit order:
+    00 111111111; width=512 = 0b111111111 + 1
+    00 111111111; height=512 = 0b111111111 + 1
+    0001110000
+* example format=pik subformat=pik1 data=50cc4b0a51319400 width=550 height=404
+  http://libwebpjs.hohenlimburg.org/pik-in-javascript/
+  http://libwebpjs.hohenlimburg.org/pik-in-javascript/images/2.pik
+  50cc4b0a: signature subformat=pik1
+  51319400: each byte in msbfirst bit order:
+    01 01000100110; width=550 == 0b01000100110
+    00 110010100; height=404 == 0b110010100
 
 __END__
