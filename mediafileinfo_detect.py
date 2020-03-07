@@ -5902,7 +5902,7 @@ class FormatDb(object):
           hps = max(hps, size + len(pattern[0]))
         else:
           hps = max(hps, size)
-    self.header_preread_size = hps  # Typically 64.
+    self.header_preread_size = hps  # Typically 64, we have 392.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
 
