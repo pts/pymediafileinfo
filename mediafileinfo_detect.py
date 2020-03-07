@@ -4093,10 +4093,11 @@ def get_brn_dimensions(fread):
 
 
 def analyze_wav(fread, info, fskip):
-  # This function doesn't do any file format detection.
   header = fread(36)
   if len(header) < 36:
     raise ValueError('Too short for wav.')
+  if not header.startswith('RIFF') or header[8 : 12] != 'WAVE':
+    raise ValueError('wav signature not found.')
   info['format'] = 'wav'
   if header[12 : 16] != 'fmt ':
     raise ValueError('wav fmt chunk missing.')
@@ -4115,7 +4116,6 @@ def analyze_wav(fread, info, fskip):
 
 
 def analyze_exe(fread, info, fskip):
-  # This function doesn't do any file format detection.
   header = fread(64)
   if len(header) < 64:
     raise ValueError('Too short for exe.')
@@ -4144,15 +4144,18 @@ def analyze_exe(fread, info, fskip):
 
 
 def analyze_bmp(fread, info, fskip):
-  # This function doesn't do any file format detection.
   header = fread(26)
   if len(header) < 26:
     raise ValueError('Too short for bmp.')
   if not header.startswith('BM'):
     raise ValueError('bmp signature not found.')
+  if header[6 : 10] != '\0\0\0\0' or header[15 : 18] != '\0\0\0':
+    raise ValueError('Bad bmp header.')
+  b = ord(header[14])
+  if not 12 <= b <= 127:
+    raise ValueError('Bad bmp info size: %d' % b)
   info['format'] = 'bmp'
   # TODO(pts): Detect codec other than 'uncompressed'.
-  b = ord(header[14])
   if b in (12, 26) and len(header) >= 22:
     info['width'], info['height'] = struct.unpack(
         '<HH', header[18 : 22])
@@ -4162,15 +4165,20 @@ def analyze_bmp(fread, info, fskip):
 
 
 def analyze_flic(fread, info, fskip):
-  # This function doesn't do any file format detection.
   header = fread(16)
   if len(header) < 16:
     raise ValueError('Too short for flic.')
-  info['format'] = 'flic'
-  if header[4] == '\x12':
-    info['subformat'] = 'flc'
+  cc = header[4 : 6]
+  if cc == '\x12\zaf':
+    subformat = 'flc'
+  elif cc == '\x11\xaf':
+    subformat = 'fli'
   else:
-    info['subformat'] = 'fli'
+    raise ValueError('Bad flic subformat: %r' % cc)
+  if header[12 : 14] != '\x08\0' or header[14 : 16] not in ('\3\0', '\0\0'):
+    raise ValueError('Bad flic header.')
+  info['format'] = 'flic'
+  info['subformat'] = subformat
   width, height = struct.unpack('<HH', header[8 : 12])
   video_track_info = {'type': 'video', 'codec': 'rle'}
   info['tracks'] = [video_track_info]
@@ -5263,11 +5271,12 @@ def analyze_ico(fread, info, fskip):
 
 
 def analyze_gif(fread, info, fskip):
-  # This function doesn't do any file format detection.
   # Still short enough for is_animated_gif.
   header = fread(10)
   if len(header) < 10:
     raise ValueError('Too short for gif.')
+  if not header.startswith('GIF87a') and not header.startswith('GIF89a'):
+    raise ValueError('gif signature not found.')
   info['format'] = 'gif'
   info['codec'] = 'lzw'
   info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
