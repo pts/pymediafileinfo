@@ -476,5 +476,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\x00nidsc\0\0\x00fjpeg\0\0\0\0\0\0\0\0\0\x01\0\x01appl\0\0\0\0\0\0\x02\0\x01\0\x01m'),
                      {'format': 'qtif', 'codec': 'jpeg', 'height': 365, 'width': 256})
 
+  def test_analyze_psp(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('Paint Shop Pro Image File\n\x1a\0\0\0\0\0')[0], 'psp')
+    data = 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0\x05\0\0\x00~BK\0\0\x00.\0\0\x00.\0\0\0\xf4\1\0\0\xb9\1\0\0'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data),
+                     {'format': 'psp', 'height': 441, 'width': 500})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data + '\0\0\0\0\0\x00R@\1\2\0'),
+                     {'format': 'psp', 'height': 441, 'width': 500, 'codec': 'lz77'})
+
+
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

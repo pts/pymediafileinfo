@@ -4257,6 +4257,44 @@ def analyze_qtif(fread, info, fskip):
   # Typically: sq = 0x200.
 
 
+PSP_CODECS = {
+    0: 'uncompressed',
+    1: 'rle',
+    2: 'lz77',
+    3: 'jpeg',  # Typically not allowed in the header (PSP_IMAGE_BLOCK).
+}
+
+
+def analyze_psp(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/PaintShop_Pro
+  # ftp://ftp.corel.com/pub/documentation/PSP/PSP%20File%20Format%20Specification%207.pdf
+  data = fread(69)
+  if len(data) < 32:
+    raise ValueError('Too short for psp.')
+  if not data.startswith('Paint Shop Pro Image File\n\x1a\0\0\0\0\0'):
+    raise ValueError('psp signature not found.')
+  if len(data) < 58:
+    raise ValueError('EOF in psp image header.')
+  info['format'] = 'psp'
+  major_version, minor_version, header_id, block_id, block_size1, block_size2, width, height = struct.unpack('<32xHHLHLLLL', data[:58])
+  if header_id != 0x4b427e:
+    raise ValueError('Bad psp header_id.')
+  if block_id:
+    raise ValueError('Bad psp block_id.')
+  if block_size1 != block_size2:
+    raise ValueError('psp block_size mismatch.')
+  if block_size1 < 8:
+    raise ValueError('psp block too short.')
+  info['width'], info['height'] = width, height
+  if not 1 <= major_version <= 8:
+    raise ValueError('Bad psp major_version: %d' % major_version)
+  if not 0 <= minor_version <= 20:  # Typically 0.
+    raise ValueError('Bad psp minor_version: %d' % minor_version)
+  if len(data) >= 69:
+    codec, = struct.unpack('<H', data[67 : 69])
+    info['codec'] = PSP_CODECS.get(codec, str(codec))
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5783,6 +5821,8 @@ FORMAT_ITEMS = (
     ('xcf', (0, 'gimp xcf ', 9, ('file', 'v001', 'v002', 'v003', 'v004', 'v005', 'v006', 'v007', 'v008', 'v009'))),
     # By Photoshop.
     ('psd', (0, '8BPS', 4, ('\0\1', '\0\2'), 6, '\0\0\0\0\0\0')),
+    # By Paint Shop Pro.
+    ('psp', (0, 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0')),
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
@@ -5813,6 +5853,7 @@ FORMAT_ITEMS = (
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
+    # Not detecting http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is too short (2 bytes).
 
     # Audio.
 
@@ -6289,6 +6330,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pik(fread, info, fskip)
   elif format == 'qtif':
     analyze_qtif(fread, info, fskip)
+  elif format == 'psp':
+    analyze_psp(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

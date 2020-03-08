@@ -302,5 +302,18 @@ elements. Some elements are truncated.
   51319400: each byte in msbfirst bit order:
     01 01000100110; width=550 == 0b01000100110
     00 110010100; height=404 == 0b110010100
+* example format=psp
+  5061696e742053686f702050726f20496d6167652046696c650a1a0000000000: signature
+  0500: major_version=5
+  0000: minor_version=0
+  7e424b00: header_identifier
+  0000: block_identifier=0(PSP_IMAGE_BLOCK)
+  2e000000: block_size=46
+  2e000000: block_size_again=64
+  f4010000: width=500
+  b9010000: height=441
+  0000000000005240: resolution_value
+  01: resolution_metric=1(PSP_METRIC_INCH)
+  0200: codec=2(lz77)
 
 __END__
