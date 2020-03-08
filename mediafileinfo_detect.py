@@ -5903,6 +5903,9 @@ FORMAT_ITEMS = (
     # TODO(pts): Get width and height from \special{papersize=...}.
     # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
+    # TODO(pts): Add .wmf and .emf support. Can we extract width= and height= easily?
+    #   https://www.fileformat.info/format/wmf/egff.htm
+    #   https://en.wikipedia.org/wiki/Windows_Metafile
 
     # Compressed file or archive.
 
