@@ -511,6 +511,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcpaint_pic, '\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\x41\0\0\0\0\2\0'),
                      {'format': 'pcpaint-pic', 'codec': 'rle', 'height': 200, 'width': 320})
 
+  def test_analyze_ivf(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('DKIF\0\0 \0')[0], 'ivf')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ivf, 'DKIF\0\0 \0VP80 \3 \4'),
+                     {'format': 'ivf', 'tracks': [{'codec': 'vp8', 'height': 1056, 'type': 'video', 'width': 800}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

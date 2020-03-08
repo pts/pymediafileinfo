@@ -1475,6 +1475,22 @@ def analyze_realmedia(fread, info, fskip):
       # Other mime-type found: application/x-pn-multirate-imagemap
 
 
+def analyze_ivf(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/IVF
+  # https://formats.kaitai.io/vp8_ivf/
+  # samples: https://gitlab.com/mbunkus/mkvtoolnix/issues/2553
+  data = fread(8)
+  if len(data) < 8:
+    raise ValueError('Too short for ivf.')
+  if data != 'DKIF\0\0 \0':
+    raise ValueError('ivf signature not found.')
+  info['format'], info['tracks'] = 'ivf', []
+  data = fread(8)
+  if len(data) == 8:
+    codec, width, height = struct.unpack('<4sHH', data)
+    info['tracks'].append({'type': 'video', 'codec': get_windows_video_codec(codec), 'width': width, 'height': height})
+
+
 # --- Windows
 
 # See some on: http://www.fourcc.org/
@@ -5947,6 +5963,7 @@ FORMAT_ITEMS = (
     ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
     ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in range(1, 40)))),
+    ('ivf', (0, 'DKIF\0\0 \0')),
 
     # Video (single elementary stream, no audio).
 
@@ -6540,6 +6557,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_gem(fread, info, fskip)
   elif format == 'pcpaint-pic':
     analyze_pcpaint_pic(fread, info, fskip)
+  elif format == 'ivf':
+    analyze_ivf(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
