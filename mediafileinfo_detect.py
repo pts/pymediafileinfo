@@ -135,15 +135,15 @@ def analyze_flv(fread, info, fskip):
           video_frame_type_id != 5):  # 5 doesn't contain dimensions.
         video_remaining -= 1
         video_track_info['codec'] = (
-            ('reserved0', 'reserved1', 'h263', 'screen', 'vp6',
+            ('reserved0', 'reserved1', 'flv1', 'screen', 'vp6',
              'vp6alpha', 'screen2', 'h264', 'u8', 'u9', 'u10',
              'u11', 'u12', 'u13', 'u14', 'u15')[video_codec_id])
-        if video_codec_id ==  2:  # 'h263'.
+        if video_codec_id == 2:  # 'h263', 'flv1', modified H.263, Sorenson Spark.
           # 736 of 1531 .flv files have this codec.
           # See H263VIDEOPACKET in swf-file-format-spec.pdf, v19.
           # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
           if len(data) < 9:
-            raise ValueError('h263 video tag too short.')
+            raise ValueError('flv1 video tag too short.')
           b, = struct.unpack('>Q', data[1 : 9])
           picture_start_code, version = int(b >> 47), int((b >> 42) & 31)
           if picture_start_code != 1:
@@ -156,7 +156,7 @@ def analyze_flv(fread, info, fskip):
             width, height = int((b >> 23) & 255), int((b >> 15) & 255)
           elif dimen_id == 1:
             if len(data) < 10:
-              raise ValueError('h263 video tag too short.')
+              raise ValueError('flv1 video tag too short.')
             b1 = ord(data[9])
             width = int((b >> 15) & 65535)
             height = int((int(b & 32767) << 1) | b1 >> 7)
@@ -1518,9 +1518,9 @@ WINDOWS_VIDEO_CODECS = {
     'iv31': 'indeo3',
     'iv32': 'indeo3',
     'vcr2': 'vcr2',
+    'flv1': 'flv1',  # Flash Player 6, modified H.263, Sorenson Spark.
     # TODO(pts): Add these.
-    # 26 flv1
-    # 13 ffds
+    # 13 ffds: Not a specific codec, but anything ffdshow (ffmpeg) supports.
     #  7 uldx
     #  6 pim1
     #  4 divf
