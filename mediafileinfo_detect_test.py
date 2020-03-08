@@ -484,6 +484,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data + '\0\0\0\0\0\x00R@\1\2\0'),
                      {'format': 'psp', 'height': 441, 'width': 500, 'codec': 'lz77'})
 
+  def test_analyze_ras(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\x59\xa6\x6a\x95')[0], 'ras')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95\0\0\1\xe6\0\0\0\x78'),
+                     {'format': 'ras', 'height': 120, 'width': 486})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

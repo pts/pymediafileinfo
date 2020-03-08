@@ -4295,6 +4295,22 @@ def analyze_psp(fread, info, fskip):
     info['codec'] = PSP_CODECS.get(codec, str(codec))
 
 
+def analyze_ras(fread, info, fskip):
+  # https://www.fileformat.info/format/sunraster/egff.htm
+  # https://en.wikipedia.org/wiki/Sun_Raster
+  # http://fileformats.archiveteam.org/wiki/Sun_Raster
+  data = fread(4)
+  if len(data) < 4:
+    raise ValueError('Too short for ras.')
+  if not data.startswith('\x59\xa6\x6a\x95'):
+    raise ValueError('ras signature not found.')
+  info['format'] = 'ras'
+  data = fread(8)
+  if len(data) < 4:
+    raise ValueError('EOF in ras header.')
+  info['width'], info['height'] = struct.unpack('>LL', data)
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5823,6 +5839,8 @@ FORMAT_ITEMS = (
     ('psd', (0, '8BPS', 4, ('\0\1', '\0\2'), 6, '\0\0\0\0\0\0')),
     # By Paint Shop Pro.
     ('psp', (0, 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0')),
+    # Sun Raster.
+    ('ras', (0, '\x59\xa6\x6a\x95')),
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
@@ -6332,6 +6350,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_qtif(fread, info, fskip)
   elif format == 'psp':
     analyze_psp(fread, info, fskip)
+  elif format == 'ras':
+    analyze_ras(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
