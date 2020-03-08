@@ -1493,6 +1493,7 @@ def analyze_ivf(fread, info, fskip):
 
 # --- Windows
 
+# FourCC.
 # See some on: http://www.fourcc.org/
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
 # See all on: https://github.com/MediaArea/MediaInfoLib/blob/9c77babfa699347c4ca4a79650cc1f3ce6fcd6c8/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
@@ -1534,6 +1535,7 @@ WINDOWS_VIDEO_CODECS = {
     'iv31': 'indeo3',
     'iv32': 'indeo3',
     'vcr2': 'vcr2',
+    'av01': 'av1',
     'flv1': 'flv1',  # Flash Player 6, modified H.263, Sorenson Spark.
     # TODO(pts): Add these.
     # 13 ffds: Not a specific codec, but anything ffdshow (ffmpeg) supports.
@@ -1545,7 +1547,7 @@ WINDOWS_VIDEO_CODECS = {
 
 
 def get_windows_video_codec(codec):
-  codec = codec.strip().lower()
+  codec = codec.strip().lower()  # Canonicalize FourCC.
   if codec == '\0\0\0\0':
     codec = 'raw'
   elif codec in ('\1\0\0\x10', '\2\0\0\x10'):
