@@ -5963,7 +5963,13 @@ FORMAT_ITEMS = (
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
-    # Not detecting http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is too short (2 bytes).
+    # * It's not feasible to detect
+    #   http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is
+    #   too short (2 bytes).
+    # * It's not possible to detect CCITT Fax Group 3 (G3), it doesn't have a
+    #   header. http://fileformats.archiveteam.org/wiki/CCITT_Group_3
+    # * It's not possible to detect CCITT Fax Group 4 (G4), it doesn't have a
+    #   header. http://fileformats.archiveteam.org/wiki/CCITT_Group_4
 
     # Audio.
 
@@ -5995,7 +6001,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Get width and height from \special{papersize=...}.
     # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
-    # TODO(pts): Add .wmf and .emf support. Can we extract width= and height= easily?
+    # * TODO(pts): Add .wmf and .emf support. Can we extract width= and height= easily?
     #   https://www.fileformat.info/format/wmf/egff.htm
     #   https://en.wikipedia.org/wiki/Windows_Metafile
 
