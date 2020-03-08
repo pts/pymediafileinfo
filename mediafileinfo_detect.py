@@ -4364,6 +4364,28 @@ def analyze_gem(fread, info, fskip):
   info['width'], info['height'] = struct.unpack('>HH', data[12 : 16])
 
 
+def analyze_pcpaint_pic(fread, info, fskip):
+  # http://www.fileformat.info/format/pictor/egff.htm
+  # http://netghost.narod.ru/gff/vendspec/pictor/pictor.txt
+  # http://fileformats.archiveteam.org/wiki/PCPaint_PIC
+  data = fread(17)
+  if len(data) < 14:
+    raise ValueError('Too short for pcpaint-pic.')
+  if not (data.startswith('\x34\x12') and data[6 : 10] == '\0\0\0\0' and data[11] in '\xff123' and data[13] in '\0\1\2\3\4'):
+    raise ValueError('pcpaint-pic signature not found.')
+  info['format'], info['codec'] = 'pcpaint-pic', 'rle'
+  info['width'], info['height'] = struct.unpack('<HH', data[2 : 6])
+  if len(data) >= 17:
+    esize, = struct.unpack('<H', data[15 : 17])
+    if not fskip(esize):
+      raise ValueError('EOF in pcpaint-pic palette.')
+    data = fread(2)
+    if len(data) < 2:
+      raise ValueError('EOF if pcpaint-pic block count.')
+    if data == '\0\0':
+      info['codec'] = 'raw'  # Uncompressed.
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5990,6 +6012,8 @@ FORMAT_ITEMS = (
     ('gem', (0, GEM_HYPERPAINT_HEADERS, 16, '\0\x80')),
     ('gem', (0, GEM_STTT_HEADERS, 16, 'STTT\0\x10')),
     ('gem', (0, GEM_XIMG_HEADERS, 16, 'XIMG\0\0')),
+    # By PCPaint >=2.0 and Pictor.
+    ('pcpaint-pic', (0, '\x34\x12', 6, '\0\0\0\0', 11, tuple('\xff123'), 13, tuple('\0\1\2\3\4'))),
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
@@ -6514,6 +6538,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ras(fread, info, fskip)
   elif format == 'gem':
     analyze_gem(fread, info, fskip)
+  elif format == 'pcpaint-pic':
+    analyze_pcpaint_pic(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

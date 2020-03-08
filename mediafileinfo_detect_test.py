@@ -506,6 +506,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\2\0\x3b\0\4\0\1\0\x55\0\x55\1\0\0\x40XIMG\0\0'),
                      {'format': 'gem', 'subformat': 'ximg', 'codec': 'rle', 'height': 64, 'width': 256})
 
+  def test_analyze_pcpaint_pic(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\0\0')[0], 'pcpaint-pic')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcpaint_pic, '\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\x41\0\0\0\0\2\0'),
+                     {'format': 'pcpaint-pic', 'codec': 'rle', 'height': 200, 'width': 320})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
