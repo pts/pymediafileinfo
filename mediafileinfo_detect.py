@@ -4901,6 +4901,96 @@ def analyze_pnm(fread, info, fskip):
   info['width'], info['height'] = dimensions
 
 
+def count_is_pam(header):
+  # http://netpbm.sourceforge.net/doc/pam.html
+  if not header.startswith('P7\n'):
+    return 0
+  i, letters = 3, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  while i < len(header):
+    c, j = header[i], i
+    i = header.find('\n', i) + 1
+    if i <= 0:
+      break  # EOF in header line.
+    if c in letters:
+      line = header[j : i - 1]
+      if line == 'ENDHDR':
+        return i * 100  # Found good header line.
+      if line[-1].isspace():
+        return 0  # Unexpected whitespace at end of line.
+      line = line.split(None, 1)
+      if len(line) != 2:
+        return 0  # Missing argument.
+      if line[0].rstrip(letters):
+        return 0  # Non-letter found in key.
+      if line[0] in ('WIDTH', 'HEIGHT', 'DEPTH', 'MAXVAL'):
+        return i * 100  # Found first mandatory key.
+    elif c in '\n#':
+      pass
+    else:
+      return 0  # Unsupported character in comment.
+  return 0  # EOF in header.
+
+
+def analyze_pam(fread, info, fskip):
+  # http://netpbm.sourceforge.net/doc/pam.html
+  # https://en.wikipedia.org/wiki/Netpbm#PAM_graphics_format
+  header = fread(4)
+  if len(header) < 4:
+    raise ValueError('Too short for pnm.')
+  letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  if not header.startswith('P7\n') or (header[3] not in '\n#' and header[3] not in letters):
+    raise ValueError('pam signature not found.')
+  info['format'], info['codec'] = 'pam', 'raw'
+  data = ''.join(('##\n', header[3], fread(508)))
+
+  def process_lines(data, letters=letters):
+    missing_keys = set(('WIDTH', 'HEIGHT', 'DEPTH', 'MAXVAL'))
+    i, hdr = 3, {}
+    while i < len(data):
+      c, j = data[i], i
+      i = data.find('\n', i) + 1
+      if i <= 0:
+        raise EOFError('EOF in pam header line.')
+      if c in letters:
+        line = data[j : i - 1]
+        if line == 'ENDHDR':
+          if missing_keys:
+            raise ValueError('Missing pam header keys: %s' % ', '.join(sorted(missing_keys)))
+          info['width'], info['height'] = hdr['width'], hdr['height']
+          return
+        if line[-1].isspace():
+          raise ValueError('Whitespace at the end of pam header argument.')
+        line = line.split(None, 1)
+        if len(line) != 2:
+          raise ValueError('Whitespace in pam header argument.')
+        if line[0].rstrip(letters):
+          raise ValueError('Non-letter in pam header key: %r' % line[0])
+        missing_keys.discard(line[0])  # Allow arbitrary keys.
+        if line[0] in ('WIDTH', 'HEIGHT'):
+          key = line[0].lower()
+          try:
+            hdr[key] = int(line[1])
+          except ValueError:
+            raise ValueError('Bad pam %s: %r' % (line[0], line[1]))
+      elif c in '\n#':
+        pass
+      else:
+        return 0  # Unsupported character in comment.
+    raise EOFError('EOF in pam header before ENDHDR.')
+
+  while 1:
+    try:
+      process_lines(data)
+      break
+    except EOFError:
+      size = len(data)
+      if size >= 8192 or size & (size - 1):  # Not a power of 2.
+        raise
+      data += fread(size)
+      if size == len(data):
+        raise
+
+
 def analyze_ps(fread, info, fskip):
   header = fread(15)
   if len(header) < 15:
@@ -5820,6 +5910,8 @@ FORMAT_ITEMS = (
     ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('ppm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
+    ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xpm', (0, '/* XPM */')),
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
@@ -6269,6 +6361,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_tiff(fread, info, fskip)
   elif format in ('pbm', 'pgm', 'ppm'):
     analyze_pnm(fread, info, fskip)
+  elif format == 'pam':
+    analyze_pam(fread, info, fskip)
   elif format == 'ps':
     analyze_ps(fread, info, fskip)
   elif format == 'miff':

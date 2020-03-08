@@ -489,6 +489,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95\0\0\1\xe6\0\0\0\x78'),
                      {'format': 'ras', 'height': 120, 'width': 486})
 
+  def test_analyze_pam(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('P7\n#\nWIDTH 1\n')[0], 'pam')
+    self.assertEqual(mediafileinfo_detect.detect_format('P7\n\nHEIGHT\t2\n')[0], 'pam')
+    self.assertEqual(mediafileinfo_detect.detect_format('P7\nQ RS\nDEPTH\f3\n')[0], 'pam')
+    self.assertEqual(mediafileinfo_detect.detect_format('P7\nQ RS\nMAXVAL\v4\n')[0], 'pam')
+    self.assertEqual(mediafileinfo_detect.detect_format('P7\nENDHDR\n')[0], 'pam')
+    self.assertNotEqual(mediafileinfo_detect.detect_format('P7\nQ RS\n')[0], 'pam')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam, 'P7\nWIDTH 227\nDEPTH 3\n# WIDTH 42\nHEIGHT\t\f149\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n'),
+                     {'format': 'pam', 'codec': 'raw', 'height': 149, 'width': 227})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
