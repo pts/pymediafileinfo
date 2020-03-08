@@ -499,6 +499,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam, 'P7\nWIDTH 227\nDEPTH 3\n# WIDTH 42\nHEIGHT\t\f149\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n'),
                      {'format': 'pam', 'codec': 'raw', 'height': 149, 'width': 227})
 
+  def test_analyze_gem(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x08\0\2\0\2')[0], 'gem')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\1\0\x08\0\2\0\2\0\x55\0\x55\1\0\0\x40'),
+                     {'format': 'gem', 'subformat': 'nosig', 'codec': 'rle', 'height': 64, 'width': 256})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\2\0\x3b\0\4\0\1\0\x55\0\x55\1\0\0\x40XIMG\0\0'),
+                     {'format': 'gem', 'subformat': 'ximg', 'codec': 'rle', 'height': 64, 'width': 256})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

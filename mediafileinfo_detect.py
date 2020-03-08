@@ -4311,6 +4311,59 @@ def analyze_ras(fread, info, fskip):
   info['width'], info['height'] = struct.unpack('>LL', data)
 
 
+GEM_NOSIG_HEADERS = (
+    '\0\1\0\x08\0\1\0\2', '\0\1\0\x08\0\2\0\2', '\0\1\0\x08\0\4\0\2', '\0\1\0\x08\0\x08\0\2', '\0\1\0\x09\0\1\0\2', '\0\1\0\x09\0\2\0\2', '\0\1\0\x09\0\4\0\2', '\0\1\0\x09\0\x08\0\2',
+    '\0\1\0\x0a\0\1\0\2',    # NOSIG, 2-color palette.
+    '\0\1\0\x0c\0\2\0\2',    # NOSIG, 4-color palette.
+    '\0\1\0\x18\0\4\0\2',    # NOSIG, 16-color palette.
+    '\0\1\1\x08\0\x08\0\2',  # NOSIG, 256-color palette.
+)
+
+GEM_HYPERPAINT_HEADERS = (
+    '\0\1\0\x0b\0\1\0\2',    # HYPERPAINT, 2-color palette.
+    '\0\1\0\x0d\0\2\0\2',    # HYPERPAINT, 4-color palette.
+    '\0\1\0\x19\0\4\0\2',    # HYPERPAINT, 16-color palette.
+    '\0\1\1\x09\0\x08\0\2',  # HYPERPAINT, 256-color palette.
+)
+
+GEM_STTT_HEADERS = (
+    '\0\1\0\x0d\0\1\0\1',    # STTT, 2-color palette.
+    '\0\1\0\x0f\0\2\0\1',    # STTT, 4-color palette.
+    '\0\1\0\x1b\0\4\0\1',    # STTT, 16-color palette.
+    '\0\1\1\x0b\0\x08\0\1',  # STTT, 256-color palette.
+)
+
+GEM_XIMG_HEADERS = (
+    '\0\2\0\x11\0\1\0\1',    # XIMG, 2-color palette.
+    '\0\2\0\x17\0\2\0\1',    # XIMG, 4-color palette.
+    '\0\2\0\x3b\0\4\0\1',    # XIMG, 16-color palette.
+    '\0\2\3\x0b\0\x08\0\1',  # XIMG, 256-color palette.
+)
+
+
+def analyze_gem(fread, info, fskip):
+  # https://www.seasip.info/Gem/ff_img.html
+  # https://www.fileformat.info/format/gemraster/egff.htm
+  # http://fileformats.archiveteam.org/wiki/GEM_Raster
+  # http://www.fileformat.info/format/gemraster/spec/20e311cc16f844fda91beb539d62c46c/view.htm
+  # http://www.atari-wiki.com/index.php/IMG_file
+  data = fread(22)
+  if len(data) < 8:
+    raise ValueError('Too short for gem.')
+  if data[:8] in GEM_NOSIG_HEADERS:
+    info['subformat'] = 'nosig'
+  elif data[:8] in GEM_HYPERPAINT_HEADERS and len(data) >= 18 and data[16 : 18] == '\0\x80':
+    info['subformat'] = 'hyperpaint'
+  elif data[:8] in GEM_STTT_HEADERS and len(data) >= 22 and data[16 : 22] == 'STTT\0\x10':
+    info['subformat'] = 'sttt'
+  elif data[:8] in GEM_XIMG_HEADERS and len(data) >= 22 and data[16 : 22] == 'XIMG\0\0':
+    info['subformat'] = 'ximg'
+  else:
+    raise ValueError('gem signature not found.')
+  info['format'], info['codec'] = 'gem', 'rle'
+  info['width'], info['height'] = struct.unpack('>HH', data[12 : 16])
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5933,6 +5986,10 @@ FORMAT_ITEMS = (
     ('psp', (0, 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0')),
     # Sun Raster.
     ('ras', (0, '\x59\xa6\x6a\x95')),
+    ('gem', (0, GEM_NOSIG_HEADERS)),
+    ('gem', (0, GEM_HYPERPAINT_HEADERS, 16, '\0\x80')),
+    ('gem', (0, GEM_STTT_HEADERS, 16, 'STTT\0\x10')),
+    ('gem', (0, GEM_XIMG_HEADERS, 16, 'XIMG\0\0')),
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
@@ -6455,6 +6512,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_psp(fread, info, fskip)
   elif format == 'ras':
     analyze_ras(fread, info, fskip)
+  elif format == 'gem':
+    analyze_gem(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
