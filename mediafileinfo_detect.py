@@ -620,6 +620,7 @@ MP4_VIDEO_CODECS = {
     'vp09': 'vp9',
     'vp10': 'vp10',
     'vp11': 'vp11',
+    'jpeg': 'jpeg',  # For qtif.
 }
 
 # See all on: http://mp4ra.org/codecs.html
@@ -4206,6 +4207,56 @@ def analyze_pik(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_qtif(fread, info, fskip):
+  # https://developer.apple.com/library/archive/documentation/QuickTime/QTFF/QTFFAppenA/QTFFAppenA.html
+  # http://justsolve.archiveteam.org/wiki/QTIF
+  data = fread(8)
+  if len(data) < 8:
+    raise ValueError('Too short for qtif atom.')
+  size, xtype = struct.unpack('>L4s', data)
+  if xtype not in ('idsc', 'iicc', 'idat'):
+    raise ValueError('qtif signature not found.')
+  if size >> (25, 8)[xtype == 'idsc']:
+    raise ValueError('qtif atom too large.')
+  info['format'] = 'qtif'
+  had_xtypes = set()
+  while xtype != 'idsc':
+    if xtype in had_xtypes:
+      raise ValueError('Duplicate qtif idsc atom: %s' % xtype)
+    had_xtypes.add(xtype)
+    if size >> 25:
+      raise ValueError('qtif %s atom too large.' % xtype)
+    if size < 8:
+      raise ValueError('qtif atom too small.')
+    if not fskip(size - 8):
+      raise ValueError('EOF in qtif %s atom.' % xtype)
+    data = fread(8)
+    if len(data) < 8:
+      raise ValueError('Too short for qtif atom.')
+    size, xtype = struct.unpack('>L4s', data)
+    if xtype not in ('idsc', 'iicc', 'idat'):
+      raise ValueError('Bad qtif atom: %r' % xtype)
+  if size >> 8:
+    raise ValueError('qtif idsc atom too large.')
+  if size < 36 + 8:
+    raise ValueError('qtif idsc atom too small.')
+  data = fread(36)
+  if len(data) < 36:
+    raise ValueError('EOF in qtif idsc atom.')
+  (size2, codec, r1, r2, version, vendor, tq, sq, width, height,
+  ) = struct.unpack('>L4sLLL4sLLHH', data)
+  if size2 != size - 8:
+    raise ValueError('qtif idsc atom size mismatch.')
+  codec = codec.strip().lower()
+  info['codec'] = MP4_VIDEO_CODECS.get(codec, codec)
+  info['width'], info['height'] = width, height
+  if r1 or r2 or tq:
+    raise ValueError('Bad qtif idsc reserved 0s.')
+  # Typically: version in (0, 0x101).
+  # Typically: vendor = 'appl'.
+  # Typically: sq = 0x200.
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -5752,6 +5803,8 @@ FORMAT_ITEMS = (
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
+    ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
+    ('qtif', (0, '\0\0\0', 4, 'idsc')),
     # JPEG2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # .mov preview image.
@@ -6234,6 +6287,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_jpegxl(fread, info, fskip)
   elif format == 'pik':
     analyze_pik(fread, info, fskip)
+  elif format == 'qtif':
+    analyze_qtif(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

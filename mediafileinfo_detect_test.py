@@ -467,5 +467,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'd74c4d0afce73f0e'.decode('hex')),
                      {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik', 'height': 512, 'width': 512})
 
+  def test_analyze_qtif(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x00idat')[0], 'qtif')
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x00iicc')[0], 'qtif')
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\xffidsc')[0], 'qtif')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\0\x0bidat\xff\xd8\xff\0\0\x00nidsc\0\0\x00fjpeg\0\0\0\0\0\0\0\0\0\x01\0\x01appl\0\0\0\0\0\0\x02\0\x01\0\x01m\x00H\0\0\x00H\0\0\0\x00Hq\0\x01\x0cPhoto - JPEG\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x18\xff\xff\0\0\0\x0cgama\0\x01\xcc\xcc\0\0\0\0'),
+                     {'format': 'qtif', 'codec': 'jpeg', 'height': 365, 'width': 256})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\x00nidsc\0\0\x00fjpeg\0\0\0\0\0\0\0\0\0\x01\0\x01appl\0\0\0\0\0\0\x02\0\x01\0\x01m'),
+                     {'format': 'qtif', 'codec': 'jpeg', 'height': 365, 'width': 256})
+
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
