@@ -1041,7 +1041,7 @@ def analyze_mp4(fread, info, fskip):
     if len(primary_ispe_boxes[0]) < 12:
       raise ValueError('EOD in isobmff-image ispe.')
     info['width'], info['height'] = struct.unpack('>LL', buffer(primary_ispe_boxes[0], 4, 8))
-    codec = item_infos[primary_item_id_ary[0]][1]
+    codec = item_infos[primary_item_id_ary[0]][1].strip().lower()
     if codec is not None:
       # Typically codec is 'hvc1' for .heic and 'av01' or .avif.
       info['codec'] = MP4_VIDEO_CODECS.get(codec, codec)
