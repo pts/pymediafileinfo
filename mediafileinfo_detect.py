@@ -4490,6 +4490,7 @@ def analyze_xml(fread, info, fskip):
   if len(header) < 6:
     raise ValueError('Too short for xml.')
   whitespace = '\t\n\x0b\x0c\r '
+  whitespace_tagend = whitespace + '>'
   if header.startswith('<?xml') and header[5] in whitespace:
     info['format'], data = 'xml', ''
   elif header.startswith('<svg:'):
@@ -4497,13 +4498,16 @@ def analyze_xml(fread, info, fskip):
       header += fread(9 - len(header))
       if len(header) < 9:
         raise ValueError('Too short for svg.')
-    if header.startswith('<svg:svg') and header[8] in whitespace:
+    if header.startswith('<svg:svg') and header[8] in whitespace_tagend:
       info['format'], data = 'svg', ''
       data = '?><svg' + header[8:]
     else:
       raise ValueError('svg signature not found.')
-  elif header.startswith('<svg') and header[4] in whitespace:
+  elif header.startswith('<svg') and header[4] in whitespace_tagend:
     info['format'], data = 'svg', ''
+    data = '?>' + header
+  elif header.startswith('<smil') and header[5] in whitespace_tagend:
+    info['format'], data = 'smil', ''
     data = '?>' + header
   else:
     raise ValueError('xml signature not found.')
@@ -4607,6 +4611,9 @@ def analyze_xml(fread, info, fskip):
                 raise EOFError
             continue
           raise ValueError('Unknown xml special tag: %s' % tag_name)
+        elif tag_name == 'smil':
+          info['format'] = 'smil'
+          # No width= and height= attributes in SMIL.
         elif tag_name == 'svg':
           info['format'] = 'svg'
           # Typical: attrs['xmlns'] == 'http://www.w3.org/2000/svg'.
@@ -5952,6 +5959,8 @@ def adjust_confidence(base_confidence, confidence):
   return (confidence, max(1, confidence - base_confidence))
 
 
+XML_WHITESPACE_TAGEND = ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '>')
+
 MAX_CONFIDENCE = 100000
 
 # TODO(pts): Static analysis: fail on duplicate format name. (Do we want this?)
@@ -6132,8 +6141,9 @@ FORMAT_ITEMS = (
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
-    ('svg', (0, '<svg', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
-    ('svg', (0, '<svg:svg', 8, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+    ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
+    ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
+    ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
     # * TODO(pts): Add .emf support. Can we extract width= and height= easily?
     #   https://www.fileformat.info/format/wmf/egff.htm
     #   https://en.wikipedia.org/wiki/Windows_Metafile
@@ -6571,8 +6581,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
-  elif format in ('xml', 'svg'):  # Also generates format=svg.
-    analyze_xml(fread, info, fskip)
+  elif format in ('xml', 'svg'):
+    analyze_xml(fread, info, fskip)  # Also generates format=svg and =smil.
   elif format == 'jpegxl-brunsli':
     analyze_brunsli(fread, info, fskip)
   elif format == 'jpegxl':

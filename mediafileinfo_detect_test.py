@@ -422,7 +422,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertRaises(ValueError, f, '10em')  # Font-based unit em not supported.
     self.assertRaises(ValueError, f, '10ex')  # Font-based unit ex not supported.
 
-  def test_analyze_xml_svg(self):
+  def test_analyze_svg(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('<svg\t')[0], 'svg')
+    self.assertEqual(mediafileinfo_detect.detect_format('<svg:svg\f')[0], 'svg')
+    self.assertEqual(mediafileinfo_detect.detect_format('<svg:svg>')[0], 'svg')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!-- Created with Sodipodi ("http://www.sodipodi.com/") -->\n<svg\n   xmlns:xml="http://www.w3.org/XML/1998/namespace"\n   xmlns:dc="http://purl.org/dc/elements/1.1/"\n   xmlns:cc="http://web.resource.org/cc/"\n   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"\n   xmlns:svg="http://www.w3.org/2000/svg"\n   xmlns="http://www.w3.org/2000/svg"\n   xmlns:xlink="http://www.w3.org/1999/xlink"\n   xmlns:sodipodi="http://inkscape.sourceforge.net/DTD/sodipodi-0.dtd"\n   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n   id="svg602"\n   sodipodi:version="0.32"\n   width="100.00000pt"\n   height="100.00000pt"\n   xml:space="preserve"\n   sodipodi:docname="english.svg"\n   sodipodi:docbase="/home/terry/.icons/nabi"\n   inkscape:version="0.41"\n   inkscape:export-filename="/home/terry/images/icon/png/NewDir/txtfile.png"\n   inkscape:export-xdpi="200.00000"\n   inkscape:export-ydpi="200.00000"><foo'),
                      {'format': 'svg', 'height': 125, 'width': 125})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" standalone="no"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<!--\n    Designed after data from http://www.wacom-asia.com/download/manuals/BambooUsersManual.pdf\n    Size and positions of controls may not be accurate\n -->\n<svg\n   xmlns="http://www.w3.org/2000/svg"\n   version="1.1"\n   style="color:#000000;stroke:#7f7f7f;fill:none;stroke-width:.25;font-size:8"\n   id="bamboo-2fg"\n   width="208"\n   height="136">\n  <title'),
@@ -437,6 +440,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'svg', 'height': 700, 'width': 800})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<svg xmlns="http://www.w3.org/2000/svg">\n  <view id="normal" viewBox="0 0 17 19"/>'),
                      {'format': 'svg', 'height': 19, 'width': 17})
+
+  def test_analyze_smil(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('<smil\r')[0], 'smil')
+    self.assertEqual(mediafileinfo_detect.detect_format('<smil>')[0], 'smil')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<smil>'),
+                     {'format': 'smil'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0" encoding="UTF-8"?>\n<!-- Comment --->\n<!DOCTYPE smil -->\t\f<smil xml:id="root" xmlns="http://www.w3.org/ns/SMIL" version="3.0" baseProfile="Tiny" >'),
+                     {'format': 'smil'})
 
   def test_analyze_brunsli(self):
     self.assertEqual(mediafileinfo_detect.detect_format('\x0a\x04B\xd2\xd5N')[0], 'jpegxl-brunsli')
