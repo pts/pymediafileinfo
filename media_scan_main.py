@@ -1146,7 +1146,7 @@ def main(argv):
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:
     # For unbuffered appending.
-    outf = os.fdopen(sys.stdout.fileno(), 'a', 0)
+    outf = os.fdopen(os.dup(sys.stdout.fileno()), 'a', 0)
   tags_impl = None
   if do_tags:
     tags_impl = lambda filename, getxattr=xattr_detect()()['getxattr']: (
