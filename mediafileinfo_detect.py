@@ -6009,7 +6009,6 @@ FORMAT_ITEMS = (
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
     ('realvideo-size', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
-
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -6132,6 +6131,9 @@ FORMAT_ITEMS = (
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
+    # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
+    ('svg', (0, '<svg', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
+    ('svg', (0, '<svg:svg', 8, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
     # * TODO(pts): Add .emf support. Can we extract width= and height= easily?
     #   https://www.fileformat.info/format/wmf/egff.htm
     #   https://en.wikipedia.org/wiki/Windows_Metafile
@@ -6158,9 +6160,6 @@ FORMAT_ITEMS = (
     # Or DOS .bat file.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
     ('xml', (0, '<?xml', 5, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
-    # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
-    ('svg', (0, '<svg', 4, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
-    ('svg', (0, '<svg:svg', 8, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # TODO(pts): Ignore whitespace in the beginning above.
