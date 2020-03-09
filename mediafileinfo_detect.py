@@ -6095,7 +6095,7 @@ FORMAT_ITEMS = (
     ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
-    ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in range(1, 40)))),
+    ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
 
     # Video (single elementary stream, no audio).
