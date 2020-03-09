@@ -7,11 +7,9 @@ Python 2.4, 2.5, 2.6 or 2.7, no module installation. mediafileinfo.py can
 read the input in a streaming way (without seeking), and it stops reading
 after the media parameters have been found.
 
-Supported video formats for dimension and codec detection include mp4, mkv,
-webm, flv, avi, asf, wmv, wma.
-
-Supported image formats for dimension detection include JPEG, PNG, GIF,
-BMP.
+mediafileinfo.py can detect >130 file formats, among those it can display
+dimensions and codec from media formats webm, flv, avi, asf, wmv, wma etc.,
+and it can display dimensions of image formats JPEG, PNG, GIF, BMP, PNM.
 
 Status: production ready for images, beta software for video. Please report
 bugs on https://github.com/pts/pymediafileinfo/issues , your feedback is
@@ -44,6 +42,17 @@ Usage on Unix (don't type the leading $):
 
 FAQ
 ~~~
+Q0. Which file formats does mediafileinfo.py support?
+
+A0. Get a full list of file formats that can be detecting (by their
+    signature) by running `mediafileinfo.py --list-formats'. This will
+    include >130 file formats.
+
+    Please note that media parameters (e.g. width, height and codec) cannot
+    be found in all file formats, e.g. format=zip doesn't have width, and
+    format=pdf would be too complicated to process (i.e. /MediaBox can be
+    in a compressed object).
+
 Q1. Can mediafileinfo.py get image authoring metadata (e.g. camera model
     and other EXIF tags), audio metadata (e.g. artist and album and other ID3
     MP3 tags) or video metadata (such as software created)?
@@ -175,7 +184,7 @@ A7. mediafileinfo.py can detect MP3 and MPEG files (mpeg-video (elementary
     * Raw MPEG audio streams without MPEG-ADTS frame wrapping are not detected.
       (Does this even exist? Aren't just junk in the beginning of the
       mpeg-adts file?)
-    * Media parameters are not extracted from some MPEG-TS files, especially
+    * Media parameters are not found from some MPEG-TS files, especially
       if the PAT frame is not near the beginning of the file.
 
 Q8. What scanning tools are available in addition to mediafileinfo.py?
@@ -195,6 +204,17 @@ A8. quick_scan.py is a small Python script which detects size=, mtime= and
     images using the findimagedupes.pl algorithm, specify --fp=yes to
     enable). Its the default `media_scan.py --scan'.
 
+Q9. mediafileinfo.py doesn't support my favorite file format, can you add
+    support?
+
+A9. Please add an issue on https://github.com/pts/pymediafileinfo/issues .
+
+Q10. mediafileinfo.py doesn't detect or analyze (media parameters) my
+     favorite file format, can you fix it?
+
+A10. Please report a bug on https://github.com/pts/pymediafileinfo/issues ,
+     and attach the offending file.
+
 TODO
 ~~~~
 
@@ -204,13 +224,16 @@ TODO
 * TODO(pts): Estimate better size limits.
 * TODO(pts): Better format=html detection, longer strings etc.
 * TODO(pts): Full detection of 'JASC BROWS FILE\0'.
-* TODO(pts): Add getting media parameters from Ogg Vorbis.
 * TODO(pts): Add type=video, type=audio, type=image etc.
-* TODO(pts): Extend media_scan.py with code from here.
 * TODO(pts): Add memory limits against large reads everywhere.
 * TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
-             my @formats) for more image formats. Publish img_bbox.pl on
-             GitHub (copy metadata from
+             my @formats) for more image formats: XPM, XBM1, XBM,
+             MinoltaRAW, Cineon, BioRad, IFF, FBM, CMUWM, RLE, PCD,
+             XWD, McIDAS, VIEW, SGI, FITS, VICAR, FIT, FIG, archivers,
+             G3, Faces, + all from @formats.
+             Still, img_bbox.pl has better PostScript, DVI (\special)
+             analyzing.
+* TODO(pts): Publish img_bbox.pl on GitHub (copy metadata from
              http://freshmeat.sourceforge.net/projects/img_bbox)
 
 __END__
