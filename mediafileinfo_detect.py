@@ -1291,6 +1291,8 @@ def get_ogg_es_track_info(header):
         header.startswith('\x90\x49\x83\x42') or header.startswith('\x91\x49\x83\x42') or header.startswith('\x92\x49\x83\x42') or header.startswith('\x93\x49\x83\x42') or
         header.startswith('\xb0\x24\xc1\xa1') or header.startswith('\xb0\xa4\xc1\xa1') or header.startswith('\xb1\x24\xc1\xa1') or header.startswith('\xb1\xa4\xc1\xa1')):
     return get_vp9_track_info(header)
+  elif header.startswith('\x12\0\x0a') and len(header) > 3 and 3 <= ord(header[3]) <= 127:
+    return get_av1_track_info(header)
   else:
     # We can't detect vcodec=vp8 here, because its 3-byte prefix can be
     # anything.
@@ -5350,6 +5352,101 @@ def analyze_vp9(fread, info, fskip):
   info['tracks'] = [track_info]
 
 
+def get_av1_track_info(header):
+  # https://aomediacodec.github.io/av1-spec/
+  # https://aomediacodec.github.io/av1-spec/av1-spec.pdf
+  #
+  # https://aomediacodec.github.io/av1-spec/#ordering-of-obus states:
+  #
+  # * First few OBUs are: temporal delimiter, sequence header, metadata (0 or more), frame.
+  # * The first frame (OBU_FRAME) header has frame_type equal to KEY_FRAME, show_frame equal to 1, show_existing_frame equal to 0, and temporal_id equal to 0.
+  #
+  # Limitations:
+  #
+  # * We don't support obu_extension_flag=1.
+  # * Largest sequence header size we support is 127 because of leb128 parsing.
+  if len(header) < 4:
+    raise ValueError('Too short for av1.')
+  seqhead_size = ord(header[3])
+  if not header.startswith('\x12\0\x0a') or not 4 <= seqhead_size <= 127:
+    raise ValueError('av1 signature not found.')
+  # TODO(pts): Check that seqhead_size is long enough.
+  bits = get_bitstream(buffer(header, 4))
+
+  def read_1():
+    for b in bits:
+      return b == '1'
+    raise ValueError('EOF in av1.')
+
+  def read_u(n):
+    result = i = 0
+    if n > 0:
+      for b in bits:
+        result = result << 1 | (b == '1')
+        i += 1
+        if i == n:
+          break
+      if i != n:
+        raise ValueError('EOF in av1.')
+    return result
+
+  def skip_uvlc():
+    lzc = 0
+    while not read_1():
+      lzc += 1
+    if lzc < 32:
+      read_u(lcz)
+
+  for b in bits:
+    break
+  else:
+    return {'type': 'video', 'codec': 'av1'}  # Just 4 bytes of header.
+
+  seq_profile = (b == '1') << 2 | read_u(2)
+  still_picture = read_1()
+  reduced_still_picture_header = read_1()
+  if reduced_still_picture_header:
+    read_u(5)  # seq_level_idx.
+  else:
+    if read_1():  # timing_info_present_flag.
+      read_u(32)
+      read_u(32)
+      if read_1():
+        skip_uvlc()
+      decoder_model_info_present_flag = read_1()
+      if decoder_model_info_present_flag:
+        buffer_delay_length_minus_1 = read_u(5)
+        read_u(32)
+        read_u(5 + 5)
+    else:
+      decoder_model_info_present_flag = buffer_delay_length_minus_1 = 0
+    initial_display_delay_present_flag = read_1()
+    for _ in xrange(read_u(5) + 1):
+      read_u(12)
+      seq_level_idx = read_u(5)
+      if seq_level_idx > 7:
+        read_1()
+      if decoder_model_info_present_flag:
+        if read_1():
+          read_u(3 + (buffer_delay_length_minus_1 << 1))
+      if initial_display_delay_present_flag:
+        if read_1():
+          read_u(4)
+  frame_width_bits_minus_1 = read_u(4)
+  frame_height_bits_minus_1 = read_u(4)
+  width = read_u(frame_width_bits_minus_1 + 1) + 1
+  height = read_u(frame_height_bits_minus_1 + 1) + 1
+  # Sequence header OBU continues here, but we stop parsing.
+  return {'type': 'video', 'codec': 'av1', 'width': width, 'height': height}
+
+
+def analyze_av1(fread, info, fskip):
+  header = fread(131)
+  track_info = get_av1_track_info(header)
+  info['format'] = 'av1'
+  info['tracks'] = [track_info]
+
+
 def is_dirac(header):
   return (len(header) >= 14 and header.startswith( 'BBCD\0\0\0\0') and
           header[9 : 13] == '\0\0\0\0' and ord(header[8]) >= 14)
@@ -6106,7 +6203,7 @@ FORMAT_ITEMS = (
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('vp9', (0, ('\x80\x49\x83\x42', '\x81\x49\x83\x42', '\x82\x49\x83\x42', '\x83\x49\x83\x42', '\xa0\x49\x83\x42', '\xa1\x49\x83\x42', '\xa2\x49\x83\x42', '\xa3\x49\x83\x42', '\x90\x49\x83\x42', '\x91\x49\x83\x42', '\x92\x49\x83\x42', '\x93\x49\x83\x42', '\xb0\x24\xc1\xa1', '\xb0\xa4\xc1\xa1', '\xb1\x24\xc1\xa1', '\xb1\xa4\xc1\xa1'), 10, lambda header: (is_vp9(header), 20))),
-
+    ('av1', (0, '\x12\0\x0a', 3, tuple(chr(c) for c in xrange(4, 128)))),
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
@@ -6571,6 +6668,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_vp8(fread, info, fskip)
   elif format == 'vp9':
     analyze_vp9(fread, info, fskip)
+  elif format == 'av1':
+    analyze_av1(fread, info, fskip)
   elif format == 'dirac':
     analyze_dirac(fread, info, fskip)
   elif format == 'theora':

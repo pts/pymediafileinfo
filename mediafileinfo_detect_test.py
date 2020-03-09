@@ -294,6 +294,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp9, data1),
                      {'format': 'vp9', 'tracks': [{'codec': 'vp9', 'height': 789, 'type': 'video', 'width': 800}]})
 
+  def test_analyze_av1(self):
+    data1 = '\x12\0\x0a\4'
+    data2 = '\x12\0\x0a\4\x18\0\x10'
+    data3 = '\x12\0\x0a\x0b\0\0\0\x24\xce\x3f\x8f\xbf'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'av1')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'av1')
+    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'av1')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data1),
+                     {'format': 'av1', 'tracks': [{'codec': 'av1', 'type': 'video'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data2),
+                     {'format': 'av1', 'tracks': [{'codec': 'av1', 'height': 2, 'type': 'video', 'width': 1}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data3),
+                     {'format': 'av1', 'tracks': [{'codec': 'av1', 'height': 800, 'type': 'video', 'width': 800}]})
+
   def test_analyze_jpegxr(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxr, '4949bc012000000024c3dd6f034efe4bb1853d77768dc90c0000000000000000080001bc0100100000000800000002bc0400010000000000000080bc040001000000a005000081bc0400010000006400000082bc0b00010000009af78f4283bc0b00010000009af78f42c0bc04000100000086000000c1bc040001000000369b0200'.decode('hex')),
                      {'codec': 'jpegxr', 'format': 'jpegxr', 'subformat': 'tagged', 'height': 100, 'width': 1440})
