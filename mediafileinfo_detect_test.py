@@ -288,6 +288,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp8, 'd2be019d012a26027001'.decode('hex')),
                      {'format': 'vp8', 'tracks': [{'codec': 'vp8', 'height': 368, 'type': 'video', 'width': 550}]})
 
+  def test_analyze_vp9(self):
+    data1 = '824983420031f0314600'.decode('hex')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'vp9')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp9, data1),
+                     {'format': 'vp9', 'tracks': [{'codec': 'vp9', 'height': 789, 'type': 'video', 'width': 800}]})
+
   def test_analyze_jpegxr(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxr, '4949bc012000000024c3dd6f034efe4bb1853d77768dc90c0000000000000000080001bc0100100000000800000002bc0400010000000000000080bc040001000000a005000081bc0400010000006400000082bc0b00010000009af78f4283bc0b00010000009af78f42c0bc04000100000086000000c1bc040001000000369b0200'.decode('hex')),
                      {'codec': 'jpegxr', 'format': 'jpegxr', 'subformat': 'tagged', 'height': 100, 'width': 1440})

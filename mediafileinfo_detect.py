@@ -1286,6 +1286,11 @@ def get_ogg_es_track_info(header):
     return get_realvideo_track_info(header)
   elif header.startswith('LSD:'):
     return get_ralf_track_info(header)
+  elif (header.startswith('\x80\x49\x83\x42') or header.startswith('\x81\x49\x83\x42') or header.startswith('\x82\x49\x83\x42') or header.startswith('\x83\x49\x83\x42') or
+        header.startswith('\xa0\x49\x83\x42') or header.startswith('\xa1\x49\x83\x42') or header.startswith('\xa2\x49\x83\x42') or header.startswith('\xa3\x49\x83\x42') or
+        header.startswith('\x90\x49\x83\x42') or header.startswith('\x91\x49\x83\x42') or header.startswith('\x92\x49\x83\x42') or header.startswith('\x93\x49\x83\x42') or
+        header.startswith('\xb0\x24\xc1\xa1') or header.startswith('\xb0\xa4\xc1\xa1') or header.startswith('\xb1\x24\xc1\xa1') or header.startswith('\xb1\xa4\xc1\xa1')):
+    return get_vp9_track_info(header)
   else:
     # We can't detect vcodec=vp8 here, because its 3-byte prefix can be
     # anything.
@@ -5300,6 +5305,51 @@ def analyze_webp(fread, info, fskip):
     info['codec'] = 'webp-lossless'
 
 
+def is_vp9(header):
+  if len(header) < 10:
+    return False
+  b = ord(header[4])
+  if header[1 : 4] == '\x49\x83\x42' and header[0] in '\x80\x81\x82\x83\xa0\xa1\xa2\xa3':
+    profile = (ord(header[0]) >> 4) & 3  # profile=0,1,2
+    # (0: uuu? or 111), (2: ?uuu? or ?111), (1: uuu???0 or 1110).
+    return profile != 1 or (b & (2, 16)[((b >> 5) & 7) == 7]) == 0
+  elif header[2 : 4] == '\xc1\xa1' and header[0] in '\xb0\xb1' and header[1] in '\x24\xa4':
+    # profile = 3
+    if ((b >> 3) & 7) == 7:  # CS_RGB.
+      return (b & 132) == 0
+    return ((b | ord(header[5])) & 128) == 0
+
+
+def get_vp9_track_info(header):
+  # https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.6-20160331-draft.pdf
+  if len(header) < 10:
+    raise ValueError('Too short for vp9.')
+  # Now header contains the first 10 bytes of the first frame: a keyframe.
+  b = ord(header[4])
+  if header[1 : 4] == '\x49\x83\x42' and header[0] in '\x80\x81\x82\x83\xa0\xa1\xa2\xa3':
+    profile = (ord(header[0]) >> 4) & 3  # profile=0,1,2
+    if not (profile != 1 or (b & (2, 16)[((b >> 5) & 7) == 7]) == 0):
+      raise ValueError('Bad bits for vp9 profile=%d' % profile)
+    is_cs_rgb = ((b >> (5 - (profile == 2))) & 3) == 7
+  elif header[2 : 4] == '\xc1\xa1' and header[0] in '\xb0\xb1' and header[1] in '\x24\xa4':
+    profile = 3  # (3: 0?uuu???0 or 0?1110)
+    is_cs_rgb = ((b >> 3) & 7) == 7
+    if (((b | ord(header[5])) & 128), b & 132)[is_cs_rgb]:
+      raise ValueError('Bad bits for vp9 profile=3')
+  else:
+    raise ValueError('vp9 signature not found.')
+  d = (4, 7, 5, 9, 3, 4, 4, 6)[profile + (is_cs_rgb << 2)]
+  width, height = [int((struct.unpack('>L', header[i : i + 4])[0] >> (16 - d)) & 0xffff) + 1 for i in (4, 6)]
+  return {'type': 'video', 'codec': 'vp9', 'width': width, 'height': height}
+
+
+def analyze_vp9(fread, info, fskip):
+  header = fread(10)
+  track_info = get_vp9_track_info(header)
+  info['format'] = 'vp9'
+  info['tracks'] = [track_info]
+
+
 def is_dirac(header):
   return (len(header) >= 14 and header.startswith( 'BBCD\0\0\0\0') and
           header[9 : 13] == '\0\0\0\0' and ord(header[8]) >= 14)
@@ -6055,6 +6105,8 @@ FORMAT_ITEMS = (
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
+    ('vp9', (0, ('\x80\x49\x83\x42', '\x81\x49\x83\x42', '\x82\x49\x83\x42', '\x83\x49\x83\x42', '\xa0\x49\x83\x42', '\xa1\x49\x83\x42', '\xa2\x49\x83\x42', '\xa3\x49\x83\x42', '\x90\x49\x83\x42', '\x91\x49\x83\x42', '\x92\x49\x83\x42', '\x93\x49\x83\x42', '\xb0\x24\xc1\xa1', '\xb0\xa4\xc1\xa1', '\xb1\x24\xc1\xa1', '\xb1\xa4\xc1\xa1'), 10, lambda header: (is_vp9(header), 20))),
+
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
@@ -6517,6 +6569,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_h265(fread, info, fskip)
   elif format == 'vp8':
     analyze_vp8(fread, info, fskip)
+  elif format == 'vp9':
+    analyze_vp9(fread, info, fskip)
   elif format == 'dirac':
     analyze_dirac(fread, info, fskip)
   elif format == 'theora':

@@ -390,5 +390,37 @@ elements. Some elements are truncated.
   01000000: EmfPlusFlags=1(reference_playback_device_context)
   66000000: LogicalDpiX
   6c000000: LogicalDpiY
+* example format=vp9 codec=vp9
+  (62730100: ivf frame_size=0x17362)
+  (0000000000000000: ivf timestamp=0)
+  824983420031f031f600: frame(0x17362), binary below
+    10: frame_marker=2 (constant)
+    00: profile=0 (little endian), can be 0,1,2,3
+    (if profile==3, then an additional 0 bit is expected here)
+    0: show_existing_frame=0
+    0: frame_type=1 (keyframe)
+    1: show_frame=1 (ignored for keyframe, but the good value is 1)
+    0: error_resilient_mode=0 (ignored for keyframe)
+    010010011000001101000010: frame_sync=0x498342
+    : color_config
+      (if profile>=2, then an additional any bit is present here)
+      000: color_space=0(CS_UNKNOWN)
+      : if color_space==7(CS_RGB)
+        (if profile==1 or profile==3, then additional 0 bit is inserted here)
+      : if color_space!=7(CS_RGB)
+        ?: color_range=0 (can be anything)
+        (if profile==1 or profile==3, then additional 3 bits: ??0 are inserted here)
+    : frame_size
+      0000001100011111: frame_width_minus_1=799
+      0000001100011111: frame_height_minus_1=799
+* bits of format=vp9 codec=vp9
+  (legend: uuu: anything other than 111)
+  one of:
+    100000??010010011000001101000010 (uuu? or 111): profile=0
+    101000??010010011000001101000010 (uuu???0 or 1110): profile=1
+    100100??010010011000001101000010 (?uuu? or ?111): profile=2
+    1011000??01001001100000110100001 (0?uuu???0 or 0?1110): profile=3
+  wwwwwwwwwwwwwwww: 16-bit frame_width_minus_1
+  hhhhhhhhhhhhhhhh: 16-bit frame_height_minus_1
 
 __END__
