@@ -533,6 +533,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam, 'P7\nWIDTH 227\nDEPTH 3\n# WIDTH 42\nHEIGHT\t\f149\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n'),
                      {'format': 'pam', 'codec': 'raw', 'height': 149, 'width': 227})
 
+  def test_analyze_xv_thumbnail(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('P7 332\n')[0], 'xv-thumbnail')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P7 332\n#XVVERSION:Version 2.28  Rev: 9/26/92\n#IMGINFO:512x440 Color JPEG\n#END_OF_COMMENTS\n48 40 255\n'),
+                     {'format': 'xv-thumbnail', 'codec': 'raw', 'height': 40, 'width': 48})
+
   def test_analyze_gem(self):
     self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x08\0\2\0\2')[0], 'gem')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\1\0\x08\0\2\0\2\0\x55\0\x55\1\0\0\x40'),

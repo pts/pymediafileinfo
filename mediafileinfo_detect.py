@@ -4965,7 +4965,7 @@ def analyze_pnm(fread, info, fskip):
       info['subformat'] = 'pbm'
     elif header[1] in '25':
       info['subformat'] = 'pgm'
-    else:
+    elif header[1] in '36':
       info['subformat'] = 'ppm'
     if header[1] in '123':
       info['codec'] = 'rawascii'
@@ -4973,7 +4973,15 @@ def analyze_pnm(fread, info, fskip):
       info['codec'] = 'raw'
   else:
     raise ValueError('pnm signature not found.')
-  info['format'] = 'pnm'
+  if header[1] == '7':
+    # http://fileformats.archiveteam.org/wiki/XV_thumbnail
+    # https://github.com/ingowald/updated-xv/blob/395756178dad44efb950e3ea6739fe60cc62d314/xvbrowse.c#L4034-L4059
+    header += fread(4)
+    if header != 'P7 332\n':
+      raise ValueError('xv-thumbnail signature not found.')
+    info['format'] = 'xv-thumbnail'
+  else:
+    info['format'] = 'pnm'
   data = header[-1]
   state = 0
   dimensions = []
@@ -6234,6 +6242,7 @@ FORMAT_ITEMS = (
     ('pnm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+    ('xv-thumbnail', (0, 'P7 332\n')),
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xpm', (0, '/* XPM */')),
@@ -6705,7 +6714,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_tga(fread, info, fskip)
   elif format == 'tiff':
     analyze_tiff(fread, info, fskip)
-  elif format == 'pnm':
+  elif format in ('pnm', 'xv-thumbnail'):
     analyze_pnm(fread, info, fskip)
   elif format == 'pam':
     analyze_pam(fread, info, fskip)
