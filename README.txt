@@ -227,7 +227,7 @@ TODO
 * TODO(pts): Add type=video, type=audio, type=image etc.
 * TODO(pts): Add memory limits against large reads everywhere.
 * TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
-             my @formats) for more image formats: XPM, XBM1, XBM,
+             my @formats) for more image formats: XBM1, XBM,
              MinoltaRAW, Cineon, BioRad, IFF, FBM, CMUWM, RLE, PCD,
              XWD, McIDAS, VIEW, SGI, FITS, VICAR, FIT, FIG, archivers,
              G3, Faces, + all from @formats.
