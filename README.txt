@@ -28,7 +28,7 @@ Advantages of mediafileinfo.py:
   package installation needed.
 * It isn't not fooled by incorrect media metadata: it gets media parameters
   directly from the media data (e.g. width sometimes from the video
-  frames themselves).
+  bitstream).
 
 Disadvantages of mediafileinfo.py:
 
@@ -149,6 +149,9 @@ Q4. How fast is mediafileinfo.py?
     All tools were run twice, and the 2nd run was measured, so that we're not
     measuring disk read speed.
 
+    mediainfo is especially slow because it reads the entire file, not only
+    the first few kilobytes.
+
 Q5. Is mediafileinfo.py able to get duration info (e.g. number of
     seconds, number of frames, number of keyframes)?
 
@@ -172,6 +175,8 @@ A7. mediafileinfo.py can detect MP3 and MPEG files (mpeg-video (elementary
     * Raw MPEG audio streams without MPEG-ADTS frame wrapping are not detected.
       (Does this even exist? Aren't just junk in the beginning of the
       mpeg-adts file?)
+    * Media parameters are not extracted from some MPEG-TS files, especially
+      if the PAT frame is not near the beginning of the file.
 
 Q8. What scanning tools are available in addition to mediafileinfo.py?
 
@@ -183,13 +188,12 @@ A8. quick_scan.py is a small Python script which detects size=, mtime= and
     mediafilefileinfo.py detects size=, mtime=, symlink=, format= and
     media parameters (e.g. width= and height=). Its functionality is also
     available as `media_scan.py --info'. It is quick, because it reads only
-    the first few kilobyte of each file.
+    the first few kilobytes of each file.
 
     media_scan.py detects size=, mtime=, symlink=, format=, media parameters
     (e.g. width= and height=), sha256= and xfidfp= (visual fingerprint of
     images using the findimagedupes.pl algorithm, specify --fp=yes to
-    enable). Its functionality is also available as `media_scan.py --info'.
-
+    enable). Its the default `media_scan.py --scan'.
 
 TODO
 ~~~~
