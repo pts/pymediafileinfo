@@ -6019,9 +6019,20 @@ FORMAT_ITEMS = (
     # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
     ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 4, lambda header: (is_mp4(header), 26))),
     ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (is_mp4(header), 26))),
+    ('f4v',),  # From 'mp4'.
+    ('webm',),  # From 'mp4'.
+    ('mov',),  # From 'mp4'.
+    ('isobmff-image',),  # From 'mp4'.
+    ('mov-mdat', (4, 'mdat')),  # TODO(pts): Analyze mpeg inside.
+    # This box ('wide', 'free' or 'skip'), after it's data, is immediately
+    # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
+    # can't detect 'mdat' here, it's too far for us.
+    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
+    ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     ('ogg', (0, 'OggS\0')),
-    # Also 'wma' and 'wmv'.
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
+    ('wmv',),  # From 'asf'.
+    ('wma',),  # From 'asf'.
     ('avi', (0, 'RIFF', 8, 'AVI ')),
     # \1 is the version number, but there is no version later than 1 in 2017.
     ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
@@ -6034,12 +6045,6 @@ FORMAT_ITEMS = (
     ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
-    ('mov-mdat', (4, 'mdat')),  # TODO(pts): Analyze mpeg inside.
-    # This box ('wide', 'free' or 'skip'), after it's data, is immediately
-    # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
-    # can't detect 'mdat' here, it's too far for us.
-    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
-    ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in range(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
 
@@ -6068,6 +6073,7 @@ FORMAT_ITEMS = (
     # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
+    ('agif',),  # From 'gif'.
     # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
     ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
@@ -6076,9 +6082,9 @@ FORMAT_ITEMS = (
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
-    ('pbm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    ('pgm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    ('ppm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+    ('pnm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+    ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
+    ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xpm', (0, '/* XPM */')),
@@ -6156,6 +6162,7 @@ FORMAT_ITEMS = (
     ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
     # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
     ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff', '\xf0', '\xf1', '\xf8', '\xf9'), 3, lambda header: (is_mpeg_adts(header), 30))),
+    ('mp3',),  # From 'mpeg-adts'.
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
@@ -6226,6 +6233,8 @@ FORMAT_ITEMS = (
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+    ('dotnetexe',),  # From 'exe'.
+    ('winexe',),  # From 'exe'.
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
     ('cue', (0, 'REM DISCID ')),
@@ -6246,12 +6255,11 @@ FORMAT_ITEMS = (
     ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
 )
 
-
 HEADER_SIZE_LIMIT = 512
 
 
 class FormatDb(object):
-  __slots__ = ('formats_by_prefix', 'header_preread_size')
+  __slots__ = ('formats_by_prefix', 'header_preread_size', 'formats')
 
   def __init__(self, format_items):
     # It's OK to have duplicate, e.g. 'cue'.
@@ -6260,6 +6268,8 @@ class FormatDb(object):
     hps = 0
     fbp = [{} for i in xrange(5)]
     for format_spec in format_items:
+      if len(format_spec) == 1:
+        continue  # Indicates that analyze_* can generate this format.
       format, spec = format_spec
       size, pattern = spec[0], spec[1]
       prefixes = ('',)
@@ -6294,6 +6304,7 @@ class FormatDb(object):
     self.header_preread_size = hps  # Typically 64, we have 392.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
+    self.formats = frozenset(item[0] for item in FORMAT_ITEMS)
 
 
 FORMAT_DB = FormatDb(FORMAT_ITEMS)
@@ -6541,7 +6552,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_tga(fread, info, fskip)
   elif format == 'tiff':
     analyze_tiff(fread, info, fskip)
-  elif format in ('pbm', 'pgm', 'ppm'):
+  elif format == 'pnm':
     analyze_pnm(fread, info, fskip)
   elif format == 'pam':
     analyze_pam(fread, info, fskip)

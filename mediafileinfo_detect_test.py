@@ -38,6 +38,8 @@ def analyze_string(analyze_func, data):
   fread, fskip = get_string_fread_fskip(data)
   info = {}
   analyze_func(fread, info, fskip)
+  if info.get('format') not in mediafileinfo_detect.FORMAT_DB.formats:
+    raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
   return info
 
 

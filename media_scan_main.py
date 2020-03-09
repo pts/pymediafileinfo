@@ -1138,6 +1138,10 @@ def main(argv):
       do_fp = value in ('1', 'yes', 'true', 'on')
     elif arg.startswith('--skip-recent-sec='):
       skip_recent_sec = int(arg[arg.find('=') + 1:].lower())
+    elif arg == '--list-formats':
+      sys.stdout.write('%s\n' % ' '.join(sorted(
+          mediafileinfo_detect.FORMAT_DB.formats)))
+      return
     else:
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:

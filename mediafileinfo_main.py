@@ -239,6 +239,10 @@ def main(argv):
       mode = 'quick'
     elif arg.startswith('--mode='):
       sys.exit('Invalid flag value: %s' % arg)
+    elif arg == '--list-formats':
+      sys.stdout.write('%s\n' % ' '.join(sorted(
+          mediafileinfo_detect.FORMAT_DB.formats)))
+      return
     else:
       sys.exit('Unknown flag: %s' % arg)
 
