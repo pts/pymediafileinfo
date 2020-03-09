@@ -5137,6 +5137,36 @@ def analyze_ps(fread, info, fskip):
       info['width'], info['height'] = (wd_ht[0] or 1, wd_ht[1] or 1)
 
 
+def analyze_wmf(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/Windows_Metafile
+  # https://www.fileformat.info/format/wmf/egff.htm
+  # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/4813e7fd-52d0-4f42-965f-228c8b7488d2
+  # https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-WMF/%5bMS-WMF%5d.pdf
+  data = fread(6)
+  if len(data) < 6:
+    raise ValueError('Too short for wmf.')
+  if data == '\xd7\xcd\xc6\x9a\0\0':  # META_PLACEABLE.
+    info['format'] = 'wmf'
+    data = fread(14)
+    if len(data) == 14:
+      left, top, right, bottom, inch, reserved = struct.unpack('<5HL', data)
+      if reserved:
+        raise ValueError('Bad wmf placeable Reserved.')
+      if not inch:
+        raise ValueError('Bad wmf placeable Inch.')
+      width, height = abs(left - right), abs(top - bottom)  # Weird signs for width.
+      width = (width * 72 + (inch >> 1)) // inch   # Convert to pt.
+      height = (height * 72 + (inch >> 1)) // inch   # Convert to pt.
+      info['width'], info['height'] = width, height
+  elif data[0] in '\1\2' and data[1 : 5] == '\0\x09\0\0' and data[5] in '\1\3':  # META_HEADER.
+    info['format'] = 'wmf'
+    data = fread(12)
+    if len(data) == 12 and data[10 : 12] != '\0\0':
+      raise ValueError('Bad wmf NumberOfMembers.')
+  else:
+    raise ValueError('wmf signature not found.')
+
+
 def is_vp8(header):
   if len(header) < 10 or header[3 : 6] != '\x9d\x01\x2a':
     return False
@@ -5217,7 +5247,6 @@ def analyze_webp(fread, info, fskip):
       raise ValueError('webp losless signature not found.')
     if size2 < 6:
       raise ValueError('webp lossless too short.')
-    info['codec'] = 'web-lossless'
     v, = struct.unpack('<L', header[21 : 25])
     if (v >> 29) & 7:
       raise ValueError('Bad webp lossless version.')
@@ -6093,7 +6122,7 @@ FORMAT_ITEMS = (
     ('realaudio', (0, '.ra\xfd')),
     ('ralf', (0, 'LSD:', 4, ('\1', '\2', '\3'))),
 
-    # Document media.
+    # Document media and vector graphics.
 
     ('pdf', (0, '%PDF')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
@@ -6101,7 +6130,9 @@ FORMAT_ITEMS = (
     # TODO(pts): Get width and height from \special{papersize=...}.
     # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
-    # * TODO(pts): Add .wmf and .emf support. Can we extract width= and height= easily?
+    ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
+    ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
+    # * TODO(pts): Add .emf support. Can we extract width= and height= easily?
     #   https://www.fileformat.info/format/wmf/egff.htm
     #   https://en.wikipedia.org/wiki/Windows_Metafile
 
@@ -6561,6 +6592,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pcpaint_pic(fread, info, fskip)
   elif format == 'ivf':
     analyze_ivf(fread, info, fskip)
+  elif format == 'wmf':
+    analyze_wmf(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

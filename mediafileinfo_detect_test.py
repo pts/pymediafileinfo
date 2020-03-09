@@ -516,6 +516,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ivf, 'DKIF\0\0 \0VP80 \3 \4'),
                      {'format': 'ivf', 'tracks': [{'codec': 'vp8', 'height': 1056, 'type': 'video', 'width': 800}]})
 
+  def test_analyze_wmf(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\xd7\xcd\xc6\x9a\0\0')[0], 'wmf')
+    self.assertEqual(mediafileinfo_detect.detect_format('\1\0\x09\0\0\3\x17\x85\0\0\4\0\xf0\x1a\0\0\0\0')[0], 'wmf')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\xd7\xcd\xc6\x9a\0\0'),
+                     {'format': 'wmf'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\1\0\x09\0\0\3'),
+                     {'format': 'wmf'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\1\0\x09\0\0\3\x17\x85\0\0\4\0\xf0\x1a\0\0\0\0'),
+                     {'format': 'wmf'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\xd7\xcd\xc6\x9a\0\0\x58\xf0\xce\xf2\xa8\x0f\x32\x0d\xe8\x03\0\0\0\0'),
+                     {'format': 'wmf', 'height': 4232, 'width': 4141})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
