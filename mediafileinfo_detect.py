@@ -6373,6 +6373,10 @@ FORMAT_ITEMS = (
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # TODO(pts): Ignore whitespace in the beginning above.
     ('html', (0, '<', 15, lambda header: (header.startswith('<!--') or header[:15].lower() in ('<!doctype html>', '<!doctype html ') or header[:6].lower() in ('<html>', '<head>', '<body>'), 500))),
+    # Contains thumbnails of multiple images files.
+    # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
+    # pspbrwse.jbf
+    # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
     ('jbf', (0, 'JASC BROWS FILE\0')),
     ('java-class', (0, '\xca\xfe\xba\xbe')),
     # OLE compound file, including Thumbs.db
