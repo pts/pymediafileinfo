@@ -284,6 +284,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'codec': 'webp-lossless', 'format': 'webp', 'height': 395, 'width': 386})
 
   def test_analyze_vp8(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('d2be019d012a26027001'.decode('hex'))[0], 'vp8')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp8, 'd2be019d012a26027001'.decode('hex')),
                      {'format': 'vp8', 'tracks': [{'codec': 'vp8', 'height': 368, 'type': 'video', 'width': 550}]})
 

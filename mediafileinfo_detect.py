@@ -5217,7 +5217,7 @@ def is_vp8(header):
     return False
   size, width, height = struct.unpack('<L2xHH', header[:10])
   return ((size & 0xffffff) >> 5 and not size & 1 and ((size >> 1) & 7) <= 3 and
-          size & 16 and width & 0x3fff and height & 0x3ffff)
+          size & 16 and width & 0x3fff and height & 0x3fff)
 
 
 def get_vp8_track_info(header):
@@ -5237,8 +5237,8 @@ def get_vp8_track_info(header):
   if not size & 16:
     return ValueError('Bad vp8 frame no-show.')
   size >>= 5
-  width &= 0x1fff
-  height &= 0x1fff
+  width &= 0x3fff
+  height &= 0x3fff
   if not (width and height):
     raise ValueError('Bad vp8 frame dimensions.')
   return {'type': 'video', 'codec': 'vp8', 'width': width, 'height': height}
