@@ -549,6 +549,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data2),
                      {'format': 'emf', 'subformat': 'dual', 'height': 61, 'width': 58})
 
+  def test_detect_unixscript(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
+    self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
+
+  def test_detect_windows_cmd(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('@echo off\r\n')[0], 'windows-cmd')
+    self.assertEqual(mediafileinfo_detect.detect_format('@ECho oFF\r\n')[0], 'windows-cmd')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

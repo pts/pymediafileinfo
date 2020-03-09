@@ -6203,8 +6203,6 @@ FORMAT_ITEMS = (
 
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
-    # Or DOS .bat file.
-    ('windows-cmd', (0, '@', 1, ('e', 'E'), 9, lambda header: (header[:9].lower() == '@echo off', 700))),
     ('xml', (0, '<?xml', 5, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
@@ -6225,6 +6223,8 @@ FORMAT_ITEMS = (
     # Example: output of pymediafileinfo and media_scan.py.
     ('fileinfo', (0, 'format=')),
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
+    # Windows .cmd or DOS .bat file. Not all such file have a signature though.
+    ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
