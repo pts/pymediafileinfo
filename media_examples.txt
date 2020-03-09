@@ -315,5 +315,80 @@ elements. Some elements are truncated.
   0000000000005240: resolution_value
   01: resolution_metric=1(PSP_METRIC_INCH)
   0200: codec=2(lz77)
+* example format=emf subformat=emf
+  # https://example-files.online-convert.com/vector%20image/emf/example.emf
+  01000000: type=1(EMR_HEADER)
+  84000000: size=132, must be a multiple of 4, must be at least 88
+  : Bounds RectL, in 0.01 millimeter uintes
+    d8010000: left=472
+    3f020000: top=575
+    88110000: right=4488
+    ac180000: bottom=6316
+  : Frame RectL, in 0.01 millimeter uintes
+    00000000: left=0
+    00000000: top=0
+    08520000: right=21000 (595.275590551181bp)
+    04740000: bottom=29700 (841.889763779527bp)
+  20454d46: ENHMETA_SIGNATURE
+  00000100: version=0x10000 (typical)
+  54ff8300: bytes
+  51010000: records
+  0400: handles=4
+  0000: reserved=0
+  0c000000: ndescription
+  6c000000: offdescription
+  00000000: npalentries
+  : Device SizeL, size of reference device, in pixels
+    60130000: width
+    671b0000: height
+  : Millimeters SizeL, size of reference device, in millimeters
+    d2000000: width
+    29010000: height
+* example format=emf subformat=dual
+  # https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-EMFPLUS/%5bMS-EMFPLUS%5d.pdf
+  01000000: type=1(EMR_HEADER)
+  6c000000: size=108, must be a multiple of 4, must be at least 88; includes the type= and size= fields as well
+  : Bounds RectL, in 0.01 millimeter uintes
+    ffffffff: left=-1
+    ffffffff: top=-1
+    64000000: right=
+    6b000000: bottom=
+  : Frame RectL, in 0.01 millimeter uintes
+    00000000: left=0
+    00000000: top=0
+    f0070000: right=2032 (57.6bp)
+    77080000: bottom=2167 (61.4267716535433bp)
+  20454d46: ENHMETA_SIGNATURE
+  00000100: version=0x10000 (typical)
+  5c0a0000: bytes
+  4c000000: records
+  0200: handles=2
+  0000: reserved=0
+  00000000: ndescription=0
+  00000000: offdesciption=0
+  00000000: npalentries=0
+  : Device SizeL, size of reference device, in pixels
+    40060000: width
+    b0040000: height
+  : Millimeters SizeL, size of reference device, in millimeters
+    40010000: width
+    f0000000: height
+  00000000: cbpixelformat=0
+  00000000: offpixelformat=0
+  00000000: bopengl=0
+  00e20400: micrometersx (width of reference device in micrometers)
+  80a90300: micrometersy (height of reference device in micrometers)
+  46000000: type=0x46(EMR_COMMENT)
+  2c000000: size=44
+  20000000: data_size=32
+  454d462b: EMR_COMMENT_EMFPLUS
+  0140: type=0x4001(EmfPlusHeader)
+  0100: flags=1(EMF+_dual)
+  1c000000: size=28
+  10000000: data_size=16
+  0210c0db: EmfPlusGraphicsVersion=(0xdbc01 << 20)+2 (can be +1 or +2)
+  01000000: EmfPlusFlags=1(reference_playback_device_context)
+  66000000: LogicalDpiX
+  6c000000: LogicalDpiY
 
 __END__

@@ -5174,6 +5174,44 @@ def analyze_wmf(fread, info, fskip):
     raise ValueError('wmf signature not found.')
 
 
+def analyze_emf(fread, info, fskip):
+  "Analyzes an EMF (Enhanced Metafile) or EMF+ file."""
+  # https://en.wikipedia.org/wiki/Windows_Metafile
+  # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-emf/91c257d7-c39d-4a36-9b1f-63e3f73d30ca
+  # https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-EMF/%5bMS-EMF%5d.pdf
+  # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-emfplus/5f92c789-64f2-46b5-9ed4-15a9bb0946c6
+  # https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-EMFPLUS/%5bMS-EMFPLUS%5d.pdf
+  data = fread(60)
+  if len(data) < 60:
+    raise ValueError('Too short for emf.')
+  if not (data.startswith('\1\0\0\0') and data[5 : 8] == '\0\0\0' and
+          data[40: 48] == ' EMF\0\0\1\0' and data[58 : 60] == '\0\0'):
+    raise ValueError('emf signature not found.')
+  info['format'] = info['subformat'] = 'emf'
+  size, left, top, right, bottom = struct.unpack('<4xL16xllll20x', data)
+  if not 88 <= size < 256 or size & 3:
+    raise ValueError('Bad emf header size: %d' % size)
+  width, height = abs(left - right), abs(top - bottom)
+  inch = 2540  # Unit of width and height: .01mm.
+  width = (width * 72 + (inch >> 1)) // inch   # Convert to pt.
+  height = (height * 72 + (inch >> 1)) // inch   # Convert to pt.
+  info['width'], info['height'] = width, height
+  if fskip(size - 60):
+    data = fread(28)
+    if len(data) == 28 and data.startswith('F\0\0\0') and data[12 : 18] == 'EMF+\1@':
+      size, data_size, flags, size2, data_size2 = struct.unpack('<4xLL6xHLL', data)
+      if flags & 1:
+        info['subformat'] = 'dual'  # Both EMF (GDI) and EMF+ (GDI+).
+      else:
+        info['subformat'] = 'emfplus'
+      if not (data_size2 > 0 and size2 >= 12 + ((data_size2 + 3) & ~3)):
+        raise ValueError('Bad emf+ data_size2.')
+      if not (data_size >= size2 + 4 and size >= 12 + ((data_size + 3) & ~3)):
+        raise ValueError('Bad emf+ data_size.')
+      if size < 32 or size & 3:
+        raise ValueError('Bad emf+ size.')
+
+
 def is_vp8(header):
   if len(header) < 10 or header[3 : 6] != '\x9d\x01\x2a':
     return False
@@ -6140,13 +6178,11 @@ FORMAT_ITEMS = (
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
+    ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
     # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
     ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
     ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
     ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
-    # * TODO(pts): Add .emf support. Can we extract width= and height= easily?
-    #   https://www.fileformat.info/format/wmf/egff.htm
-    #   https://en.wikipedia.org/wiki/Windows_Metafile
 
     # Compressed file or archive.
 
@@ -6603,6 +6639,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ivf(fread, info, fskip)
   elif format == 'wmf':
     analyze_wmf(fread, info, fskip)
+  elif format == 'emf':
+    analyze_emf(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

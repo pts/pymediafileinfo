@@ -539,6 +539,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\xd7\xcd\xc6\x9a\0\0\x58\xf0\xce\xf2\xa8\x0f\x32\x0d\xe8\x03\0\0\0\0'),
                      {'format': 'wmf', 'height': 4232, 'width': 4141})
 
+  def test_analyze_emf(self):
+    data1 = '0100000084000000d80100003f02000088110000ac1800000000000000000000085200000474000020454d460000010054ff83005101000004000000'.decode('hex')
+    data2 = '010000006c000000ffffffffffffffff640000006b0000000000000000000000f00700007708000020454d46000001005c0a00004c0000000200000000000000000000000000000040060000b004000040010000f000000000000000000000000000000000e2040080a90300460000002c00000020000000454d462b014001001c000000100000000210c0db01000000660000006c000000'.decode('hex')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'emf')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'emf')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data1),
+                     {'format': 'emf', 'subformat': 'emf', 'height': 842, 'width': 595})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data2),
+                     {'format': 'emf', 'subformat': 'dual', 'height': 61, 'width': 58})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
