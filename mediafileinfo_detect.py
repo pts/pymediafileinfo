@@ -5289,7 +5289,7 @@ def analyze_webp(fread, info, fskip):
   elif header[15] == 'L':
     # https://developers.google.com/speed/webp/docs/webp_lossless_bitstream_specification
     if header[20] != '\x2f':
-      raise ValueError('webp losless signature not found.')
+      raise ValueError('webp lossless signature not found.')
     if size2 < 6:
       raise ValueError('webp lossless too short.')
     v, = struct.unpack('<L', header[21 : 25])
