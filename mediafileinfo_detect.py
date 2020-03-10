@@ -4694,6 +4694,7 @@ def analyze_xml(fread, info, fskip):
 
 
 def analyze_bmp(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/BMP_file_format
   header = fread(26)
   if len(header) < 26:
     raise ValueError('Too short for bmp.')
@@ -4706,10 +4707,10 @@ def analyze_bmp(fread, info, fskip):
     raise ValueError('Bad bmp info size: %d' % b)
   info['format'] = 'bmp'
   # TODO(pts): Detect codec other than 'uncompressed'.
-  if b in (12, 26) and len(header) >= 22:
+  if b < 40 and len(header) >= 22:
     info['width'], info['height'] = struct.unpack(
         '<HH', header[18 : 22])
-  elif b in (40, 124) and len(header) >= 26:
+  elif b >= 40 and len(header) >= 26:
     info['width'], info['height'] = struct.unpack(
         '<LL', header[18 : 26])
 
