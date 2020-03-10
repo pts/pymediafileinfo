@@ -585,6 +585,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format('@echo off\r\n')[0], 'windows-cmd')
     self.assertEqual(mediafileinfo_detect.detect_format('@ECho oFF\r\n')[0], 'windows-cmd')
 
+  def test_analyze_xwd(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08')[0], 'xwd')
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0')[0], 'xwd')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\1\xd3\0\0\0\x3c\0\0\0\0'),
+                     {'format': 'xwd', 'subformat': 'x11', 'height': 60, 'width': 467})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\1\xd3\0\0\0\x3c'),
+                     {'format': 'xwd', 'subformat': 'x10', 'height': 60, 'width': 467})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

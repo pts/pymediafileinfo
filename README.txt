@@ -228,7 +228,7 @@ TODO
 * TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
              my @formats) for more image formats: XBM1, XBM,
              MinoltaRAW, Cineon, BioRad, IFF, FBM, CMUWM, RLE, PCD,
-             XWD, McIDAS, VIEW, SGI, FITS, VICAR, FIT, FIG, archivers,
+             McIDAS, VIEW, SGI, FITS, VICAR, FIT, FIG, archivers,
              G3, Faces, + all from @formats.
              Still, img_bbox.pl has better PostScript, DVI (\special)
              analyzing.

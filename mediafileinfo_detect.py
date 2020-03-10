@@ -4411,6 +4411,37 @@ def analyze_pcpaint_pic(fread, info, fskip):
       info['codec'] = 'raw'  # Uncompressed.
 
 
+def analyze_xwd(fread, info, fskip):
+  # https://www.fileformat.info/format/xwd/egff.htm
+  # http://fileformats.archiveteam.org/wiki/XWD
+  # https://en.wikipedia.org/wiki/Xwd
+  data = fread(28)
+  if len(data) < 28:
+    raise ValueError('Too short for xwd.')
+  header_size, file_version = struct.unpack('>LL', data[:8])
+  if not 28 <= header_size <= 512:
+    raise ValueError('Bad xwd header size: %d' % header_size)
+  if file_version == 6:
+    info['format'], info['subformat'] = 'xwd', 'x10'
+    display_type, display_planes, pixmap_format, width, height = struct.unpack('>8x5L', data)
+    if display_type > 16:
+      raise ValueError('Bad xwd display type: %d' % display_type)
+    if not 1 <= display_planes <= 5:  # Typically 1 or 3.
+      raise ValueError('Bad xwd display planes: %d' % display_planes)
+    if pixmap_format > 1:
+      raise ValueError('Bad xwd pixmap format: %d' % pixmap_format)
+  elif file_version == 7:
+    info['format'], info['subformat'] = 'xwd', 'x11'
+    pixmap_format, pixmap_depth, width, height = struct.unpack('>8x4L4x', data)
+    if not 1 <= pixmap_depth <= 32:
+      raise ValueError('Bad xwd pixmap depth: %d' % pixmap_depth)
+    if pixmap_format > 2:
+      raise ValueError('Bad xwd pixmap format: %d' % pixmap_format)
+  else:
+    raise ValueError('Bad xwd file version: %d' % file_version)
+  info['width'], info['height'] = width, height
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -6302,6 +6333,9 @@ FORMAT_ITEMS = (
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
+    ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
+    ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
+
     # * It's not feasible to detect
     #   http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is
     #   too short (2 bytes).
@@ -6818,6 +6852,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_wmf(fread, info, fskip)
   elif format == 'emf':
     analyze_emf(fread, info, fskip)
+  elif format == 'xwd':
+    analyze_xwd(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
