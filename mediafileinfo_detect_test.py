@@ -593,6 +593,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\1\xd3\0\0\0\x3c'),
                      {'format': 'xwd', 'subformat': 'x10', 'height': 60, 'width': 467})
 
+  def test_analyze_dvi(self):
+    data1 = '\xf7\2\1\x83\x92\xc0\x1c\x3b\0\0\0\0\3\xe8\x1b TeX output 2020.03.10:0921\x8b\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\xff\xff\xff\xff\xef\x21papersize=421.10078pt,597.50787pt'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:10])[0], 'dvi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'dvi')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dvi, data1[:10]),
+                     {'format': 'dvi'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dvi, data1),
+                     {'format': 'dvi', 'height': 595, 'width': 420})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

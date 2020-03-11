@@ -5259,6 +5259,113 @@ def analyze_emf(fread, info, fskip):
         raise ValueError('Bad emf+ size.')
 
 
+# https://en.wikibooks.org/wiki/LaTeX/Lengths#Units
+# 'ex' and 'em' are missing here, because they are font-specific.
+TEX_DIMEN_MULTIPLIERS = {  # When converting to bp.
+    'bp': 1,
+    'pt': 72 / 72.27,
+    'in': 72,
+    'mm': 72 / 25.4,
+    'cm': 72 / 2.54,
+    'sp': 72 / (65536 * 72.27),
+    'pc': 12 * 72 / 72.27,
+    'dd': 1238 * 72 / (72.27 * 1157),
+    'cc': 1238 * 12 * 72 / (72.27 * 1157),
+    'nd': 685 * 72 / (72.27 * 642),
+    'nc': 685 * 12 * 72 / (72.27 * 642),
+}
+
+
+def parse_tex_dimen(data):
+  data = data.lower().strip()
+  if len(data) < 2 or data[-2:] not in TEX_DIMEN_MULTIPLIERS:
+    raise ValueError('Bad unit in TeX dimension: %r' % data)
+  multiplier = TEX_DIMEN_MULTIPLIERS[data[-2:]]
+  data = data[:-2].rstrip()
+  if ('e' in data or '.' in data) and (data[0].isdigit() or data[0] == '.') and data[-1].isdigit():  # Floating point, e.g. 2e3.
+    data = float(data) * multiplier
+  elif data and data.isdigit():
+    data = int(data) * multiplier
+  else:
+    # This also disallows negative.
+    raise ValueError('Bad number in TeX dimension: %r' % data)
+  if isinstance(data, float):
+    data = int(data + .5)  # Round to neariest integer.
+  return data
+
+
+def analyze_dvi(fread, info, fskip):
+  # http://mirror.utexas.edu/ctan/dviware/driv-standard/level-0/dvistd0.pdf
+  # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
+  data = fread(10)
+  if len(data) < 10:
+    raise ValueError('Too short for dvi.')
+  pre, version, num, den = struct.unpack('>BBLL', data)
+  if pre != 247 or version not in (2, 3):
+    raise ValueError('dvi signature not found.')
+  if num != 25400000:
+    raise ValueError('Bad num: (num, den)=(%d, %d)', (num, den))
+  if den != 473628672:
+    raise ValueError('Bad den: (num, den)=(%d, %d)', (num, den))
+  info['format'] = 'dvi'
+  data = fread(5)
+  if len(data) < 5:
+    return
+  mag, comment_size = struct.unpack('>LB', data)
+  if not fskip(comment_size):
+    return
+  while 1:
+    c = fread(1)
+    if not c:
+      raise ValueError('EOF before dvi command.')
+    b = ord(c)
+    if b < 128 or b in (138, 140, 141, 142, 142, 147, 152, 161, 166) or 171 <= b <= 234:
+      continue
+    elif b in (128, 133, 143, 148, 153, 157, 162, 167, 235):
+      n = 1
+    elif b in (129, 134, 144, 149, 154, 158, 163, 168, 236):
+      n = 2
+    elif b in (130, 135, 145, 150, 155, 159, 164, 169, 237):
+      n = 3
+    elif b in (131, 136, 146, 151, 156, 160, 165, 170, 238):
+      n = 4
+    elif b in (132, 137):
+      n = 8
+    elif b == 139:
+      n = 44
+    elif b in (243, 244, 245, 246):  # Font definition.
+      if not fskip(b - 230):
+        break
+      c = fread(2)
+      if len(c) < 2 or not fskip(ord(c[0]) + ord(c[1])):
+        break
+      continue
+    elif b in (248, 140):  # End of first page, stop parsing.
+      return
+    elif b in (239, 240, 241, 242):  # Special.
+      c = '\0' * (242 - b) + fread(b - 238)
+      if len(c) != 4:
+        break
+      n, = struct.unpack('>L', c)
+      if n <= 2048:  # Not too long.
+        c = fread(n)
+        if len(c) < n:
+          break
+        if not c.startswith('papersize='):
+          continue
+        c = c[c.find('=') + 1:].split(',')
+        if len(c) < 2:
+          raise ValueError('Missing comma in papersize= special.')
+        width = parse_tex_dimen(c[0])
+        height = parse_tex_dimen(c[1])
+        info['width'], info['height'] = width, height
+        return
+    else:
+      raise ValueError('Bad dvi command: %d' % b)
+    if not fskip(n):
+      break  # EOF in dvi command argument.
+  raise ValueError('EOF in dvi command.')
+
 def is_vp8(header):
   if len(header) < 10 or header[3 : 6] != '\x9d\x01\x2a':
     return False
@@ -6373,9 +6480,7 @@ FORMAT_ITEMS = (
     ('pdf', (0, '%PDF')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
     # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
-    # TODO(pts): Get width and height from \special{papersize=...}.
-    # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
-    ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\34;\0\0')),
+    ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
@@ -6851,6 +6956,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ivf(fread, info, fskip)
   elif format == 'wmf':
     analyze_wmf(fread, info, fskip)
+  elif format == 'dvi':
+    analyze_dvi(fread, info, fskip)
   elif format == 'emf':
     analyze_emf(fread, info, fskip)
   elif format == 'xwd':
