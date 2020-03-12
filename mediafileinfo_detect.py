@@ -6648,6 +6648,7 @@ FORMAT_ITEMS = (
     # Compressed archive.
 
     # '\6\6' is ZIP64.
+    # Also Java jar and Android apk.
     ('zip', (0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
     ('zip', (0, 'PK00PK', 6, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
     ('rar', (0, 'Rar!')),
