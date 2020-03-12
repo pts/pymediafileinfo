@@ -6641,6 +6641,9 @@ FORMAT_ITEMS = (
     ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
     ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
     ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
+    # https://fossies.org/linux/xfig/doc/FORMAT3.2
+    # TODO(pts): For width= and height=, get paper size from line 5 in version 3.2 only.
+    ('fig', (0, '#FIG ', 5, ('1', '2', '3'), 6, '.')),
 
     # Compressed file or archive.
 
