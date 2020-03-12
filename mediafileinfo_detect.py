@@ -6672,7 +6672,8 @@ FORMAT_ITEMS = (
     ('bzip', (0, 'BZ0')),
     ('bz2', (0, 'BZh')),
     ('lzip', (0, 'LZIP')),
-    ('lzop', (0, '\x89LZO\0\r\n')),
+    # http://fileformats.archiveteam.org/wiki/Lzop
+    ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
     ('xz', (0, '\xfd7zXZ\0')),
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
