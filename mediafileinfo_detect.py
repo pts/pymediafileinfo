@@ -4442,6 +4442,49 @@ def analyze_xwd(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def count_is_sun_icon(header):
+  if not header.startswith('/*') or header[2 : 3] not in ' \t\r\n':
+    return False
+  i = 3 + (header[2 : 4] == '\r\n')
+  if header[i : i + 17] != 'Format_version=1,':
+    return False
+  return (i + 17) * 100
+
+
+def analyze_sun_icon(fread, info, fskip):
+  # https://www.fileformat.info/format/sunicon/egff.htm
+  data = fread(4)
+  if data.startswith('/*') and data[2 : 3] in ' \t\r\n':
+    if data == '/*\r\n':
+      data = '/* '
+    else:
+      data = '/* ' + data[-1]
+    data += fread(20 - len(data))
+  if len(data) < 4:
+    raise ValueError('Too short for sun-icon.')
+  if data != '/* Format_version=1,':
+    raise ValueError('sun-icon signature not found.')
+  info['format'] = 'sun-icon'
+  data = fread(256)
+  i = data.find('*/')
+  if i >= 0:
+    items = data.split(',')
+  else:
+    data = data[:data.rfind(',')]
+  dimens = {}
+  for item in data.split(','):
+    item = item.strip()
+    if item.startswith('Width=') or item.startswith('Height='):
+      key, value = item.split('=', 1)
+      key = key.lower()
+      try:
+        dimens[key] = int(value)
+      except ValueError:
+        raise ValueError('Bad sun-icon %s value: %r' % (key, value))
+  if 'width' in dimens and 'height' in dimens:
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
@@ -6443,6 +6486,7 @@ FORMAT_ITEMS = (
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
+    ('sun-icon', (0, '/*', 2, (' ', '\t', '\r', '\n'), 21, lambda header: adjust_confidence(300, count_is_sun_icon(header)))),  # '/* Format_version=1,'.
 
     # * It's not feasible to detect
     #   http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is
@@ -6962,6 +7006,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_emf(fread, info, fskip)
   elif format == 'xwd':
     analyze_xwd(fread, info, fskip)
+  elif format == 'sun-icon':
+    analyze_sun_icon(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

@@ -602,6 +602,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dvi, data1),
                      {'format': 'dvi', 'height': 595, 'width': 420})
 
+  def test_analyze_sun_icon(self):
+    data1 = '/* Format_version=1, Width=123, Height=45, Depth=1, Valid_bits_per_item=16\n */\n'
+    data2 = '/*\r\nFormat_version=1,Width=123,Height=45,'
+    data3 = '/* Format_version=1,'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'sun-icon')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'sun-icon')
+    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'sun-icon')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data1),
+                     {'format': 'sun-icon', 'height': 45, 'width': 123})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data2),
+                     {'format': 'sun-icon', 'height': 45, 'width': 123})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data3),
+                     {'format': 'sun-icon'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
