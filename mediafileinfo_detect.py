@@ -1556,7 +1556,7 @@ WINDOWS_VIDEO_CODECS = {
 def get_windows_video_codec(codec):
   codec = codec.strip().lower()  # Canonicalize FourCC.
   if codec == '\0\0\0\0':
-    codec = 'raw'
+    codec = 'uncompressed'
   elif codec in ('\1\0\0\x10', '\2\0\0\x10'):
     codec = 'mpeg'
   elif codec == '\2\0\0\x10':
@@ -4408,7 +4408,7 @@ def analyze_pcpaint_pic(fread, info, fskip):
     if len(data) < 2:
       raise ValueError('EOF if pcpaint-pic block count.')
     if data == '\0\0':
-      info['codec'] = 'raw'  # Uncompressed.
+      info['codec'] = 'uncompressed'
 
 
 def analyze_xwd(fread, info, fskip):
@@ -5043,9 +5043,9 @@ def analyze_pnm(fread, info, fskip):
     elif header[1] in '36':
       info['subformat'] = 'ppm'
     if header[1] in '123':
-      info['codec'] = 'rawascii'
+      info['codec'] = 'uncompressed-ascii'
     else:
-      info['codec'] = 'raw'
+      info['codec'] = 'uncompressed'  # Raw.
   else:
     raise ValueError('pnm signature not found.')
   if header[1] == '7':
@@ -5130,7 +5130,7 @@ def analyze_pam(fread, info, fskip):
   letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   if not header.startswith('P7\n') or (header[3] not in '\n#' and header[3] not in letters):
     raise ValueError('pam signature not found.')
-  info['format'], info['codec'] = 'pam', 'raw'
+  info['format'], info['codec'] = 'pam', 'uncompressed'
   data = ''.join(('##\n', header[3], fread(508)))
 
   def process_lines(data, letters=letters):

@@ -199,7 +199,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_pnm(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P1#f oo\n #bar\r\t123\x0b\x0c456#'),
-                     {'codec': 'rawascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
+                     {'codec': 'uncompressed-ascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
 
   def test_analyze_lbm(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5'),
@@ -531,12 +531,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format('P7\nENDHDR\n')[0], 'pam')
     self.assertNotEqual(mediafileinfo_detect.detect_format('P7\nQ RS\n')[0], 'pam')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam, 'P7\nWIDTH 227\nDEPTH 3\n# WIDTH 42\nHEIGHT\t\f149\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n'),
-                     {'format': 'pam', 'codec': 'raw', 'height': 149, 'width': 227})
+                     {'format': 'pam', 'codec': 'uncompressed', 'height': 149, 'width': 227})
 
   def test_analyze_xv_thumbnail(self):
     self.assertEqual(mediafileinfo_detect.detect_format('P7 332\n')[0], 'xv-thumbnail')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P7 332\n#XVVERSION:Version 2.28  Rev: 9/26/92\n#IMGINFO:512x440 Color JPEG\n#END_OF_COMMENTS\n48 40 255\n'),
-                     {'format': 'xv-thumbnail', 'codec': 'raw', 'height': 40, 'width': 48})
+                     {'format': 'xv-thumbnail', 'codec': 'uncompressed', 'height': 40, 'width': 48})
 
   def test_analyze_gem(self):
     self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x08\0\2\0\2')[0], 'gem')
