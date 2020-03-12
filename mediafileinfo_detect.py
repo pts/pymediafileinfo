@@ -6678,6 +6678,8 @@ FORMAT_ITEMS = (
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
     # http://fileformats.archiveteam.org/wiki/Compress_(Unix)
     ('compress', (0, '\x1f\x9d')),  # .Z
+    # http://fileformats.archiveteam.org/wiki/Compact_(Unix)
+    ('compact', (0, ('\x1f\xff', '\xff\x1f'))),  # .C
 
     # Non-compressed, non-media.
 
