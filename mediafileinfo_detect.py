@@ -6703,6 +6703,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/LZ4
     ('lz4', (0, '\x04\x22\x4d\x18')),
     ('lz4-legacy', (0, '\x04\x22\x4d\x18')),
+    # https://github.com/google/brotli/issues/298
+    # https://github.com/madler/brotli/blob/master/br-format-v3.txt
+    ('brotli', (0, '\xce\xb2\xcf\x81')),  # .br
 
     # Non-compressed, non-media.
 
