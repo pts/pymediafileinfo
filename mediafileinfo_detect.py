@@ -6649,6 +6649,7 @@ FORMAT_ITEMS = (
 
     # '\6\6' is ZIP64.
     ('zip', (0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
+    ('zip', (0, 'PK00PK', 6, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
     ('rar', (0, 'Rar!')),
     ('zpaq', (0, ('7kS', 'zPQ'), 4, lambda header: (header.startswith('7kSt') or (header.startswith('zPQ') and 1 <= ord(header[3]) <= 127), 52))),
     ('7z', (0, '7z\xbc\xaf\x27\x1c')),
