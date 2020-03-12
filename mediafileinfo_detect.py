@@ -6683,6 +6683,8 @@ FORMAT_ITEMS = (
     ('compact', (0, ('\x1f\xff', '\xff\x1f'))),  # .C
     # http://fileformats.archiveteam.org/wiki/Pack_(Unix)
     ('pack', (0, '\x1f\x1e')),  # .z
+    # http://fileformats.archiveteam.org/wiki/Crunch
+    ('crunch', (0, '\x76\xfe')),
     # http://fileformats.archiveteam.org/wiki/Zstandard
     ('zstd', (0, ('\x25\xb5\x2f\xfd', '\x28\xb5\x2f\xfd'))),
     # http://fileformats.archiveteam.org/wiki/Zstandard_dictionary
