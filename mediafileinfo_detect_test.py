@@ -644,6 +644,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_fig(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#FIG 3.2\n')[0], 'fig')
 
+  def test_detect_zoo(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
+    self.assertEqual(mediafileinfo_detect.detect_format('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
+
   def test_detect_arj(self):
     self.assertEqual(mediafileinfo_detect.detect_format('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2')[0], 'arj')
 
