@@ -4854,6 +4854,80 @@ def analyze_pcx(fread, info, fskip):
   info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
 
 
+def count_define_key(data, i=0):
+  if not (data[i : i + 7] == '#define' and data[i + 7 : i + 8] in ' \t'):
+    return 0, ''
+  i += 8
+  while i < len(data) and data[i] in ' \t':
+    i += 1
+  j = i
+  while i < len(data) and (data[i].isalnum() or data[i] in '_.'):
+    i += 1
+  if not (i < len(data) and data[i] in ' \t'):
+    return 0, ''
+  key = data[j : i]
+  j = i
+  while i < len(data) and data[i] in ' \t':
+    i += 1
+  if j == i:
+    return 0, ''
+  return i, key
+
+
+def parse_define_dimens(data, i, format):
+  dimens = {}
+  while 1:
+    i, key = count_define_key(data, i)
+    if not i:
+      break
+    if key.endswith('_width') or key.endswith('_height'):
+      key = key[key.rfind('_') + 1:]
+      j = i
+      while i < len(data) and data[i].isalnum():
+        i += 1
+      value = data[j : i]
+      try:
+        dimens[key] = int(value)
+      except ValueError:
+        raise ValueError('Bad %s %s value: %r' % (format, key, value))
+      if i >= len(data):
+        break
+      if data[i] not in '\r\n':
+        raise ValueError('Bad %s %s value terminator.' % (format, key))
+      if 'width' in dimens and 'height' in dimens:
+        break
+    else:  # Skip this item.
+      while i < len(data) and data[i] not in '\r\n':
+        i += 1
+    i += 1
+    while i < len(data) and data[i] in ' \t\r\n':
+      i += 1
+  return dimens
+
+
+def count_is_xbm(header):
+  i, key = count_define_key(header)
+  if not i or not (key.endswith('_width') or key.endswith('_height')):
+    return False
+  if not (len(header) > i and header[i].isdigit()):
+    return False
+  return i * 100 + 12
+
+
+def analyze_xbm(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/X_BitMap
+  # https://www.fileformat.info/format/xbm/egff.htm
+  data = fread(512)
+  if len(data) < 8:
+    raise ValueError('Too short for xbm.')
+  if not count_is_xbm(data):
+    raise ValueError('xbm signature not found.')
+  info['format'], info['codec'] = 'xbm', 'uncompressed-ascii'
+  dimens = parse_define_dimens(data, 0, 'xbm')
+  if 'width' in dimens and 'height' in dimens:
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def analyze_xpm(fread, info, fskip):
   header = fread(140)
   if len(header) < 9:
@@ -6427,6 +6501,7 @@ FORMAT_ITEMS = (
     ('xv-thumbnail', (0, 'P7 332\n')),
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
+    ('xbm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xbm(header)))),  # '#define test_width 42'.
     ('xpm', (0, '/* XPM */')),
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
@@ -6892,6 +6967,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_lbm(fread, info, fskip)
   elif format == 'pcx':
     analyze_pcx(fread, info, fskip)
+  elif format == 'xbm':
+    analyze_xbm(fread, info, fskip)
   elif format == 'xpm':
     analyze_xpm(fread, info, fskip)
   elif format == 'xcf':

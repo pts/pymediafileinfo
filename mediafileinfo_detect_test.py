@@ -616,6 +616,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data3),
                      {'format': 'sun-icon'})
 
+  def test_analyze_xbm(self):
+    data1 = '#define gs_l_m.xbm_width 4'
+    data2 = '#define test_width 16\n#define test_height 7\nstatic unsigned char test_bits[] = {\n  0x13, 0x00, 0x15, 0x00, 0x93, 0xcd, 0x55, 0xa5,'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xbm')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'xbm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, data1),
+                     {'format': 'xbm', 'codec': 'uncompressed-ascii'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, data2),
+                     {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 7, 'width': 16})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, '#define test_width 16\n#define test_height 72'),
+                     {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 72, 'width': 16})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
