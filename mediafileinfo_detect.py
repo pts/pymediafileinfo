@@ -6670,6 +6670,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/ACE
     # https://raw.githubusercontent.com/droe/acefile/master/acefile.py
     ('ace', (4, '\0', 7, '**ACE**')),
+    # http://fileformats.archiveteam.org/wiki/Deb
+    # Also udeb.
+    ('deb', (0, '!<arch>\ndebian-binary ')),
 
     # Compressed single file.
 
