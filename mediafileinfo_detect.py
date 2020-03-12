@@ -6683,6 +6683,8 @@ FORMAT_ITEMS = (
     ('compact', (0, ('\x1f\xff', '\xff\x1f'))),  # .C
     # http://fileformats.archiveteam.org/wiki/Zstandard
     ('zstd', (0, ('\x25\xb5\x2f\xfd', '\x28\xb5\x2f\xfd'))),
+    # http://fileformats.archiveteam.org/wiki/Zstandard_dictionary
+    ('zstd-dict', (0, '\x37\xa4\x30\xec')),
 
     # Non-compressed, non-media.
 
