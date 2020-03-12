@@ -6668,6 +6668,8 @@ FORMAT_ITEMS = (
     # Compressed single file.
 
     ('gz', (0, '\037\213\010')),
+    # http://fileformats.archiveteam.org/wiki/Bzip
+    ('bzip', (0, 'BZ0')),
     ('bz2', (0, 'BZh')),
     ('lzip', (0, 'LZIP')),
     ('lzop', (0, '\x89LZO\0\r\n')),
