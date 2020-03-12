@@ -6645,20 +6645,13 @@ FORMAT_ITEMS = (
     # TODO(pts): For width= and height=, get paper size from line 5 in version 3.2 only.
     ('fig', (0, '#FIG ', 5, ('1', '2', '3'), 6, '.')),
 
-    # Compressed file or archive.
+    # Compressed archive.
 
     # '\6\6' is ZIP64.
     ('zip', (0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
     ('rar', (0, 'Rar!')),
     ('zpaq', (0, ('7kS', 'zPQ'), 4, lambda header: (header.startswith('7kSt') or (header.startswith('zPQ') and 1 <= ord(header[3]) <= 127), 52))),
-    ('gz', (0, '\037\213\010')),
-    ('bz2', (0, 'BZh')),
-    ('lzip', (0, 'LZIP')),
-    ('lzop', (0, '\x89LZO\0\r\n')),
     ('7z', (0, '7z\xbc\xaf\x27\x1c')),
-    ('xz', (0, '\xfd7zXZ\0')),
-    ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
-    ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
     # http://fileformats.archiveteam.org/wiki/Zoo
     # https://www.fileformat.info/format/zoo/corion.htm
     ('zoo', (0, 'ZOO ', 4, ('1', '2'), 5, '.', 6, tuple('0123456789'), 7, tuple('0123456789'), 8, ' Archive.\x1a\0\0\xdc\xa7\xc4\xfd')),
@@ -6671,6 +6664,16 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/LHA
     # https://web.archive.org/web/20021005080911/http://www.osirusoft.com/joejared/lzhformat.html
     ('lha', (2, ('-lh0-', '-lzs-', '-lh1-', '-lh2-', '-lh3-', '-lh4-', '-lh5-', '-lh6-', '-lh7-', '-lh8-', '-lh9-', '-lhd-', '-lha-', '-lhb-', '-lhc-', '-lhe-', '-lhx-', '-pc1-', '-pm0-', '-pm1-', '-pm2-', '-pms-', '-lz2-', '-lz3-', '-lz4-', '-lz5-', '-lz7-', '-lz8-'), 20, ('\0', '\1', '\2'))),
+
+    # Compressed single file.
+
+    ('gz', (0, '\037\213\010')),
+    ('bz2', (0, 'BZh')),
+    ('lzip', (0, 'LZIP')),
+    ('lzop', (0, '\x89LZO\0\r\n')),
+    ('xz', (0, '\xfd7zXZ\0')),
+    ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
+    ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
 
     # Non-compressed, non-media.
 
