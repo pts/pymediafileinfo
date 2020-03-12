@@ -6659,6 +6659,15 @@ FORMAT_ITEMS = (
     ('xz', (0, '\xfd7zXZ\0')),
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
+    # http://fileformats.archiveteam.org/wiki/Zoo
+    # https://www.fileformat.info/format/zoo/corion.htm
+    ('zoo', (0, 'ZOO ', 4, ('1', '2'), 5, '.', 6, tuple('0123456789'), 7, tuple('0123456789'), 8, ' Archive.\x1a\0\0\xdc\xa7\xc4\xfd')),
+    # http://fileformats.archiveteam.org/wiki/UltraCompressor_II
+    ('uc2', (0, 'UC2\x1a')),
+    # http://fileformats.archiveteam.org/wiki/ARJ
+    # https://github.com/tripsin/unarj/blob/master/TECHNOTE.TXT
+    # https://github.com/joncampbell123/arj/blob/master/defines.h
+    ('arj', (0, '\x60\xea', 5, tuple(chr(c) for c in xrange(1, 16)), 6, tuple(chr(c) for c in xrange(1, 16)), 7, tuple(chr(c) for c in xrange(16)), 9, ('\0', '\1', '\2', '\3', '\4'), 10, ('\0', '\1', '\2', '\3', '\4'))),
     # http://fileformats.archiveteam.org/wiki/LHA
     # https://web.archive.org/web/20021005080911/http://www.osirusoft.com/joejared/lzhformat.html
     ('lha', (2, ('-lh0-', '-lzs-', '-lh1-', '-lh2-', '-lh3-', '-lh4-', '-lh5-', '-lh6-', '-lh7-', '-lh8-', '-lh9-', '-lhd-', '-lha-', '-lhb-', '-lhc-', '-lhe-', '-lhx-', '-pc1-', '-pm0-', '-pm1-', '-pm2-', '-pms-', '-lz2-', '-lz3-', '-lz4-', '-lz5-', '-lz7-', '-lz8-'), 20, ('\0', '\1', '\2'))),

@@ -644,6 +644,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_fig(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#FIG 3.2\n')[0], 'fig')
 
+  def test_detect_arj(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2')[0], 'arj')
+
   def test_detect_lha(self):
     self.assertEqual(mediafileinfo_detect.detect_format('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1')[0], 'lha')
 
