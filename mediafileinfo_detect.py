@@ -6665,6 +6665,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/LHA
     # https://web.archive.org/web/20021005080911/http://www.osirusoft.com/joejared/lzhformat.html
     ('lha', (2, ('-lh0-', '-lzs-', '-lh1-', '-lh2-', '-lh3-', '-lh4-', '-lh5-', '-lh6-', '-lh7-', '-lh8-', '-lh9-', '-lhd-', '-lha-', '-lhb-', '-lhc-', '-lhe-', '-lhx-', '-pc1-', '-pm0-', '-pm1-', '-pm2-', '-pms-', '-lz2-', '-lz3-', '-lz4-', '-lz5-', '-lz7-', '-lz8-'), 20, ('\0', '\1', '\2'))),
+    # https://github.com/NeighTools/ARCX/wiki/ARCX-format
+    ('arcx', (0, 'ARCX')),
 
     # Compressed single file.
 
