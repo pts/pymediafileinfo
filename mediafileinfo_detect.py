@@ -6677,6 +6677,9 @@ FORMAT_ITEMS = (
 
     # Compressed single file.
 
+    # http://fileformats.archiveteam.org/wiki/Gzip
+    # https://wiki.alpinelinux.org/wiki/Alpine_package_format
+    # Also .tar.gz and Alpine apk.
     ('gz', (0, '\037\213\010')),
     # http://fileformats.archiveteam.org/wiki/Bzip
     ('bzip', (0, 'BZ0')),
