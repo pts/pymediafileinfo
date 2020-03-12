@@ -6689,6 +6689,8 @@ FORMAT_ITEMS = (
     ('squeeze', (0, '\x76\xff')),
     # http://fileformats.archiveteam.org/wiki/CrLZH
     ('crlzh', (0, '\x76\xfd')),
+    # http://fileformats.archiveteam.org/wiki/SCO_compress_LZH
+    ('sco-lzh', (0, '\x1f\xa0')),
     # http://fileformats.archiveteam.org/wiki/Zstandard
     ('zstd', (0, ('\x25\xb5\x2f\xfd', '\x28\xb5\x2f\xfd'))),
     # http://fileformats.archiveteam.org/wiki/Zstandard_dictionary
