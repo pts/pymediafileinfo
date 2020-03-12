@@ -6659,6 +6659,9 @@ FORMAT_ITEMS = (
     ('xz', (0, '\xfd7zXZ\0')),
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
+    # http://fileformats.archiveteam.org/wiki/LHA
+    # https://web.archive.org/web/20021005080911/http://www.osirusoft.com/joejared/lzhformat.html
+    ('lha', (2, ('-lh0-', '-lzs-', '-lh1-', '-lh2-', '-lh3-', '-lh4-', '-lh5-', '-lh6-', '-lh7-', '-lh8-', '-lh9-', '-lhd-', '-lha-', '-lhb-', '-lhc-', '-lhe-', '-lhx-', '-pc1-', '-pm0-', '-pm1-', '-pm2-', '-pms-', '-lz2-', '-lz3-', '-lz4-', '-lz5-', '-lz7-', '-lz8-'), 20, ('\0', '\1', '\2'))),
 
     # Non-compressed, non-media.
 
