@@ -6685,6 +6685,8 @@ FORMAT_ITEMS = (
     ('pack', (0, '\x1f\x1e')),  # .z
     # http://fileformats.archiveteam.org/wiki/Crunch
     ('crunch', (0, '\x76\xfe')),
+    # http://fileformats.archiveteam.org/wiki/Squeeze
+    ('squeeze', (0, '\x76\xff')),
     # http://fileformats.archiveteam.org/wiki/Zstandard
     ('zstd', (0, ('\x25\xb5\x2f\xfd', '\x28\xb5\x2f\xfd'))),
     # http://fileformats.archiveteam.org/wiki/Zstandard_dictionary
