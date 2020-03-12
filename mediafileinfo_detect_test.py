@@ -211,10 +211,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),
                      {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
 
-  def test_analyze_xpm(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 3456 '),
-                     {'codec': 'uncompressed', 'format': 'xpm', 'height': 3456, 'width': 12})
-
   def test_analyze_xcf(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xcf, 'gimp xcf v001\0\0\0\1\x0d\0\0\1\7'),
                      {'format': 'xcf', 'width': 269, 'height': 263})
@@ -627,6 +623,23 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 7, 'width': 16})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, '#define test_width 16\n#define test_height 72'),
                      {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 72, 'width': 16})
+
+  def test_analyze_xpm(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('#define gs_l_m._format 1\r')[0], 'xpm')
+    self.assertEqual(mediafileinfo_detect.detect_format('! XPM2\r')[0], 'xpm')
+    self.assertEqual(mediafileinfo_detect.detect_format('/* XPM */\r')[0], 'xpm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '#define gs_l_m._format 1\n'),
+                     {'format': 'xpm', 'subformat': 'xpm1', 'codec': 'uncompressed-ascii'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '#define gs_l_m._format 1\n#define gs_l_m._width 16\r\n\n\n#define gs_l_m._height 72'),
+                     {'format': 'xpm', 'subformat': 'xpm1', 'codec': 'uncompressed-ascii', 'height': 72, 'width': 16})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '! XPM2\n'),
+                     {'format': 'xpm', 'subformat': 'xpm2', 'codec': 'uncompressed-ascii'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '! XPM2\r\n16\t7 '),
+                     {'format': 'xpm', 'subformat': 'xpm2', 'codec': 'uncompressed-ascii', 'height': 7, 'width': 16})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\n\r\t'),
+                     {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 \t3456 '),
+                     {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii', 'height': 3456, 'width': 12})
 
 
 if __name__ == '__main__':

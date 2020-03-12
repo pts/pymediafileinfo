@@ -4928,35 +4928,67 @@ def analyze_xbm(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
+def count_is_xpm1(header):
+  i, key = count_define_key(header)
+  if not i or not key.endswith('_format'):
+    return False
+  if not (len(header) >= i + 2 and header[i] == '1' and header[i + 1] in '\r\n'):
+    return False
+  return (i + 1) * 100 + 50
+
+
 def analyze_xpm(fread, info, fskip):
-  header = fread(140)
-  if len(header) < 9:
+  # https://en.wikipedia.org/wiki/X_PixMap
+  # https://wiki.multimedia.cx/index.php/XPM
+  data = fread(512)
+  if len(data) < 7:
     raise ValueError('Too short for xpm.')
-  if not header.startswith('/* XPM */'):
+  i = count_is_xpm1(data) // 100
+  if i:
+    info['format'], info['subformat'], info['codec'] = 'xpm', 'xpm1', 'uncompressed-ascii'
+    dimens = parse_define_dimens(data, i + 1, 'xbm')
+    if 'width' in dimens and 'height' in dimens:
+      info['width'], info['height'] = dimens['width'], dimens['height']
+    return
+  if data.startswith('! XPM2') and data[6 : 7] in '\r\n':
+    info['format'], info['subformat'], info['codec'] = 'xpm', 'xpm2', 'uncompressed-ascii'
+    i = 7
+    while i < len(data) and data[i] in '\r\n\t ':
+      i += 1
+  elif data.startswith('/* XPM */') and data[9 : 10] in '\r\n':
+    info['format'], info['subformat'], info['codec'] = 'xpm', 'xpm3', 'uncompressed-ascii'
+    i = 10
+    while i < len(data) and data[i] in '\r\n\t ':
+      i += 1
+    if i != len(data):
+      i = data.find('"', 9) + 1
+      if i <= 0:
+        raise ValueError('Missing quote in xpm.')
+  else:
     raise ValueError('xpm signature not found.')
-  info['format'] = 'xpm'
-  info['codec'] = 'uncompressed'
-  i = header.find('"', 9) + 1
-  if i <= 0:
-    raise ValueError('Missing quote in xpm.')
-  j = i
-  while i < len(header) and header[i].isdigit():
+  if i < len(data):
+    j = i
+    while i < len(data) and data[i].isdigit():
+      i += 1
+    try:
+      width = int(data[j : i])
+    except ValueError:
+      raise ValueError('Bad xpm width: %r' % data[j  : i])
+    if data[i] not in '\r\n\t ':
+      raise ValueError('Bad xpm separator.')
     i += 1
-  if i == j or i == len(header):
-    raise ValueError('Bad xpm width.')
-  width = int(header[j : i])
-  if not header[i].isspace():
-    raise ValueError('Bad xpm separator.')
-  i += 1
-  j = i
-  while i < len(header) and header[i].isdigit():
-    i += 1
-  if i == j or i == len(header):
-    raise ValueError('Bad xpm height.')
-  height = int(header[j : i])
-  if not header[i].isspace():
-    raise ValueError('Bad xpm separator.')
-  info['width'], info['height'] = width, height
+    while i < len(data) and data[i] in '\r\n\t ':
+      i += 1
+    j = i
+    while i < len(data) and data[i].isdigit():
+      i += 1
+    try:
+      height = int(data[j : i])
+    except ValueError:
+      raise ValueError('Bad xpm height: %r' % data[j  : i])
+    if data[i] not in '\r\n\t ':
+      raise ValueError('Bad xpm separator.')
+    info['width'], info['height'] = width, height
 
 
 def analyze_xcf(fread, info, fskip):
@@ -6502,7 +6534,9 @@ FORMAT_ITEMS = (
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xbm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xbm(header)))),  # '#define test_width 42'.
-    ('xpm', (0, '/* XPM */')),
+    ('xpm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xpm1(header)))),  # '#define test_format 1'. XPM1.
+    ('xpm', (0, '! XPM2', 6, ('\r', '\n'))),  # XPM2.
+    ('xpm', (0, '/* XPM */', 9, ('\r', '\n'))),  # XPM3.
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
