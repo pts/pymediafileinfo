@@ -6684,6 +6684,8 @@ FORMAT_ITEMS = (
     ('compact', (0, ('\x1f\xff', '\xff\x1f'))),  # .C
     # http://fileformats.archiveteam.org/wiki/Pack_(Unix)
     ('pack', (0, '\x1f\x1e')),  # .z
+    # http://fileformats.archiveteam.org/wiki/Freeze/Melt
+    ('freeze', (0, ('\x1f\x9e', '\x1f\x9f'))),  # .F
     # http://fileformats.archiveteam.org/wiki/Crunch
     ('crunch', (0, '\x76\xfe')),
     # http://fileformats.archiveteam.org/wiki/Squeeze
