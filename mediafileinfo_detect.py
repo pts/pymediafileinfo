@@ -6937,7 +6937,8 @@ FORMAT_ITEMS = (
     ('avidemux-project', (0, '//AD')),
     # *** These modified files were found in JOE when it aborted on ...
     # *** JOE was aborted by UNIX signal ...
-    ('deadjoe', (0, '\n*** ', 5, ('Thes', 'JOE '))),
+    # *** Modified files in JOE when it aborted on
+    ('deadjoe', (0, '\n*** ', 5, ('These modified', 'JOE was aborte', 'Modified files'))),
     ('elf', (0, '\x7fELF', 4, ('\1', '\2'), 5, ('\1', '\2'), 6, '\1')),
     # Filename extension: .mfo
     # Example: output of pymediafileinfo and media_scan.py.
