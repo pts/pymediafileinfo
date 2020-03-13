@@ -6697,6 +6697,8 @@ FORMAT_ITEMS = (
     ('rzip', (0, 'RZIP')),
     # http://fileformats.archiveteam.org/wiki/Lrzip
     ('lrzip', (0, 'LRZI')),
+    # http://fileformats.archiveteam.org/wiki/LZX
+    ('lzx', (0, 'LZX')),
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
     ('xz', (0, '\xfd7zXZ\0')),
