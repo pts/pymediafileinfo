@@ -6834,6 +6834,9 @@ FORMAT_ITEMS = (
     ('cab', (0, 'MSCF\0\0\0\0')),
     # https://doomwiki.org/wiki/WAD#Compression
     ('wad', (0, ('IWAD', 'PWAD'))),
+    # http://fileformats.archiveteam.org/wiki/AIN
+    # JUP.DAT in JUP at https://weynans.lima-city.de/tools-en.htm
+    ('ain', (0, '!', 1, ('\x11', '\x12'), 2, '\0\0\0\0\0\0')),
 
     # Compressed single file.
 
