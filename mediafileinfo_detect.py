@@ -6674,6 +6674,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Deb
     # Also udeb.
     ('deb', (0, '!<arch>\ndebian-binary ')),
+    # http://fileformats.archiveteam.org/wiki/RPM
+    ('rpm', (0, '\xed\xab\xee\xdb')),
     # http://fileformats.archiveteam.org/wiki/AR
     ('ar', (0, '!<arch>\n')),
 
