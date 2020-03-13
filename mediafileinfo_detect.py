@@ -6680,6 +6680,8 @@ FORMAT_ITEMS = (
     ('ar', (0, '!<arch>\n')),
     # http://fileformats.archiveteam.org/wiki/Cabinet
     ('cab', (0, 'MSCF\0\0\0\0')),
+    # https://doomwiki.org/wiki/WAD#Compression
+    ('wad', (0, ('IWAD', 'PWAD'))),
 
     # Compressed single file.
 
