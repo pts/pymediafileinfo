@@ -459,6 +459,23 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format('\r\n' + data2)[0], 'xml-comment')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '\r\n' + data2), {'format': 'html'})
 
+  def test_analyze_xhtml(self):
+    data1 = '<html lang="en"\txmlns="http://www.w3.org/1999/xhtml">'
+    data2 = '\t\f<!DOCTYPE\rhtml>\n' + data1
+    data3 = '<?xml version="1.0"?>\r\n' + data2
+    data4 = '<!-- hi --> ' + data3
+    data5 = '\t\f<!DOCTYPE\rhtml>\n<!-- hi -->\r\n<!---->' + data1
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'html')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data1), {'format': 'xhtml'})
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'html')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data2), {'format': 'xhtml'})
+    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'xml')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data3), {'format': 'xhtml'})
+    self.assertEqual(mediafileinfo_detect.detect_format(data4)[0], 'xml-comment')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data4), {'format': 'xhtml'})
+    self.assertEqual(mediafileinfo_detect.detect_format(data5)[0], 'html')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data5), {'format': 'xhtml'})
+
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen
     self.assertRaises(ValueError, f, '')

@@ -4621,10 +4621,49 @@ def analyze_xml(fread, info, fskip):
     info['format'], data = 'smil', ''
     data = '?>' + header
   else:
-    if ((header_lo.startswith('<html') or header_lo.startswith('<head') or header_lo.startswith('<body')) and header[5] in whitespace_tagend) or header_lo.startswith('<!doct'):
+    def is_ws_xhtml_tag(header, i):
+      if i:
+        i = header.find('>', i - 1)
+        if i > 0:
+          j = 0
+          while j < i and header[j].isspace():
+            j += 1
+          if header[j : j + 5] == '<html':  # Lowercase.
+            header = ' '.join(header[j : i].split()).replace("'", '"')
+            if ' xmlns="' in header:
+              return True
+      return False
+    if header_lo.startswith('<!doct'):
       header += fread(1024 - len(header))
       if count_is_html(header):
         info['format'] = 'html'
+        if header.startswith('<!DOCTYPE'):  # Uppercase.
+          i = header.find('>')
+          if i > 0:
+            header = header[i + 1:]
+            while 1:
+              header += fread(1024 - len(header))
+              if not (header.startswith('<!--') or header[:1].isspace()):
+                break
+              j = 0
+              while j < len(header) and header[j].isspace():
+                j += 1
+              header = header[j:]
+              if header.startswith('<!--'):
+                j = header.find('-->', 4)
+                if j >= 0:
+                  header = header[j + 3:]
+                else:
+                  header = '<!--' + header[-2:]
+            if is_ws_xhtml_tag(header, count_is_html(header) // 100):
+              # https://en.wikipedia.org/wiki/XHTML
+              info['format'] = 'xhtml'
+        return
+    elif (header_lo.startswith('<html') or header_lo.startswith('<head') or header_lo.startswith('<body')) and header[5] in whitespace_tagend:
+      header += fread(1024 - len(header))
+      i = count_is_html(header) // 100
+      if i:
+        info['format'] = ('html', 'xhtml')[is_ws_xhtml_tag(header, i)]
         return
     if had_comment:
       info['format'] = 'xml-comment'
@@ -4755,6 +4794,9 @@ def analyze_xml(fread, info, fskip):
                   i -= 1
                 attrs = parse_attrs(buffer(data, j, i - j - 1))
                 populate_svg_dimens(attrs, info)
+        elif tag_name == 'html':
+          # We don't check for xmlns="..." here, <?xml above was enough.
+          info['format'] = 'xhtml'
         break
       else:
         raise ValueError('xml tag expected.')
@@ -6530,6 +6572,8 @@ def count_is_html(header):
   return False
 
 
+
+
 # --- File format detection for many file formats and getting media
 # parameters for some.
 
@@ -6866,6 +6910,7 @@ FORMAT_ITEMS = (
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('html', (0, '<', 392, lambda header: adjust_confidence(100, count_is_html(header)))),
     ('html', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_html(header)))),
+    ('xhtml',),  # From 'html' and 'xml'.
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf
@@ -7286,8 +7331,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
-  elif format in ('xml', 'xml-comment', 'svg', 'smil'):
-    analyze_xml(fread, info, fskip)  # Also generates format=svg and =smil.
+  elif format in ('xml', 'xml-comment', 'html', 'svg', 'smil'):
+    analyze_xml(fread, info, fskip)  # Also generates format=svg, =smil, =html, =xml.
   elif format == 'jpegxl-brunsli':
     analyze_brunsli(fread, info, fskip)
   elif format == 'jpegxl':
