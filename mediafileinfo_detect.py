@@ -6907,7 +6907,7 @@ def detect_format(f):
     header = f(size)
   if not isinstance(header, str):
     raise TypeError
-  matches = []
+  best_match = ()
   fbp = format_db.formats_by_prefix
   for j in xrange(min(len(header), 4), -1, -1):
     for format, spec in fbp[j].get(header[:j], ()):
@@ -6949,13 +6949,8 @@ def detect_format(f):
           raise AssertionError(type(pattern))
         i += 2
       if i == len(spec):  # The spec has matched.
-        matches.append((confidence, format))
-  if matches:
-    matches.sort()  # By (confidence, format) ascending.
-    format = matches[-1][1]
-  else:
-    format = '?'
-  return format, header
+        best_match = max(best_match, (confidence, format))
+  return (best_match or (-1, '?'))[1], header
 
 
 def copy_info_from_tracks(info):

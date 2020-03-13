@@ -656,6 +656,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_lha(self):
     self.assertEqual(mediafileinfo_detect.detect_format('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1')[0], 'lha')
 
+  def test_detect_unknown(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('Unknown'), ('?', 'Unknown'))
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
