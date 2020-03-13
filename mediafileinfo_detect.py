@@ -823,7 +823,7 @@ def analyze_mp4(fread, info, fskip):
         process_box(size2 - 8)
         xtype_path.pop()
     else:
-      if size > 16383 or xtype in ('free', 'skip', 'wide'):
+      if size > 16383 or xtype in ('free', 'skip', 'wide', 'junk'):
         if not fskip(size):
           raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
       else:
@@ -964,6 +964,7 @@ def analyze_mp4(fread, info, fskip):
       toplevel_xtypes.discard('free')
       toplevel_xtypes.discard('skip')
       toplevel_xtypes.discard('wide')
+      toplevel_xtypes.discard('junk')
       if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
         # This happens. The mdat can be any video, we could process
         # recursively. (But it's too late to seek back.)
@@ -6625,7 +6626,7 @@ FORMAT_ITEMS = (
     # This box ('wide', 'free' or 'skip'), after it's data, is immediately
     # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
     # can't detect 'mdat' here, it's too far for us.
-    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip'))),
+    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip', 'junk'))),
     ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     ('ogg', (0, 'OggS\0')),
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
