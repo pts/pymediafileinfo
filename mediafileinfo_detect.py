@@ -4519,14 +4519,14 @@ def analyze_exe(fread, info, fskip):
   if pe_ofs < 8180 and len(header) < pe_ofs + 300:
     header += fread(pe_ofs + 300 - len(header))
   if (len(header) >= pe_ofs + 6 and
-      header.startswith('MZ') and
       header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
       header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
-      # Only i386 and amd64 are recognized.
-      header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86')):
+      # Some known architectures.
+      header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86', '\x64\xaa', '\xc0\x01', '\xc4\x01', '\xbc\x0e', '\x00\x02')):
     # Windows .exe file (PE, Portable Executable).
+    # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
     info['format'] = 'winexe'
-    # 108 bytes instead of 92 bytes for PE32+.
+    # 108 bytes for PE32+, 92 bytes for PE32.
     rva_ofs = pe_ofs + 24 + 92 + 16 * (
         header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
     rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
@@ -4534,6 +4534,11 @@ def analyze_exe(fread, info, fskip):
       vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
       if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
         info['format'] = 'dotnetexe'  # .NET executable assembly.
+        return
+        # Check the subsystem field for UEFI.
+    if header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
+      info['format'] = 'efiexe'
+      return
 
 
 def parse_svg_dimen(data):
@@ -6935,6 +6940,7 @@ FORMAT_ITEMS = (
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
     ('dotnetexe',),  # From 'exe'.
     ('winexe',),  # From 'exe'.
+    ('efiexe',),  # From 'exe'.
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
     ('com32r', (0, '\xb8\xfeL\xcd!')),  # .c32
     # https://github.com/pts/pts-xcom
