@@ -4523,9 +4523,14 @@ def analyze_exe(fread, info, fskip):
       header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
       # Some known architectures.
       header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86', '\x64\xaa', '\xc0\x01', '\xc4\x01', '\xbc\x0e', '\x00\x02')):
+    characteristics, = struct.unpack('<H', header[pe_ofs + 22 : pe_ofs + 24])
+    if characteristics & 0x2000:
+      suffix = 'dll'
+    else:
+      suffix = 'exe'
     # Windows .exe file (PE, Portable Executable).
     # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
-    info['format'] = 'winexe'
+    info['format'] = 'win' + suffix  # 'winexe'
     # 108 bytes for PE32+, 92 bytes for PE32.
     rva_ofs = pe_ofs + 24 + 92 + 16 * (
         header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
@@ -4533,11 +4538,11 @@ def analyze_exe(fread, info, fskip):
     if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
       vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
       if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
-        info['format'] = 'dotnetexe'  # .NET executable assembly.
+        info['format'] = 'dotnet' + suffix  # 'dotnetexe'  # .NET executable assembly.
         return
         # Check the subsystem field for UEFI.
     if header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
-      info['format'] = 'efiexe'
+      info['format'] = 'efi' + suffix  # 'efiexe'
       return
 
 
@@ -6944,6 +6949,9 @@ FORMAT_ITEMS = (
     ('dotnetexe',),  # From 'exe'.
     ('winexe',),  # From 'exe'.
     ('efiexe',),  # From 'exe'.
+    ('dotnetdll',),  # From 'exe'.
+    ('windll',),  # From 'exe'.
+    ('efidll',),  # From 'exe'.
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
     ('com32r', (0, '\xb8\xfeL\xcd!')),  # .c32
     # https://github.com/pts/pts-xcom
