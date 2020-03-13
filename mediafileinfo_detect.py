@@ -6694,7 +6694,10 @@ FORMAT_ITEMS = (
     ('xz', (0, '\xfd7zXZ\0')),
     # http://fileformats.archiveteam.org/wiki/LZMA_Alone
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
+    # http://fileformats.archiveteam.org/wiki/Zlib
+    # https://tools.ietf.org/html/rfc1950
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
+    ('flate-small-window', (0, ('\x08', '\x18', '\x28', '\x38', '\x48', '\x58', '\x68'), 1, ('\x01', '\x5e', '\x9c', '\xda'))),
     # http://fileformats.archiveteam.org/wiki/Compress_(Unix)
     ('compress', (0, '\x1f\x9d')),  # .Z
     # http://fileformats.archiveteam.org/wiki/Compact_(Unix)
