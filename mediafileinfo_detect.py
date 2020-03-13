@@ -6935,6 +6935,8 @@ FORMAT_ITEMS = (
     ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
     ('dotnetexe',),  # From 'exe'.
     ('winexe',),  # From 'exe'.
+    # https://github.com/pts/pts-xcom
+    ('xcom', (0, "&XPZ,2P_0E[0E_,pP[,Eu\r\nR^!5+1+1CC+1)5GGHu#PWtl6~!ugH\"!rE\"!~~0B(m\"!4r!!Y~!)E~\"0~~Cump!!|d\r\n~E)!~~0B(m\"!pq!\"G0!!oD!\"B~\"v_Q\"! PSW\r\n")),
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
     ('cue', (0, 'REM DISCID ')),
