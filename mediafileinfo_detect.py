@@ -6690,6 +6690,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Bzip
     ('bzip', (0, 'BZ0')),
     ('bz2', (0, 'BZh')),
+    # http://fileformats.archiveteam.org/wiki/Lzip
+    # Uses LZMA.
     ('lzip', (0, 'LZIP')),
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
