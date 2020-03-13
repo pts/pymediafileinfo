@@ -6748,6 +6748,8 @@ FORMAT_ITEMS = (
     ('squash', (0, 'SQSH')),
     # http://fileformats.archiveteam.org/wiki/DIET_(compression)
     ('diet', (0, '\xb4\x4c\xcd\x21\x9d\x89\x64\x6c\x7a')),
+    # https://github.com/pts/upxbc/blob/0c5c63aef8c5c3336945a92a3829078d64dfdee2/upxbc#L1239
+    ('upxz', (0, 'UPXZ')),
 
     # Non-compressed, non-media.
 
