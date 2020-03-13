@@ -6937,6 +6937,9 @@ FORMAT_ITEMS = (
     ('winexe',),  # From 'exe'.
     # https://github.com/pts/pts-xcom
     ('xcom', (0, "&XPZ,2P_0E[0E_,pP[,Eu\r\nR^!5+1+1CC+1)5GGHu#PWtl6~!ugH\"!rE\"!~~0B(m\"!4r!!Y~!)E~\"0~~Cump!!|d\r\n~E)!~~0B(m\"!pq!\"G0!!oD!\"B~\"v_Q\"! PSW\r\n")),
+    # http://nozdr.ru/marinais/
+    # Krasilnikov 1993.
+    ('com4mail', (0, 'BEGIN===tfud#of_Com4Mail_file#\r\n')),
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
     ('cue', (0, 'REM DISCID ')),
