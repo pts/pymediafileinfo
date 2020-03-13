@@ -6692,6 +6692,7 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
     ('xz', (0, '\xfd7zXZ\0')),
+    # http://fileformats.archiveteam.org/wiki/LZMA_Alone
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
     # http://fileformats.archiveteam.org/wiki/Compress_(Unix)
