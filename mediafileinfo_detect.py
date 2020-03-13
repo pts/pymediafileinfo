@@ -6678,6 +6678,8 @@ FORMAT_ITEMS = (
     ('rpm', (0, '\xed\xab\xee\xdb')),
     # http://fileformats.archiveteam.org/wiki/AR
     ('ar', (0, '!<arch>\n')),
+    # http://fileformats.archiveteam.org/wiki/Cabinet
+    ('cab', (0, 'MSCF\0\0\0\0')),
 
     # Compressed single file.
 
