@@ -6744,6 +6744,8 @@ FORMAT_ITEMS = (
     ('msdos-compress-kwaj', (0, 'KWAJ\x88\xF0\x27\xD1')),
     # http://fileformats.archiveteam.org/wiki/Squash_(RISC_OS)
     ('squash', (0, 'SQSH')),
+    # http://fileformats.archiveteam.org/wiki/DIET_(compression)
+    ('diet', (0, '\xb4\x4c\xcd\x21\x9d\x89\x64\x6c\x7a')),
 
     # Non-compressed, non-media.
 
