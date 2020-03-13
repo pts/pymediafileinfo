@@ -6802,6 +6802,8 @@ FORMAT_ITEMS = (
     ('?-zeros16', (0, '\0' * 16)),
     ('?-zeros32', (0, '\0' * 32)),
     ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
+    ('utf8', (0, '\xef\xbb\xbf')),  # BOM.
+    ('utf16', (0, ('\xff\xfe', '\xfe\xff'))),  # BOM.
 )
 
 HEADER_SIZE_LIMIT = 512
