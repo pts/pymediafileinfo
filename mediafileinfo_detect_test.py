@@ -202,10 +202,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'codec': 'uncompressed-ascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
 
   def test_analyze_lbm(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('FORM\0\0\0\x4eILBMBMHD\0\0\0\x14')[0], 'lbm')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5'),
-                     {'codec': 'rle', 'format': 'lbm', 'height': 261, 'width': 259})
+                     {'codec': 'rle', 'format': 'lbm', 'subformat': 'ilbm', 'height': 261, 'width': 259})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5'),
-                     {'codec': 'uncompressed', 'format': 'lbm', 'height': 261, 'width': 259})
+                     {'codec': 'uncompressed', 'format': 'lbm', 'subformat': 'pbm', 'height': 261, 'width': 259})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eACBMBMHD\0\0\0\x14\1\3\1\5'),
+                     {'codec': 'uncompressed', 'format': 'lbm', 'subformat': 'acbm', 'height': 261, 'width': 259})
 
   def test_analyze_pcx(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),

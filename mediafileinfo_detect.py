@@ -4912,14 +4912,17 @@ def analyze_jng(fread, info, fskip):
 
 def analyze_lbm(fread, info, fskip):
   # https://en.wikipedia.org/wiki/ILBM
+  # https://github.com/unwind/gimpilbm/blob/master/ilbm.c
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for lbm.')
   if not (header.startswith('FORM') and
-          header[8 : 12] in ('ILBM', 'PBM ') and
+          # Different 'DEEP', 'SHAM', 'DHAM', 'RGFX'.
+          header[8 : 12] in ('ILBM', 'PBM ', 'RGB8', 'RGBN', 'ACBM', 'VDAT') and
+          # Limitation: BMHD can appear later in the file.
           header[12 : 20] == 'BMHD\0\0\0\x14'):
     raise ValueError('lbm signature not found.')
-  info['format'] = 'lbm'
+  info['format'], info['subformat'] = 'lbm', header[8 : 12].strip().lower()
   if header[8] == 'I':
     info['codec'] = 'rle'
   else:
@@ -6693,7 +6696,7 @@ FORMAT_ITEMS = (
     ('xpm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xpm1(header)))),  # '#define test_format 1'. XPM1.
     ('xpm', (0, '! XPM2', 6, ('\r', '\n'))),  # XPM2.
     ('xpm', (0, '/* XPM */', 9, ('\r', '\n'))),  # XPM3.
-    ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM '), 12, 'BMHD\0\0\0\x14')),
+    ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM ', 'RGB8', 'RGBN', 'ACBM', 'VDAT'), 12, 'BMHD\0\0\0\x14')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
