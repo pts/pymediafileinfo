@@ -6738,6 +6738,10 @@ FORMAT_ITEMS = (
     # https://github.com/google/brotli/issues/298
     # https://github.com/madler/brotli/blob/master/br-format-v3.txt
     ('brotli', (0, '\xce\xb2\xcf\x81')),  # .br
+    # http://fileformats.archiveteam.org/wiki/MS-DOS_installation_compression
+    ('msdos-compress-szdd-qbasic', (0, 'SZ \x88\xF0\x27\x33\xd1')),
+    ('msdos-compress-szdd', (0, 'SZDD\x88\xF0\x27\x33')),
+    ('msdos-compress-kwaj', (0, 'KWAJ\x88\xF0\x27\xD1')),
 
     # Non-compressed, non-media.
 
