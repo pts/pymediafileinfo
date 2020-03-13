@@ -416,6 +416,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_detect_xml(self):
     self.assertEqual(mediafileinfo_detect.detect_format('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')[0], 'xml')
+    self.assertEqual(mediafileinfo_detect.detect_format('<?xml\t\fencoding="UTF-8" standalone="no"?>')[0], 'xml')
+    self.assertEqual(mediafileinfo_detect.detect_format('<?xml\v\rstandalone="no"?>')[0], 'xml')
 
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen

@@ -6432,6 +6432,21 @@ def analyze_gif(fread, info, fskip):
     info['format'] = 'agif'
 
 
+def count_is_xml(header):
+  # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
+  if not header.startswith('<?xml') and header[5 : 6].isspace():
+    return False
+  i = 6
+  while i < len(header) and header[i].isspace():
+    i += 1
+  header = header[i : i + 13]
+  for decl in ('version=', 'encoding=', 'standalone='):
+    i = len(decl)
+    if header.startswith(decl) and len(header) > i and header[i] in '"\'':
+      return (i + 1) * 100
+  return False
+
+
 # --- File format detection for many file formats and getting media
 # parameters for some.
 
@@ -6441,6 +6456,9 @@ def adjust_confidence(base_confidence, confidence):
 
 
 XML_WHITESPACE_TAGEND = ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '>')
+
+# Python whitespace (.isspace()).
+WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
 
 MAX_CONFIDENCE = 100000
 
@@ -6758,8 +6776,8 @@ FORMAT_ITEMS = (
 
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
-    ('xml', (0, '<?xml', 5, ('\t', '\n', '\x0b', '\x0c', '\r', ' '))),
-    ('php', (0, '<?', 2, ('p', 'P'), 6, ('\t', '\n', '\x0b', '\x0c', '\r', ' '), 5, lambda header: (header[:5].lower() == '<?php', 200))),
+    ('xml', (0, '<?xml', 5, WHITESPACE, 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
+    ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # TODO(pts): Ignore whitespace in the beginning above.
     ('html', (0, '<', 15, lambda header: (header.startswith('<!--') or header[:15].lower() in ('<!doctype html>', '<!doctype html ') or header[:6].lower() in ('<html>', '<head>', '<body>'), 500))),
