@@ -6788,7 +6788,7 @@ FORMAT_ITEMS = (
 
     # Document media and vector graphics.
 
-    ('pdf', (0, '%PDF')),
+    ('pdf', (0, '%PDF-1.')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
     # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
