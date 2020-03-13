@@ -6693,6 +6693,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Lzip
     # Uses LZMA.
     ('lzip', (0, 'LZIP')),
+    # http://fileformats.archiveteam.org/wiki/Rzip
+    ('rzip', (0, 'RZIP')),
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
     ('xz', (0, '\xfd7zXZ\0')),
