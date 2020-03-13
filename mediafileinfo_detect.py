@@ -4567,12 +4567,42 @@ def parse_svg_dimen(data):
 
 
 def analyze_xml(fread, info, fskip):
-  header = fread(6)
-  if len(header) < 6:
-    raise ValueError('Too short for xml.')
+  # https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   whitespace = '\t\n\x0b\x0c\r '
   whitespace_tagend = whitespace + '>'
-  if header.startswith('<?xml') and header[5] in whitespace:
+  header = fread(1)
+  while header and header in whitespace:
+    header = fread(1)
+  if header:
+    header += fread(5)
+  had_comment = False
+  while header.startswith('<!--'):
+    had_comment = True
+    s = (header[5] == '-') + (header[4 : 6] == '--')
+    while 1:  # Look for terminating '-->'.
+      data = fread(1)
+      if not data:
+        raise ValueError('EOF in xml comment.')
+      if data == '-':
+        if s < 2:
+          s += 1
+      elif data == '>':
+        if s == 2:
+          break
+      else:
+        s = 0
+    data = fread(1)
+    while data and data in whitespace:
+      data = fread(1)
+    header = data + fread(5)
+
+  if len(header) < 6:
+    if had_comment:
+      info['format'] = 'xml-comment'
+      return
+    raise ValueError('Too short for xml tag.')
+  header_lo = header.lower()
+  if header.startswith('<?xml') and (header[5] in whitespace or header[5] == '?'):
     info['format'], data = 'xml', ''
   elif header.startswith('<svg:'):
     if len(header) < 9:
@@ -4591,6 +4621,14 @@ def analyze_xml(fread, info, fskip):
     info['format'], data = 'smil', ''
     data = '?>' + header
   else:
+    if ((header_lo.startswith('<html') or header_lo.startswith('<head') or header_lo.startswith('<body')) and header[5] in whitespace_tagend) or header_lo.startswith('<!doct'):
+      header += fread(1024 - len(header))
+      if count_is_html(header):
+        info['format'] = 'html'
+        return
+    if had_comment:
+      info['format'] = 'xml-comment'
+      return
     raise ValueError('xml signature not found.')
 
   def parse_attrs(data):
@@ -4680,7 +4718,7 @@ def analyze_xml(fread, info, fskip):
         if i <= 0:
           raise EOFError
         if tag_name.startswith('!'):
-          if tag_name == '!DOCTYPE':
+          if tag_name == '!DOCTYPE':  # XML doctype is uppercase.
             if had_doctype:
               raise ValueError('Duplicate xml doctype.')
             had_doctype = True
@@ -6434,16 +6472,61 @@ def analyze_gif(fread, info, fskip):
 
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
+  if header.startswith('<?xml?>'):
+    # XMLDecl needs version="...", but we are lenient here.
+    return 700
   if not header.startswith('<?xml') and header[5 : 6].isspace():
     return False
   i = 6
   while i < len(header) and header[i].isspace():
     i += 1
   header = header[i : i + 13]
+  if header.startswith('?>'):
+    return (i + 2) * 100
   for decl in ('version=', 'encoding=', 'standalone='):
     i = len(decl)
     if header.startswith(decl) and len(header) > i and header[i] in '"\'':
       return (i + 1) * 100
+  return False
+
+
+def count_is_xml_comment(header):
+  i = 0
+  while i < len(header) and header[i].isspace():
+    i += 1
+  if header[i : i + 4] != '<!--':
+    return False
+  return (i + 4) * 100
+
+
+def count_is_html(header):
+  i = 0
+  while i < len(header) and header[i].isspace():
+    i += 1
+  if header[i : i + 1] != '<':
+    return False
+  i += 1
+  j = i
+  while i < len(header) and not (header[i].isspace() or header[i] in '<>"\''):
+    i += 1
+  tag = header[j : i].lower()
+  if not (i < len(header) and (header[i].isspace() or header[i] == '>')):
+    return False
+  while i < len(header) and header[i].isspace():
+    i += 1
+  if tag == '!doctype':
+    j = i
+    while i < len(header) and not (header[i].isspace() or header[i] in '<>"\''):
+      i += 1
+    arg = header[j : i].lower()
+    if not (i < len(header) and (header[i].isspace() or header[i] == '>')):
+      return False
+    while i < len(header) and header[i].isspace():
+      i += 1
+    if arg == 'html':
+      return i * 100
+  elif tag in ('html', 'head', 'body'):
+    return i * 100
   return False
 
 
@@ -6658,7 +6741,6 @@ FORMAT_ITEMS = (
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
-    # TODO(pts): Detect <!--....--><svg ...> as format=svg (rather than format=html).
     ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
     ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
     ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
@@ -6776,11 +6858,14 @@ FORMAT_ITEMS = (
 
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
-    ('xml', (0, '<?xml', 5, WHITESPACE, 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
+    ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
+    ('xml-comment', (0, '<!--', 392, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
+    ('xml-comment', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 5, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
-    # TODO(pts): Ignore whitespace in the beginning above.
-    ('html', (0, '<', 15, lambda header: (header.startswith('<!--') or header[:15].lower() in ('<!doctype html>', '<!doctype html ') or header[:6].lower() in ('<html>', '<head>', '<body>'), 500))),
+    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
+    ('html', (0, '<', 392, lambda header: adjust_confidence(100, count_is_html(header)))),
+    ('html', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_html(header)))),
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf
@@ -7201,7 +7286,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
-  elif format in ('xml', 'svg'):
+  elif format in ('xml', 'xml-comment', 'svg', 'smil'):
     analyze_xml(fread, info, fskip)  # Also generates format=svg and =smil.
   elif format == 'jpegxl-brunsli':
     analyze_brunsli(fread, info, fskip)
