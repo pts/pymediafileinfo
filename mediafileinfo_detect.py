@@ -4930,6 +4930,29 @@ def analyze_lbm(fread, info, fskip):
   info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
 
 
+def analyze_deep(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/IFF-DEEP
+  # https://wiki.amigaos.net/wiki/DEEP_IFF_Chunky_Pixel_Image
+  header = fread(26)
+  if len(header) < 20:
+    raise ValueError('Too short for deep.')
+  if not (header.startswith('FORM') and
+          header[8 : 12] == 'DEEP' and
+          # Limitation: BMHD can appear later in the file.
+          header[12 : 20] == 'DGBL\0\0\0\x08'):
+    raise ValueError('deep signature not found.')
+  info['format'] = 'deep'
+  if len(header) >= 24:
+    info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
+  if len(header) >= 26:
+    codec, = struct.unpack('>H', header[24 : 26])
+    codecs = ('uncompressed', 'rle', 'huffman', 'dynamic-huffman', 'jpeg', 'tvdc')
+    if codec < len(codecs):
+      info['codec'] = codecs[codec]
+    else:
+      info['codec'] = str(codec)
+
+
 def analyze_pcx(fread, info, fskip):
   # https://en.wikipedia.org/wiki/PCX
   header = fread(12)
@@ -6697,6 +6720,7 @@ FORMAT_ITEMS = (
     ('xpm', (0, '! XPM2', 6, ('\r', '\n'))),  # XPM2.
     ('xpm', (0, '/* XPM */', 9, ('\r', '\n'))),  # XPM3.
     ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM ', 'RGB8', 'RGBN', 'ACBM', 'VDAT'), 12, 'BMHD\0\0\0\x14')),
+    ('deep', (0, 'FORM', 8, 'DEEPDGBL\0\0\0\x08')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
@@ -7270,6 +7294,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_jng(fread, info, fskip)
   elif format == 'lbm':
     analyze_lbm(fread, info, fskip)
+  elif format == 'deep':
+    analyze_deep(fread, info, fskip)
   elif format == 'pcx':
     analyze_pcx(fread, info, fskip)
   elif format == 'xbm':

@@ -210,6 +210,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eACBMBMHD\0\0\0\x14\1\3\1\5'),
                      {'codec': 'uncompressed', 'format': 'lbm', 'subformat': 'acbm', 'height': 261, 'width': 259})
 
+  def test_analyze_deep(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08')[0], 'deep')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_deep, 'FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08'),
+                     {'format': 'deep'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_deep, 'FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08\2\1\2\4\0\3'),
+                     {'format': 'deep', 'height': 516, 'width': 513, 'codec': 'dynamic-huffman'})
+
   def test_analyze_pcx(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),
                      {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
