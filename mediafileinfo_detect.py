@@ -6742,6 +6742,8 @@ FORMAT_ITEMS = (
     ('msdos-compress-szdd-qbasic', (0, 'SZ \x88\xF0\x27\x33\xd1')),
     ('msdos-compress-szdd', (0, 'SZDD\x88\xF0\x27\x33')),
     ('msdos-compress-kwaj', (0, 'KWAJ\x88\xF0\x27\xD1')),
+    # http://fileformats.archiveteam.org/wiki/Squash_(RISC_OS)
+    ('squash', (0, 'SQSH')),
 
     # Non-compressed, non-media.
 
