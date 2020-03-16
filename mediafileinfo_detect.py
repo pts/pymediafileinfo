@@ -6747,8 +6747,10 @@ FORMAT_ITEMS = (
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
-    # .bup and .ifo files on a video DVD.
-    ('dvd-bup', (0, 'DVDVIDEO-V', 10, ('TS', 'MG'))),
+    # .ifo and .bup files on a video DVD.
+    # http://stnsoft.com/DVD/ifo.html
+    ('dvd-video-video-ts-ifo', (0, 'DVDVIDEO-VMG\0')),
+    ('dvd-video-vts-ifo', (0, 'DVDVIDEO-VTS\0')),
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
