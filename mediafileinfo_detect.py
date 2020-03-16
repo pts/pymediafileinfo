@@ -6824,6 +6824,26 @@ def analyze_ybm(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>HH', header[2 : 6])
 
 
+def analyze_fbm(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/FBM_image
+  header = fread(24)
+  if len(header) < 8:
+    raise ValueError('Too short for fbm.')
+  if not header.startswith('%bitmap\0'):
+    raise ValueError('fbm signature not found.')
+  info['format'], info['codec'] = 'fbm', 'uncompressed'
+  if len(header) >= 24:
+    dimens = {}
+    dimens['width'], dimens['height'] = struct.unpack('>8s8s', header[8 : 24])
+    for key in ('width', 'height'):
+      dimens[key] = dimens[key].split('\0', 1)[0]
+      try:
+        dimens[key] = int(dimens[key])
+      except ValueError:
+        raise ValueError('Bad fbm %s: %r' % (key, dimens[key]))
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7053,6 +7073,7 @@ FORMAT_ITEMS = (
     ('pds', (1, '\0CCSD3ZF')),
     # This is a very short header, it most probably conflicts with many others.
     ('ybm', (0, '!!')),
+    ('fbm', (0, '%bitmap\0')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7660,6 +7681,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pds(fread, info, fskip)
   elif format == 'ybm':
     analyze_ybm(fread, info, fskip)
+  elif format == 'fbm':
+    analyze_fbm(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

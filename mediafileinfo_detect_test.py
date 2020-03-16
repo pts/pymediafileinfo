@@ -709,6 +709,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!!\2\3\2\2'),
                      {'format': 'ybm', 'codec': 'uncompressed', 'height': 514, 'width': 515})
 
+  def test_analyze_fbm(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('%bitmap\0')[0], 'fbm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\x00'),
+                     {'format': 'fbm', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\x00123\x00456\x007890\0???'),
+                     {'format': 'fbm', 'codec': 'uncompressed', 'height': 7890, 'width': 123})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
