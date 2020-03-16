@@ -6844,6 +6844,22 @@ def analyze_fbm(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
+def analyze_cmuwm(fread, info, fskip):
+  # Also called as ITC bitmap.
+  # http://fileformats.archiveteam.org/wiki/CMU_Window_Manager_bitmap
+  # http://inf.ufes.br/~thomas/vision/netpbm/pbm/cmuwmtopbm.c
+  # http://inf.ufes.br/~thomas/vision/netpbm/pbm/cmuwm.h
+  header = fread(12)
+  if len(header) < 4:
+    raise ValueError('Too short for cmuwm.')
+  if not (header.startswith('\xf1\0\x40\xbb') or header.startswith('\xbb\x40\0\xf1')):
+    raise ValueError('cmuwm signature not found.')
+  fmt = '<>'[header[1] == '\0']
+  info['format'], info['codec'] = 'cmuwm', 'uncompressed'
+  if len(header) >= 12:
+    info['width'], info['height'] = struct.unpack(fmt + 'LL', header[4 : 12])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7074,6 +7090,7 @@ FORMAT_ITEMS = (
     # This is a very short header, it most probably conflicts with many others.
     ('ybm', (0, '!!')),
     ('fbm', (0, '%bitmap\0')),
+    ('cmuwm', (0, ('\xf1\0\x40\xbb', '\xbb\x40\0\xf1'))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7683,6 +7700,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ybm(fread, info, fskip)
   elif format == 'fbm':
     analyze_fbm(fread, info, fskip)
+  elif format == 'cmuwm':
+    analyze_cmuwm(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

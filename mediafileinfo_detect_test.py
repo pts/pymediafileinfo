@@ -716,6 +716,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\x00123\x00456\x007890\0???'),
                      {'format': 'fbm', 'codec': 'uncompressed', 'height': 7890, 'width': 123})
 
+  def test_analyze_cmuwm(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\xf1\0\x40\xbb')[0], 'cmuwm')
+    self.assertEqual(mediafileinfo_detect.detect_format('\xbb\x40\0\xf1')[0], 'cmuwm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xf1\0\x40\xbb'),
+                     {'format': 'cmuwm', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xbb\x40\0\xf1'),
+                     {'format': 'cmuwm', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xf1\0\x40\xbb\0\0\2\3\0\0\2\1\0\1'),
+                     {'format': 'cmuwm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xbb\x40\0\xf1\3\2\0\0\1\2\0\0'),
+                     {'format': 'cmuwm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
