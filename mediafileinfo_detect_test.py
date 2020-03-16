@@ -681,6 +681,27 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, "LBLSIZE=94   FORMAT='HALF'  TYPE='IMAGE' U1='NS=12' FOO NS=34 U2='NS=56' NL = 789\0NL=5 FOO=bar"),
                      {'format': 'vicar', 'height': 789, 'width': 34})
 
+  def test_analyze_vicar(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('LBLSIZE=10')[0], 'vicar')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10'),
+                     {'format': 'vicar'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10 NS=1 NL=2 FOO=bar'),
+                     {'format': 'vicar'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, "LBLSIZE=94   FORMAT='HALF'  TYPE='IMAGE' U1='NS=12' FOO NS=34 U2='NS=56' NL = 789\0NL=5 FOO=bar"),
+                     {'format': 'vicar', 'height': 789, 'width': 34})
+
+  def test_analyze_pds(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('NJPL1I00PDS')[0], 'pds')
+    self.assertEqual(mediafileinfo_detect.detect_format('PDS_VERSION_ID\f')[0], 'pds')
+    self.assertEqual(mediafileinfo_detect.detect_format('CCSD3ZF')[0], 'pds')
+    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0NJPL1I00PDS')[0], 'pds')
+    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0PDS_VERSION_ID\f')[0], 'pds')
+    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0CCSD3ZF')[0], 'pds')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, 'CCSD3ZF0000100000001\nLINES = 42\r\n  IMAGE\0LINE_SAMPLES = 43'),
+                     {'format': 'pds', 'height': 42, 'width': 43})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\x20\0NJPL1I00PDS  = XV_COMPATIBILITY \0\x0e\0IMAGE_LINES=42\x0f\0LINE_SAMPLES=43\4\0 END\x0e\0IMAGE_LINES=44'),
+                     {'format': 'pds', 'height': 42, 'width': 43})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')

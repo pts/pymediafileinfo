@@ -6739,6 +6739,79 @@ def analyze_vicar(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
+def analyze_pds(fread, info, fskip):
+  # http://justsolve.archiveteam.org/wiki/PDS
+  # https://pds.nasa.gov/datastandards/pds3/standards/sr/StdRef_20090227_v3.8.pdf
+  # https://descanso.jpl.nasa.gov/DPSummary/DS1_Navigation_Primary.pdf
+  # Sample: https://pdsimage2.wr.usgs.gov/Missions/Voyager/vg_0001/miranda/c2531144.imq
+  data = fread(2)
+  if len(data) == 2 and data[1] == '\0':
+    size, = struct.unpack('<H', data)
+    data = fread(size)
+    if len(data) < size:
+      raise ValueError('Too short for pds size.')
+    nulb = fread(1)
+    if nulb != '\0':
+      raise ValueError('Missing NUL byte after pds header record.')
+    def yield_records():
+      yield data
+      while 1:
+        ydata = fread(2)
+        if len(ydata) < 2:
+          break
+        ysize, = struct.unpack('<H', ydata)
+        ydata = fread(ysize)
+        if len(ydata) < ysize:
+          break
+        yield ydata
+  else:
+    def yield_records():
+      ydata = (data + fread(1024 - len(data))).replace('\r', '\n').replace('\0', '\n')
+      while 1:
+        if '\n' in ydata:
+          lines = ydata.split('\n')
+          ydata = lines.pop()
+          for line in lines:
+            yield line
+        ysize = len(ydata)
+        ydata += fread(1024 - len(ydata)).replace('\r', '\n').replace('\0', '\n')
+        if len(ydata) == ysize:  # EOF
+          if ydata:
+            yield ydata
+          break
+  need_header = True
+  dimens = {}
+  for record in yield_records():
+    if need_header:
+      if not (record.startswith('NJPL1I00PDS') or
+              (record.startswith('PDS_VERSION_ID') and record[14 : 15].isspace()) or
+              record.startswith('CCSD3ZF')):
+        break
+      need_header = False
+      info['format'] = 'pds'
+      continue
+    record = record.strip()
+    if record.startswith('IMAGE'):
+      dimens['is_image'] = True
+    elif record == 'END':
+      break
+    i = record.find('=')
+    if i < 0:
+      continue
+    key, value = record[:i].rstrip(), record[i + 1:].lstrip()
+    if key in ('LINES', 'LINE_SAMPLES', 'IMAGE_LINES'):
+      dimens_key = ('height', 'width')[key == 'LINE_SAMPLES']
+      try:
+        value = int(value)
+      except ValueError:
+        raise ValueError('Bad pds %s: %r' % (dimens_key, value))
+      dimens[dimens_key] = value
+  if need_header:
+    raise ValueError('pds signature not found.')
+  if dimens.get('is_image') and 'width' in dimens and 'height' in dimens:
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -6960,6 +7033,12 @@ FORMAT_ITEMS = (
     ('cineon', (0, '\x80\x2a\x5f\xd7\0\0')),  # .cin
     ('cineon', (0, '\xd7\x5f\x2a\x80', 6, '\0\0')),
     ('vicar', (0, 'LBLSIZE=', 8, tuple('123456789'), 9, tuple('0123456789'))),
+    ('pds', (0, 'NJPL1I00PDS')),
+    ('pds', (0, 'PDS_VERSION_ID', 14, WHITESPACE)),
+    ('pds', (0, 'CCSD3ZF')),
+    ('pds', (1, '\0NJPL1I00PDS')),
+    ('pds', (1, '\0PDS_VERSION_ID', 16, WHITESPACE)),
+    ('pds', (1, '\0CCSD3ZF')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7563,6 +7642,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_cineon(fread, info, fskip)
   elif format == 'vicar':
     analyze_vicar(fread, info, fskip)
+  elif format == 'pds':
+    analyze_pds(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
