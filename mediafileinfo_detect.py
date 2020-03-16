@@ -3198,7 +3198,12 @@ def analyze_mpeg_ps(fread, info, fskip):
                had_video = True
                info['tracks'].append(track_info)
                info['pes_video_at'] = track_info['header_ofs']
-        elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a0:  # Audio.
+        elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a8:  # Audio.
+          # 0xc0..0xdf: MPEG-ADTS audio
+          # 0x20..0x2f: DVD subtitle (subpicture)
+          # 0x80..0x87: DVD AC3 audio
+          # 0x88..0x8f: DVD DTS audio
+          # 0xa0..0xa7: DVD LPCM (uncompressed) audio: TODO(pts): What headers does it have? Get abitrate from VTS_??_0.IFO audio parameters, see http://stnsoft.com/DVD/ifo.html
           av_packet_count += 1
           if not had_audio:
              if sid not in finders:
