@@ -4500,12 +4500,13 @@ def analyze_xwd(fread, info, fskip):
   data = fread(28)
   if len(data) < 28:
     raise ValueError('Too short for xwd.')
-  header_size, file_version = struct.unpack('>LL', data[:8])
+  fmt = '<>'[data[4 : 7] == '\0\0\0']  # Use file_version.
+  header_size, file_version = struct.unpack(fmt + 'LL', data[:8])
   if not 28 <= header_size <= 512:
     raise ValueError('Bad xwd header size: %d' % header_size)
   if file_version == 6:
     info['format'], info['subformat'] = 'xwd', 'x10'
-    display_type, display_planes, pixmap_format, width, height = struct.unpack('>8x5L', data)
+    display_type, display_planes, pixmap_format, width, height = struct.unpack(fmt + '8x5L', data)
     if display_type > 16:
       raise ValueError('Bad xwd display type: %d' % display_type)
     if not 1 <= display_planes <= 5:  # Typically 1 or 3.
@@ -4514,7 +4515,7 @@ def analyze_xwd(fread, info, fskip):
       raise ValueError('Bad xwd pixmap format: %d' % pixmap_format)
   elif file_version == 7:
     info['format'], info['subformat'] = 'xwd', 'x11'
-    pixmap_format, pixmap_depth, width, height = struct.unpack('>8x4L4x', data)
+    pixmap_format, pixmap_depth, width, height = struct.unpack(fmt + '8x4L4x', data)
     if not 1 <= pixmap_depth <= 32:
       raise ValueError('Bad xwd pixmap depth: %d' % pixmap_depth)
     if pixmap_format > 2:
@@ -6922,6 +6923,8 @@ FORMAT_ITEMS = (
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
+    ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\6\0\0\0', 8, tuple(chr(c) for c in xrange(17)), 9, '\0\0\0', 12, ('\1', '\2', '\3', '\4', '\5'), 13, '\0\0\0', 16, ('\0', '\1'), 17, '\0\0\0')),
+    ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\7\0\0\0', 8, ('\0', '\1', '\2'), 9, '\0\0\0', 12, tuple(chr(c) for c in xrange(1, 33)), 13, '\0\0\0')),
     ('sun-icon', (0, '/*', 2, (' ', '\t', '\r', '\n'), 21, lambda header: adjust_confidence(300, count_is_sun_icon(header)))),  # '/* Format_version=1,'.
 
     # * It's not feasible to detect
