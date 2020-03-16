@@ -3057,7 +3057,7 @@ def analyze_mpeg_ps(fread, info, fskip):
   # MPEG-PES packet SID (http://dvd.sourceforge.net/dvdinfo/pes-hdr.html):
   #
   # * 0xbd; Private stream 1 (non MPEG audio, subpictures); has extension
-  #         Audio streams are typically bd[80], bd[81] etc.
+  #         AC3 audio streams are typically bd[80], bd[81] etc.
   # * 0xbe; Padding stream; no extension, just ignore contents
   # * 0xbf; Private stream 2 (navigation data); mostly in DVD .vob; no extension
   # * 0xc0...0xdf; MPEG-1 or MPEG-2 audio stream; has extension
@@ -3067,24 +3067,34 @@ def analyze_mpeg_ps(fread, info, fskip):
   # These are present, but not as MPEG-PES SID (stream ID) values:
   #
   # * 0xb9: MPEG-PS end
-  # * 0xba: MPEG-PS header (file signature)
+  # * 0xba: MPEG-PS pack header packet, file signature
   # * 0xbb: MPEG-PS system header packet
   # * 0xbc: program stream map
   # * 0xff: program stream directory
   #
   # TODO(pts): Can we get a list of SIDs without scanning through the file?
+  # TODO(pts): Detect subformat=dvd-video even for VTS_??_2.VOB, which starts with MPEG-PS pack header, then it has the system header packet later.
+  # TODO(pts): Count packet sizes for subformat=dvd-video, check for multiple of 2048.
   header = fread(12)
-  if len(header) < 12:
+  if len(header) < 4:
     raise ValueError('Too short for mpeg-ps.')
   if not header.startswith('\0\0\1\xba'):
     raise ValueError('mpeg-ps signature not found.')
   info['format'] = 'mpeg-ps'
+  if len(header) < 12:
+    return
+  maybe_dvd = 0
+  def is_pack_dvd(data):
+    # http://stnsoft.com/DVD/packhdr.html
+    return data[:4] == '\0\0\1\xba' and ord(data[4]) >> 6 == 1 and data[13] == '\xf8' and (ord(data[4]) & 196) == 68 and ord(data[6]) & 4 and ord(data[8]) & 4 and ord(data[9]) & 1 and (ord(data[12]) & 3) == 3
   if ord(header[4]) >> 6 == 1:
     info['subformat'] = 'mpeg-2'  # MPEG-2 program stream.
     header += fread(2)
     if len(header) < 14:
       raise ValueError('Too short for mpeg-ps mpeg-2.')
     size = 14 + (ord(header[13]) & 7)
+    if is_pack_dvd(header):
+      maybe_dvd = 2
   elif ord(header[4]) >> 4 == 2:
     info['subformat'] = 'mpeg-1'  # MPEG-1 system stream.
     size = 12
@@ -3106,6 +3116,7 @@ def analyze_mpeg_ps(fread, info, fskip):
   while 1:
     data = fread(4)
     while len(data) == 4 and not data.startswith('\0\0\1'):
+      maybe_dvd &= 1
       # TODO(pts): Don't skip or read too much in total.
       data = data[1 : 4] + fread(1)
       skip_count += 1
@@ -3115,8 +3126,10 @@ def analyze_mpeg_ps(fread, info, fskip):
       break
     sid = ord(data[3])
     if sid == 0xb9:  # MPEG end code.
+      maybe_dvd &= 1
       break
     elif sid == 0xba:  # MPEG pack.
+      maybe_dvd &= 1
       data = fread(8)
       if len(data) < 8:
         break  # raise ValueError('EOF in mpeg-ps pack.')
@@ -3125,6 +3138,13 @@ def analyze_mpeg_ps(fread, info, fskip):
         if len(data) < 10:
           raise ValueError('Too short for mpeg-ps mpeg-2 pack.')
         size = 10 + (ord(data[9]) & 7)
+        if size == 10:
+          data += fread(10 - len(data))
+          if len(data) < 10:
+            break  # raise ValueError('EOF in mpeg-ps pack header.')
+          if maybe_dvd == 0 and is_pack_dvd('\0\0\1\xba' + data):
+            maybe_dvd = 2
+          size = len(data)
       elif ord(data[0]) >> 4 == 2:  # MPEG-1.
         size = 8
       else:
@@ -3134,8 +3154,10 @@ def analyze_mpeg_ps(fread, info, fskip):
         break  # raise ValueError('EOF in mpeg-ps pack header.')
       expect_system_header = True
     elif sid == 0xbb:  # MPEG system header.
+      if maybe_dvd != 2:
+        maybe_dvd &= 1
       packet_count += 1
-      if packet_count > 1500:
+      if packet_count > 1500:  # This should be large enough for MPEG pack header in dvd-video VTS_??_2.VOB.
         break
       if not expect_system_header:
         raise ValueError('Unexpected mpeg-ps system header.')
@@ -3144,7 +3166,20 @@ def analyze_mpeg_ps(fread, info, fskip):
       if len(data) < 2:
         break  # raise ValueError('EOF in mpeg-ps system header size.')
       size, = struct.unpack('>H', data)
-      if not fskip(size):
+      if size != 18:
+        maybe_dvd &= 1
+      if maybe_dvd == 2:
+        data = fread(size)
+        if len(data) != size:
+          break  # raise ValueError('EOF in mpeg-ps system header.')
+        # System header: http://stnsoft.com/DVD/sys_hdr.html
+        if (not (ord(data[0]) & 128) or (ord(data[3]) & 1) or not (ord(data[2]) & 1) or (ord(data[4]) & 63) != 33 or data[5] not in ('\xff', '\x7f') or
+            data[6] != '\xb9' or (ord(data[7]) & 224) != 224 or data[9] != '\xb8' or (ord(data[10]) & 224) != 192 or data[12] != '\xbd' or
+            (ord(data[13]) & 224) not in (224, 192) or data[15] != '\xbf' or data[16 : 18] != '\xe0\x02'):
+          maybe_dvd = 0
+        else:
+          maybe_dvd = 4
+      elif not fskip(size):
         break  # raise ValueError('EOF in mpeg-ps system header.')
     elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):  # PES packet.
       packet_count += 1
@@ -3160,6 +3195,15 @@ def analyze_mpeg_ps(fread, info, fskip):
       data = fread(size)
       if len(data) < size:
         break  # raise ValueError('EOF in mpeg-ps packet.')
+      if maybe_dvd == 4 and sid == 0xbf and size == 0x3d4 and data[0] == '\0':
+        # http://stnsoft.com/DVD/pci_pkt.html
+        maybe_dvd = 6
+      elif maybe_dvd == 6 and sid == 0xbf and size == 0x3fa and data[0] == '\1':
+        # http://stnsoft.com/DVD/dsi_pkt.html
+        info['subformat'] = 'dvd-video'  # Subset of subformat=mpeg-2.
+        maybe_dvd = 1  # Stop looking.
+      else:
+        maybe_dvd &= 1
       i = 0
       if 0xc0 <= sid < 0xf0 or sid == 0xbd:
         while i < len(data) and i <= 16 and data[i] == '\xff':

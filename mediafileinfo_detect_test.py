@@ -44,6 +44,7 @@ def analyze_string(analyze_func, data):
 
 
 class MediaFileInfoDetectTest(unittest.TestCase):
+  maxDiff = None
 
   JP2_HEADER = '0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a703268000000166968647200000120000001600003080700000000000f636f6c7201000000000012'.decode('hex')
 
@@ -730,6 +731,43 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_detect_unknown(self):
     self.assertEqual(mediafileinfo_detect.detect_format('Unknown'), ('?', 'Unknown'))
+
+  def test_analyze_mpeg(self):
+    data1 = '000001ba4400040004010189c3f8000001bb001280c4e104e17fb9e0e8b8c020bde03abfe002000001e0007681c10d310001b8611100019c411e60e8000001b32c0240231755e38110111112121213131313141414141415151515151516161616161616171717171717171718181819181818191a1a1a1a191b1b1b1b1b1c1c1c1c1e1e1e1f1f21000001b5148200010000000001b52305050508721200000001b8'.decode('hex')
+    data2 = '000001ba2100031941801b91000001bb0009801b9101e1ffe0e02e000001be00086162636465666768000001ba2100032c01801b91000001e0001c602e31000527911100050b71000001b31601208302cee0a4000001b8'.decode('hex')
+    data_video_prev = '000001ba44e806d16e030189c3f8000001e0001c8100007428c0ade7649131f5c187e1b8005dc0d5acdb4c892a787137'.decode('hex')
+    data_video = '000001ba44e80f07f4ad0189c3f8000001e0002781c00a313a05c2eb113a057c89000001b32d01e0240a1e62f8000001b5148200010000000001b8'.decode('hex')
+    data_audio = '000001ba44e807716e030189c3f8000001bd0014818005213a0335a7800301850b779c6714404b7f'.decode('hex')
+    data_dvd = ('000001ba44e80f0364010189c3f8000001bb001280c4e104e17fb9e0e8b8c020bde03abfe002000001bf03d4000007ffc100000000000000000e8149ff0e81f9f400000000000632d5' + '00' * 953 +
+                '01bf03fa010e80e06c0007ffc10000006100000017000000250000003500010003000632d5000000000000000000000000000069931a20799a' + '00' * 182 +
+                '80000062c0005a8bc0002db8c0001662c000079980000557800004f38000049380000431800003d08000036180000305800002ac8000024d800001ef8000018a80000125800000c38000006280000000800000628000006080000060800000c08000011d80000174800001d28000023f8000029e800002f88000034a800003a18000040480000466800004ce8000053080000589c000077ac0001686c0002d73c0005b7f80000060005e' +
+                '00' * 613).decode('hex')
+    track_info_audio = {'channel_count': 2, 'sample_size': 16, 'codec': 'ac3', 'sample_rate': 48000, 'header_ofs': 3, 'type': 'audio'}
+    track_info_video0 = {'width': 720, 'codec': 'mpeg-2', 'type': 'video', 'header_ofs': 0, 'height': 480}
+    track_info_video = {'width': 720, 'codec': 'mpeg-2', 'type': 'video', 'header_ofs': 25, 'height': 480}
+    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\1\xba')[0], 'mpeg-ps')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'mpeg-ps')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'mpeg-ps')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, '\0\0\1\xba'),
+                     {'format': 'mpeg-ps'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data1),
+                     {'format': 'mpeg-ps', 'pes_video_at': 0, 'hdr_skip_count': 0, 'subformat': 'mpeg-2', 'hdr_packet_count': 2, 'hdr_av_packet_count': 1,
+                      'tracks': [{'width': 704, 'codec': 'mpeg-2', 'type': 'video', 'header_ofs': 0, 'height': 576}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data2),
+                     {'format': 'mpeg-ps', 'pes_video_at': 0, 'hdr_skip_count': 0, 'subformat': 'mpeg-1', 'hdr_packet_count': 3, 'hdr_av_packet_count': 1,
+                     'tracks': [{'width': 352, 'codec': 'mpeg-1', 'type': 'video', 'header_ofs': 0, 'height': 288}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_video_prev + data_audio + data_dvd + data_video),
+                     {'format': 'mpeg-ps', 'hdr_av_packet_count': 3, 'hdr_skip_count': 0, 'subformat': 'dvd-video', 'pes_audio_at': 3, 'hdr_packet_count': 6, 'pes_video_at': 25,
+                      'tracks': [track_info_audio, track_info_video]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_dvd + data_video + data_audio),
+                     {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'dvd-video', 'pes_audio_at': 3, 'hdr_packet_count': 5, 'pes_video_at': 0,
+                      'tracks': [track_info_video0, track_info_audio]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_dvd + data_video + data_dvd + data_audio + data_dvd),
+                     {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'dvd-video', 'pes_audio_at': 3, 'hdr_packet_count': 8, 'pes_video_at': 0,
+                      'tracks': [track_info_video0, track_info_audio]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_audio + data_video),
+                     {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'mpeg-2', 'pes_audio_at': 3, 'hdr_packet_count': 2, 'pes_video_at': 0,
+                      'tracks': [track_info_audio, track_info_video0]})
 
 
 if __name__ == '__main__':
