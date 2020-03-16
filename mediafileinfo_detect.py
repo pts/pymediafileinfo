@@ -2520,12 +2520,12 @@ def analyze_h265(fread, info, fskip):
 # --- Audio streams in MPEG.
 
 
-def is_mpeg_adts(header):
+def is_mpeg_adts(header, expect_aac=None):
   # Works with: isinstance(header, (str, buffer)).
   return (len(header) >= 4 and header[0] == '\xff' and
-          ((header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' '\xf0\xf1\xf8\xf9' and
+          ((header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
            ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
-           (header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13)))
+           (expect_aac is not False and header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13)))
 
 
 def get_mpeg_adts_track_info(header, expect_aac=None):
@@ -2546,6 +2546,7 @@ def get_mpeg_adts_track_info(header, expect_aac=None):
       raise ValueError('Invalid mpeg-adts AAC sampling frequency index: %d' % sfi)
     track_info['sample_rate'] = (96000, 88200, 6400, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0)[sfi]
     if ord(header[2]) >> 6:
+      raise SyntaxError
       raise ValueError('Unexpected mpeg-adts AAC private bit.')
     cc = ord(header[2]) >> 7 << 2 | ord(header[3]) >> 6
     if cc:
@@ -2731,14 +2732,15 @@ def analyze_dts(fread, info, fskip):
 class MpegAudioHeaderFinder(object):
   """Supports the mpeg-adts (mp1, mp2, mp3) and ac3 audio codecs."""
 
-  __slots__ = ('_buf', '_header_ofs')
+  __slots__ = ('_buf', '_header_ofs', '_expect_aac')
 
-  def __init__(self):
-    self._buf, self._header_ofs = '', 0
+  def __init__(self, expect_aac):
+    self._buf, self._header_ofs, self._expect_aac = '', 0, expect_aac
 
   def get_track_info(self):
     buf = self._buf
-    if buf.startswith('\xff') and is_mpeg_adts(buf):
+    if buf.startswith('\xff') and is_mpeg_adts(buf, self._expect_aac):
+      import sys; sys.stdout.flush()
       track_info = get_mpeg_adts_track_info(buf)
     elif buf.startswith('\x0b\x77') and is_ac3(buf):
       track_info = get_ac3_track_info(buf)
@@ -2754,7 +2756,7 @@ class MpegAudioHeaderFinder(object):
     if not data:
       return
     buf = self._buf
-    if ((buf.startswith('\xff') and is_mpeg_adts(buf)) or
+    if ((buf.startswith('\xff') and is_mpeg_adts(buf, self._expect_aac)) or
         (buf.startswith('\x0b\x77') and is_ac3(buf))):
       return  # Found before.
     # We could do fewer copies with a 2-pass with data[:6] in pass 1 if data
@@ -3270,7 +3272,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                info['tracks'].append(track_info)
                info['pes_video_at'] = track_info['header_ofs']
         elif 0xc0 <= sid < 0xe0 or 0x180 <= sid < 0x1a8:  # Audio.
-          # 0xc0..0xdf: MPEG-ADTS audio
+          # 0xc0..0xdf: MPEG-ADTS MPEG-1 or MPEG-2 audio
           # 0x20..0x2f: DVD subtitle (subpicture)
           # 0x80..0x87: DVD AC3 audio
           # 0x88..0x8f: DVD DTS audio
@@ -3278,7 +3280,10 @@ def analyze_mpeg_ps(fread, info, fskip):
           av_packet_count += 1
           if not had_audio:
              if sid not in finders:
-               finders[sid] = MpegAudioHeaderFinder()
+               # Specifying expect_aac=True wouldn't work here, it would
+               # find a false AAC signature too early. And MPEG-PS files
+               # can't have AAC audio anyway.
+               finders[sid] = MpegAudioHeaderFinder(expect_aac=False)
              finders[sid].append(buffer(data, i))
              track_info = finders[sid].get_track_info()
              if track_info:  # Use first video stream with header.
