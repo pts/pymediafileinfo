@@ -768,6 +768,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_audio + data_video),
                      {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'mpeg-2', 'pes_audio_at': 3, 'hdr_packet_count': 2, 'pes_video_at': 0,
                       'tracks': [track_info_audio, track_info_video0]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data_audio + data_video + data_dvd),
+                     {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'dvd-video', 'pes_audio_at': 3, 'hdr_packet_count': 5, 'pes_video_at': 0,
+                      'tracks': [track_info_audio, track_info_video0]})
 
 
 if __name__ == '__main__':

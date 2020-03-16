@@ -3083,7 +3083,7 @@ def analyze_mpeg_ps(fread, info, fskip):
   info['format'] = 'mpeg-ps'
   if len(header) < 12:
     return
-  maybe_dvd = 0
+  maybe_dvd, never_dvd = 0, True
   def is_pack_dvd(data):
     # http://stnsoft.com/DVD/packhdr.html
     return data[:4] == '\0\0\1\xba' and ord(data[4]) >> 6 == 1 and data[13] == '\xf8' and (ord(data[4]) & 196) == 68 and ord(data[6]) & 4 and ord(data[8]) & 4 and ord(data[9]) & 1 and (ord(data[12]) & 3) == 3
@@ -3094,7 +3094,7 @@ def analyze_mpeg_ps(fread, info, fskip):
       raise ValueError('Too short for mpeg-ps mpeg-2.')
     size = 14 + (ord(header[13]) & 7)
     if is_pack_dvd(header):
-      maybe_dvd = 2
+      maybe_dvd, never_dvd = 2, False
   elif ord(header[4]) >> 4 == 2:
     info['subformat'] = 'mpeg-1'  # MPEG-1 system stream.
     size = 12
@@ -3113,6 +3113,7 @@ def analyze_mpeg_ps(fread, info, fskip):
   # finders to find the MPEG elementary stream header for video and audio
   # frames because the beginning of the frame may be truncated.
   finders = {}
+  packet_limit, av_packet_limit = 1500, 1000
   while 1:
     data = fread(4)
     while len(data) == 4 and not data.startswith('\0\0\1'):
@@ -3142,7 +3143,7 @@ def analyze_mpeg_ps(fread, info, fskip):
           data += fread(10 - len(data))
           if len(data) < 10:
             break  # raise ValueError('EOF in mpeg-ps pack header.')
-          if maybe_dvd == 0 and is_pack_dvd('\0\0\1\xba' + data):
+          if maybe_dvd == 0 and not never_dvd and is_pack_dvd('\0\0\1\xba' + data):
             maybe_dvd = 2
           size = len(data)
       elif ord(data[0]) >> 4 == 2:  # MPEG-1.
@@ -3152,12 +3153,13 @@ def analyze_mpeg_ps(fread, info, fskip):
       assert size >= len(data), 'mpeg-ps pack size too large.'
       if not fskip(size - len(data)):
         break  # raise ValueError('EOF in mpeg-ps pack header.')
+      never_dvd = never_dvd or not maybe_dvd
       expect_system_header = True
     elif sid == 0xbb:  # MPEG system header.
       if maybe_dvd != 2:
         maybe_dvd &= 1
       packet_count += 1
-      if packet_count > 1500:  # This should be large enough for MPEG pack header in dvd-video VTS_??_2.VOB.
+      if packet_count > packet_limit:  # This should be large enough for MPEG pack header in dvd-video VTS_??_2.VOB.
         break
       if not expect_system_header:
         raise ValueError('Unexpected mpeg-ps system header.')
@@ -3177,13 +3179,14 @@ def analyze_mpeg_ps(fread, info, fskip):
             data[6] != '\xb9' or (ord(data[7]) & 224) != 224 or data[9] != '\xb8' or (ord(data[10]) & 224) != 192 or data[12] != '\xbd' or
             (ord(data[13]) & 224) not in (224, 192) or data[15] != '\xbf' or data[16 : 18] != '\xe0\x02'):
           maybe_dvd = 0
+          never_dvd = True
         else:
           maybe_dvd = 4
       elif not fskip(size):
         break  # raise ValueError('EOF in mpeg-ps system header.')
     elif 0xc0 <= sid < 0xf0 or sid in (0xbd, 0xbe, 0xbf, 0xbc, 0xff):  # PES packet.
       packet_count += 1
-      if packet_count > 1500:
+      if packet_count > packet_limit:
         break
       data = fread(2)
       if len(data) < 2:
@@ -3200,7 +3203,10 @@ def analyze_mpeg_ps(fread, info, fskip):
         maybe_dvd = 6
       elif maybe_dvd == 6 and sid == 0xbf and size == 0x3fa and data[0] == '\1':
         # http://stnsoft.com/DVD/dsi_pkt.html
+        # These are the VIDEO_TS/*.VOB files on a DVD-video filesystem.
         info['subformat'] = 'dvd-video'  # Subset of subformat=mpeg-2.
+        if had_audio and had_video:
+          break
         maybe_dvd = 1  # Stop looking.
       else:
         maybe_dvd &= 1
@@ -3279,7 +3285,7 @@ def analyze_mpeg_ps(fread, info, fskip):
                had_audio = True
                info['tracks'].append(track_info)
                info['pes_audio_at'] = track_info['header_ofs']
-          if (had_audio and had_video) or av_packet_count > 1000:
+          if (had_audio and had_video and (never_dvd or maybe_dvd == 1)) or av_packet_count > av_packet_limit:
             break
     #else:  # Some broken MPEGs have useless SIDs, ignore those silently.
     #  raise ValueError('unexpected mpeg-ps sid=0x%02x' % sid)
