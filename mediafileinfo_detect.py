@@ -6668,6 +6668,25 @@ def analyze_dpx(fread, info, fskip):
       info['codec'] = 'rle'
 
 
+def analyze_cineon(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Cineon
+  # https://125px.com/docs/motionpicture/kodak/cineonfileformat4.5.pdf
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for cineon.')
+  if header.startswith('\x80\x2a\x5f\xd7\0\0'):
+    fmt = '>'
+  elif header.startswith('\xd7\x5f\x2a\x80') and header[6 : 8] == '\0\0':
+    fmt = '<'
+  else:
+    raise ValueError('cineon signature not found.')
+  info['format'], info['codec'] = 'cineon', 'uncompressed'
+  if fskip(200 - 8):
+    data = fread(8)
+    if len(data) == 8:
+      info['width'], info['height'] = struct.unpack(fmt + 'LL', data)
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -6886,6 +6905,8 @@ FORMAT_ITEMS = (
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
     ('dpx', (0, 'SDPX\0\0', 8, 'V', 9, ('1', '2'), 10, '.', 11, tuple('0123456789'))),
+    ('cineon', (0, '\x80\x2a\x5f\xd7\0\0')),  # .cin
+    ('cineon', (0, '\xd7\x5f\x2a\x80', 6, '\0\0')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7483,6 +7504,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_minolta_raw(fread, info, fskip)
   elif format == 'dpx':
     analyze_dpx(fread, info, fskip)
+  elif format == 'cineon':
+    analyze_cineon(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

@@ -662,6 +662,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dpx, 'SDPX\0\0 \0V2.0\0' + 755 * '?' + '\0\0\0\2\0\0\2\3\0\0\2\1' + '?' * 26 + '\0\1'),
                      {'format': 'dpx', 'codec': 'rle', 'height': 513, 'width': 515})
 
+  def test_analyze_cineon(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\x80\x2a\x5f\xd7\0\0??')[0], 'cineon')
+    self.assertEqual(mediafileinfo_detect.detect_format('\xd7\x5f\x2a\x80??\0\0')[0], 'cineon')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\x80\x2a\x5f\xd7\0\0??'),
+                     {'format': 'cineon', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\x80\x2a\x5f\xd7\0\0??' + '?' * 192 + '\0\0\2\3\0\0\2\1'),
+                     {'format': 'cineon', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\xd7\x5f\x2a\x80??\0\0' + '?' * 192 + '\3\2\0\0\1\2\0\0'),
+                     {'format': 'cineon', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
