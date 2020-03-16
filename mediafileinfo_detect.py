@@ -3200,7 +3200,19 @@ def analyze_mpeg_ps(fread, info, fskip):
           av_packet_count += 1
           if not had_video:
              if sid not in finders:
-               finders[sid] = MpegVideoHeaderFinder()
+               # Specifying expect_mpeg4=True wouldn't work here, e.g. for
+               # subformat=dvd-video VTS_??_2.VOB, \0\0\1\xb5 (MPEG-2
+               # extension header) may arrive earlier than \0\0\1\xb3 (MPEG
+               # video sequence header), and expect_mpeg4=True would
+               # interpret \0\0\1\xb5 as MPEG-4 visual_object_start, and
+               # then it would fail to parse the subsequent non-empty MPEG-2
+               # \0\0\1\1 slice as MPEG-4 video_object_start (which must be
+               # empty).
+               #
+               # TODO(pts): Add parallel parsing of MPEG-2 and MPEG-4, and
+               # when an non-empty MPEG-4 video_object_start is found,
+               # continue scanning for MPEG-{1,2} headers.
+               finders[sid] = MpegVideoHeaderFinder(expect_mpeg4=False)
              finders[sid].append(buffer(data, i))
              track_info = finders[sid].get_track_info()
              if track_info and track_info['codec'] != 'mpeg':  # Use first video stream with header.
