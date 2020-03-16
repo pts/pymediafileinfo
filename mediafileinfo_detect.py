@@ -6812,6 +6812,18 @@ def analyze_pds(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
+def analyze_ybm(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/YBM
+  header = fread(6)
+  if len(header) < 2:
+    raise ValueError('Too short for ybm.')
+  if not header.startswith('!!'):
+    raise ValueError('ybm signature not found.')
+  info['format'], info['codec'] = 'ybm', 'uncompressed'
+  if len(header) >= 6:
+    info['width'], info['height'] = struct.unpack('>HH', header[2 : 6])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7039,6 +7051,8 @@ FORMAT_ITEMS = (
     ('pds', (1, '\0NJPL1I00PDS')),
     ('pds', (1, '\0PDS_VERSION_ID', 16, WHITESPACE)),
     ('pds', (1, '\0CCSD3ZF')),
+    # This is a very short header, it most probably conflicts with many others.
+    ('ybm', (0, '!!')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7644,6 +7658,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_vicar(fread, info, fskip)
   elif format == 'pds':
     analyze_pds(fread, info, fskip)
+  elif format == 'ybm':
+    analyze_ybm(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

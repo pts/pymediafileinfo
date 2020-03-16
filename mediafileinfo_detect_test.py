@@ -702,6 +702,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\x20\0NJPL1I00PDS  = XV_COMPATIBILITY \0\x0e\0IMAGE_LINES=42\x0f\0LINE_SAMPLES=43\4\0 END\x0e\0IMAGE_LINES=44'),
                      {'format': 'pds', 'height': 42, 'width': 43})
 
+  def test_analyze_ybm(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('!!??')[0], 'ybm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!!??'),
+                     {'format': 'ybm', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!!\2\3\2\2'),
+                     {'format': 'ybm', 'codec': 'uncompressed', 'height': 514, 'width': 515})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
