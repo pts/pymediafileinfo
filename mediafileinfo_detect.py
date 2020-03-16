@@ -6688,6 +6688,57 @@ def analyze_cineon(fread, info, fskip):
       info['width'], info['height'] = struct.unpack(fmt + 'LL', data)
 
 
+def analyze_vicar(fread, info, fskip):
+  # https://en.wikipedia.org/wiki/VICAR_file_format
+  # https://www-mipl.jpl.nasa.gov/external/VICAR_file_fmt.pdf
+  header = fread(64)
+  if len(header) < 10:
+    raise ValueError('Too short for vicar.')
+  if not (header.startswith('LBLSIZE=') and header[8] in '123456789' and header[9].isdigit()):
+    raise ValueError('vicar signature not found.')
+  info['format'] = 'vicar'
+  size = header[8:].split(None, 1)[0]
+  try:
+    size = int(size)
+  except ValueError:
+    raise ValueError('Bad vicar lblsize: %r' % size)
+  assert size >= 10  # Follows from above.
+  data = header[8 : size]
+  if len(data) < size - 8:
+    data += fread(size - 8 - len(data))
+    if len(data) < size - 8:
+      raise ValueError('EOF in vicar header.')
+  i = data.find('\0')
+  if i >= 0:
+    data = data[:i]
+  data = data.replace('=', ' = ').replace("'", " ' ").split()
+  i = 1
+  dimens = {}
+  while i < len(data):
+    key = data[i]
+    i += 1
+    if data[i] != '=':
+      continue
+    i += 1
+    if i == len(data):
+      break
+    value = data[i]
+    i += 1
+    if value == "'":
+      while i < len(data) and data[i] != "'":
+        i += 1
+      i += 1
+    elif key in ('NS', 'NL'):
+      dimens_key = ('height', 'width')[key == 'NS']
+      try:
+        value = int(value)
+      except ValueError:
+        raise ValueError('Bad vicar %s: %r' % (dimens_key, value))
+      dimens[dimens_key] = value
+  if 'width' in dimens and 'height' in dimens:
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -6908,6 +6959,7 @@ FORMAT_ITEMS = (
     ('dpx', (0, 'SDPX\0\0', 8, 'V', 9, ('1', '2'), 10, '.', 11, tuple('0123456789'))),
     ('cineon', (0, '\x80\x2a\x5f\xd7\0\0')),  # .cin
     ('cineon', (0, '\xd7\x5f\x2a\x80', 6, '\0\0')),
+    ('vicar', (0, 'LBLSIZE=', 8, tuple('123456789'), 9, tuple('0123456789'))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7509,6 +7561,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_dpx(fread, info, fskip)
   elif format == 'cineon':
     analyze_cineon(fread, info, fskip)
+  elif format == 'vicar':
+    analyze_vicar(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

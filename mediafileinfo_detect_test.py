@@ -672,6 +672,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\xd7\x5f\x2a\x80??\0\0' + '?' * 192 + '\3\2\0\0\1\2\0\0'),
                      {'format': 'cineon', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
+  def test_analyze_vicar(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('LBLSIZE=10')[0], 'vicar')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10'),
+                     {'format': 'vicar'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10 NS=1 NL=2 FOO=bar'),
+                     {'format': 'vicar'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, "LBLSIZE=94   FORMAT='HALF'  TYPE='IMAGE' U1='NS=12' FOO NS=34 U2='NS=56' NL = 789\0NL=5 FOO=bar"),
+                     {'format': 'vicar', 'height': 789, 'width': 34})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
