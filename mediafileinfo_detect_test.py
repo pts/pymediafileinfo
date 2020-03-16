@@ -648,6 +648,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data2),
                      {'format': 'emf', 'subformat': 'dual', 'height': 61, 'width': 58})
 
+  def test_analyze_minolta_raw(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('\0MRM\0\1\2\3\0PRD\0\0\0\x18')[0], 'minolta-raw')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x18'),
+                     {'format': 'minolta-raw', 'codec': 'raw'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x1827820001\7\x88\x0a\x08\7\x80\x0a\0'),
+                     {'format': 'minolta-raw', 'codec': 'raw', 'height': 1920, 'width': 2560})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')

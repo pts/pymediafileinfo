@@ -6630,6 +6630,25 @@ def analyze_gif(fread, info, fskip):
     info['format'] = 'agif'
 
 
+def analyze_minolta_raw(fread, info, fskip):
+  # http://www.dalibor.cz/software/minolta-raw-mrw-file-format
+  # Old: http://www.dalibor.cz/minolta/raw_file_format.htm
+  # Sample: http://www.rawsamples.ch/raws/minolta/a1/RAW_MINOLTA_A1.MRW
+  # Example camera model: Minolta Dimage A1
+  # Other Minolta cameras use a different raw file format.
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for minolta-raw.')
+  if not (header.startswith('\0MRM') and header[8 : 16 ] == '\0PRD\0\0\0\x18'):
+    raise ValueError('minolta-raw signature not found.')
+  info['format'], info['codec'] = 'minolta-raw', 'raw'
+  if header[5] not in '\0\1\2\3':
+    raise ValueError('minolta-raw header too long.')
+  header += fread(32 - len(header))
+  if len(header) >= 32:
+    info['height'], info['width'] = struct.unpack('>HH', header[28 : 32])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -6846,6 +6865,7 @@ FORMAT_ITEMS = (
     # Getting the dimensions of the JPEG thumbnail is easy though, but it's
     # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
+    ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7439,6 +7459,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'lepton'
   elif format == 'fuji-raf':
     info['codec'] = 'raw'
+  elif format == 'minolta-raw':
+    analyze_minolta_raw(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
