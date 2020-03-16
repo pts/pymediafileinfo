@@ -2846,9 +2846,11 @@ def parse_mpeg_video_header(header, expect_mpeg4=None):
       if start_data == '\0\0\0\1':
         i += 1
         start_data = header[i : i + 4]
-      if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):
+      if start_data in ('\0\0\1\xb2', '\0\0\1\xb8'):  # \xb2: user data;  \xb8: (group of pictures).
         track_info['codec'] = 'mpeg-1'
       elif start_data in ('\0\0\1\xb5'):  # MPEG-2 sequence extension.
+        # TODO(pts): Parse the sequence_extension, prepend 2+2 bits to width= and height=.
+        # http://dvd.sourceforge.net/dvdinfo/mpeghdrs.html#ext
         track_info['codec'] = 'mpeg-2'
       elif not start_data.startswith('\0\0\1'):
         raise ValueError('mpeg-video start expected.')
@@ -2963,17 +2965,21 @@ def get_mpeg_video_track_info(header, expect_mpeg4=None):
 class MpegVideoHeaderFinder(object):
   """Supports the mpeg video codec."""
 
-  __slots__ = ('_buf', '_header_ofs')
+  __slots__ = ('_buf', '_header_ofs', '_expect_mpeg4', '_ids')
 
-  def __init__(self):
-    self._buf, self._header_ofs = '', 0
+  def __init__(self, expect_mpeg4=None):
+    self._buf, self._header_ofs, self._expect_mpeg4 = '', 0, expect_mpeg4
+    if self._expect_mpeg4 is False:
+      self._ids = '\xb3'  # MPEG-1 or MPEG-2 video sequence.
+    else:
+      self._ids = '\xb0\xb3\xb5'  # Also includes MPEG-4.
 
   def get_track_info(self):
     buf = self._buf
     # MPEG video sequence header start code.
-    if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb5\xb0':
+    if buf.startswith('\0\0\1') and buf[3 : 4] in self._ids:
       try:
-        parse_mpeg_video_header(buf)
+        parse_mpeg_video_header(buf, self._expect_mpeg4)
       except ValueError:
         return None
       track_info = get_mpeg_video_track_info(buf)
@@ -2986,26 +2992,29 @@ class MpegVideoHeaderFinder(object):
     if not isinstance(data, (str, buffer)):
       raise TypeError
     if data:
-      buf = self._buf
+      buf, ids = self._buf, self._ids
       # MPEG video sequence header start code. We need 7 bytes of header.
-      if buf.startswith('\0\0\1') and buf[3 : 4] in '\xb3\xb0\xb5':  # Found before signature.
+      if buf.startswith('\0\0\1') and buf[3 : 4] in ids:  # Found before signature.
         if len(buf) < 145:
           self._buf = buf + data[:145 - len(buf)]
-      elif buf.endswith('\0\0\1') and data[0] in '\xb3\xb0\xb5':
+      elif buf.endswith('\0\0\1') and data[0] in ids:
         self._header_ofs += len(buf) - 3
-        self._buf = buf[-3:] + data[:16]  # Found signature.
-      elif buf.endswith('\0\1') and data[:2] in ('\1\xb3', '\1\xb0', '\1\xb5'):
+        self._buf = buf[-3:] + data[:145 - 3]  # Found signature.
+      elif buf.endswith('\0\1') and data[0] == '\1' and data[1] in ids:
         self._header_ofs += len(buf) - 2
-        self._buf = buf[-2:] + data[:16]  # Found signature.
-      elif buf.endswith('\0') and data[:3] == ('\0\1\xb3', '\0\1\xb0', '\0\1\xb5'):
+        self._buf = buf[-2:] + data[:145 - 2]  # Found signature.
+      elif buf.endswith('\0') and data[:2] == '\0\1' and data[2] in ids:
         self._header_ofs += len(buf) - 1
-        self._buf = buf[-1] + data[:16]  # Found signature.
+        self._buf = buf[-1] + data[:145 - 1]  # Found signature.
       else:
         self._header_ofs += len(buf)
         data = data[:]  # Convert buffer to str.
         i = i1 = data.find('\0\0\1\xb3')
-        i2 = data.find('\0\0\1\xb0')
-        i3 = data.find('\0\0\1\xb5')
+        if len(ids) > 1:
+          i2 = data.find('\0\0\1\xb0')
+          i3 = data.find('\0\0\1\xb5')
+        else:
+          i2 = i3 = -1
         if i < 0 or (i2 >= 0 and i2 < i):
           i = i2
         if i < 0 or (i3 >= 0 and i3 < i):
