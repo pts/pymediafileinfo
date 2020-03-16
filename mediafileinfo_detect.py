@@ -6649,6 +6649,25 @@ def analyze_minolta_raw(fread, info, fskip):
     info['height'], info['width'] = struct.unpack('>HH', header[28 : 32])
 
 
+def analyze_dpx(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/DPX
+  # http://www.simplesystems.org/users/bfriesen/dpx/S268M_Revised.pdf
+  header = fread(12)
+  if len(header) < 12:
+    raise ValueError('Too short for dpx.')
+  if not (header.startswith('SDPX\0\0') and header[8 : 11] in ('V1.', 'V2.') and header[11].isdigit()):
+    raise ValueError('dpx signature not found.')
+  info['format'] = 'dpx'
+  if fskip(768 - 12):
+    data = fread(40)
+    if len(data) >= 12:
+      info['width'], info['height'] = struct.unpack('>LL', data[4 : 12])
+    if len(data) >= 40 and data[38 : 40] == '\0\0':
+      info['codec'] = 'uncompressed'
+    elif len(data) >= 40 and data[38 : 40] == '\0\1':
+      info['codec'] = 'rle'
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -6866,6 +6885,7 @@ FORMAT_ITEMS = (
     # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
+    ('dpx', (0, 'SDPX\0\0', 8, 'V', 9, ('1', '2'), 10, '.', 11, tuple('0123456789'))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7461,6 +7481,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'raw'
   elif format == 'minolta-raw':
     analyze_minolta_raw(fread, info, fskip)
+  elif format == 'dpx':
+    analyze_dpx(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

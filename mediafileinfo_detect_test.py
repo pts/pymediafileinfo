@@ -655,6 +655,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x1827820001\7\x88\x0a\x08\7\x80\x0a\0'),
                      {'format': 'minolta-raw', 'codec': 'raw', 'height': 1920, 'width': 2560})
 
+  def test_analyze_dpx(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('SDPX\0\0 \0V2.0')[0], 'dpx')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dpx, 'SDPX\0\0 \0V2.0'),
+                     {'format': 'dpx'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dpx, 'SDPX\0\0 \0V2.0\0' + 755 * '?' + '\0\0\0\2\0\0\2\3\0\0\2\1' + '?' * 26 + '\0\1'),
+                     {'format': 'dpx', 'codec': 'rle', 'height': 513, 'width': 515})
+
   def test_detect_unixscript(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
     self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
