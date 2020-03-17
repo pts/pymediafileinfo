@@ -802,6 +802,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 \t3456 '),
                      {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii', 'height': 3456, 'width': 12})
 
+  def test_analyze_bmp(self):
+    data1 = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
+    data2 = 'BM????\0\0\0\0????\x0c\0\0\0\x80\2\xe0\1'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'bmp')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'bmp')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data1),
+                     {'format': 'bmp', 'codec': 'rle', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data2),
+                     {'format': 'bmp', 'height': 480, 'width': 640})
+
   def test_detect_fig(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#FIG 3.2\n')[0], 'fig')
 
@@ -882,6 +892,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'mpeg-cdxa', 'pes_video_at': 64, 'pes_audio_at': 0, 'hdr_skip_count': 0, 'subformat': 'mpeg-1', 'hdr_packet_count': 2, 'hdr_av_packet_count': 2,
                       'tracks': [{'width': 352, 'codec': 'mpeg-1', 'type': 'video', 'header_ofs': 64, 'height': 240},
                                  {'channel_count': 2, 'codec': 'mp2', 'header_ofs': 0, 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'mpeg-1', 'type': 'audio'}]})
+
+  def test_analyze_rmmp(self):
+    data1 = 'RIFF????RMMPcftc0\0\0\0\0\0\0\0cftc0\0\0\0\0\0\0\0\x0c\0\0\0'
+    data_cftc_ver = 'ver \6\0\0\0\0\0\0\0\x48\0\0\0'
+    data_cftc_dib = 'dib \x2e\0\0\0\0\4\0\0\x5a\0\0\0'
+    data_ver = data_cftc_ver[:12] + '??????'
+    data_dib = data_cftc_dib[:12] + '\0\0\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0????????????'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rmmp')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, data1),
+                     {'format': 'rmmp', 'tracks': []}),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
+                     {'format': 'rmmp', 'tracks': [{'codec': 'rle', 'height': 480, 'type': 'video', 'width': 640}]})
 
 
 if __name__ == '__main__':

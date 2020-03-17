@@ -4987,10 +4987,25 @@ def analyze_xml(fread, info, fskip):
           break
 
 
+BMP_CODECS = {
+    0: 'uncompressed',
+    1: 'rle',
+    2: 'rle',
+    3: 'bitfields',
+    4: 'jpeg',
+    5: 'flate',  # PNG.
+    6: 'bitfields',
+    11: 'uncompressed',
+    12: 'rle',
+    13: 'rle',
+}
+
+
+
 def analyze_bmp(fread, info, fskip):
   # https://en.wikipedia.org/wiki/BMP_file_format
-  header = fread(26)
-  if len(header) < 26:
+  header = fread(34)
+  if len(header) < 22:
     raise ValueError('Too short for bmp.')
   if not header.startswith('BM'):
     raise ValueError('bmp signature not found.')
@@ -5001,12 +5016,15 @@ def analyze_bmp(fread, info, fskip):
     raise ValueError('Bad bmp info size: %d' % b)
   info['format'] = 'bmp'
   # TODO(pts): Detect codec other than 'uncompressed'.
-  if b < 40 and len(header) >= 22:
+  if b < 40 and len(header) >= 12:
     info['width'], info['height'] = struct.unpack(
         '<HH', header[18 : 22])
   elif b >= 40 and len(header) >= 26:
     info['width'], info['height'] = struct.unpack(
         '<LL', header[18 : 26])
+    if len(header) >= 34 and b != 64:
+      codec, = struct.unpack('<L', header[30 : 34])
+      info['codec'] = BMP_CODECS.get(codec, str(codec))
 
 
 def analyze_flic(fread, info, fskip):
@@ -7178,7 +7196,7 @@ FORMAT_ITEMS = (
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
-    ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 26, lambda header: (len(header) >= 26 and 12 <= ord(header[14]) <= 127, 52))),
+    ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
