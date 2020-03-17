@@ -517,5 +517,76 @@ elements. Some elements are truncated.
   0: obu_reserved_1bit
   1010110100101010: obu_size=0b01010100101101=5421 (bytes)
   11000001010001000000000000111000101000100110000000000000000000001100000000000011000000000001000000000000000000000011000001000000000000100000000011000000000100000011000000010000010110101000000000111011...
+* example format=rmmp
+  @0: header
+    52494646: file_signature='RIFF'
+    96be0a00: data_size=704150==(file_size - 8)
+    524d4d50: file_type='RMMP'
+  @12: chunk
+    63667463: chunk_type='cftc'
+    14040000: chunk_size=1044 (this many bytes follow)
+    00000000: sequence_id=0
+  : cftc entry
+    63667463: chunk_type='cftc'
+    14040000: chunk_size=1044
+    00000000: sequence_id=0
+    0c000000: ofs=12
+  : cftc entry
+    76657220: chunk_type='ver '
+    06000000: chunk_size=6
+    27000000: sequence_id=39
+    28040000: ofs=1064
+  : cftc entry
+    6d636e6d: chunk_type='mcnm'
+    18000000: chunk_size=24
+    00000000: sequence_id=0
+    36040000: ofs=1078
+  : cftc_entry
+    76776366: chunk_type='vwcf'
+    24000000: chunk_size=36
+    00040000: sequence_id=1024
+    56040000: ofs=1110
+  : cftc_entry
+    76776372: chunk_type='vwcr'
+    3e040000: chunk_size=1086
+    00040000: sequence_id=1024
+    82040000: ofs=1154
+  : cftc_entry
+    64696220: chunk_type='dib '
+    12810300: chunk_size=229650
+    02040000: sequence_id=1016
+    c8080000: ofs=2248
+  : cftc_entry
+    64696220: chunk_type='dib '
+    b4090000: chunk_size=2484
+    03040000: sequence_id=1016
+    e2890300: ofs=231906
+  ...
+  @2248: chunk
+    64696220: chunk_type='dib '
+    12810300: chunk_size=229650
+    02040000: sequence_id=1026
+    0000: padding
+    28000000: bmp_header_size=40
+    80020000: width=640
+    e0010000: height=480
+    0100: planes=1
+    0800: bitcount=8
+    01000000: compression=1
+    e4800300: data_size==(chunk_size + 46)
+    ...
+  @231906: chunk
+    64696220: chunk_type='dib '
+    b4090000: chunk_size=2484
+    03040000: sequence_id=1027
+    0000: padding
+    28000000: bmp_header_size=40
+    32010000: width=306
+    96010000: height=406
+    0100: planes=1
+    0800: bitcount=8
+    01000000: compression=1
+    86090000: data_size==(chunk_size + 46)
+    ...
 
 __END__

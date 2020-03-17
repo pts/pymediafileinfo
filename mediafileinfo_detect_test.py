@@ -905,6 +905,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
                      {'format': 'rmmp', 'tracks': [{'codec': 'rle', 'height': 480, 'type': 'video', 'width': 640}]})
 
+  def test_analyze_rmmp(self):
+    data1 = 'RIFF????RMMPcftc0\0\0\0\0\0\0\0cftc0\0\0\0\0\0\0\0\x0c\0\0\0'
+    data_cftc_ver = 'ver \6\0\0\0\0\0\0\0\x48\0\0\0'
+    data_cftc_dib = 'dib \x2e\0\0\0\0\4\0\0\x5a\0\0\0'
+    data_ver = data_cftc_ver[:12] + '??????'
+    data_dib = data_cftc_dib[:12] + '\0\0\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0????????????'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rmmp')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, data1),
+                     {'format': 'rmmp', 'tracks': []}),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
+                     {'format': 'rmmp', 'tracks': [{'codec': 'rle', 'height': 480, 'type': 'video', 'width': 640}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

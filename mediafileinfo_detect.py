@@ -1811,6 +1811,76 @@ def analyze_avi(fread, info, fskip):
   process_list(ofs_limit, 'RIFF')
 
 
+# --- rmmp
+
+def analyze_rmmp(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/RIFF_Multimedia_Movie
+  # https://www.aelius.com/njh/wavemetatools/doc/riffmci.pdf
+  # Samples (in the .iso file): https://archive.org/download/Microsoft_Works_-_Gateway_2000_Edition_Microsoft_1991
+  data = fread(40)
+  if len(data) < 40:
+    raise ValueError('Too short for rmmp.')
+  if not (data.startswith('RIFF') and data[8 : 16] == 'RMMPcftc' and data[20 : 28] == '\0\0\0\0cftc' and data[32 : 40] == '\0\0\0\0\x0c\0\0\0'):
+    raise ValueError('rmmp signature not found.')
+  info['format'], info['tracks'] = 'rmmp', []
+  # Find width and height of the first image (dip).
+  cftc_size, cftc_size2 = struct.unpack('<L8xL', data[16: 32])
+  if cftc_size != cftc_size2:
+    raise ValueError('Mismatch in rmmp cftc size.')
+  if cftc_size < 16:
+    raise ValueError('Bad rmmp cftc size: %d' % cftc_size)
+  min_ofs, dib_ofs, dib_chunk_size, dib_sequence_id = cftc_size + 20, None, None, None
+  read_ofs = len(data)
+  for i in xrange(16, cftc_size, 16):
+    data = fread(16)
+    read_ofs += len(data)
+    if len(data) < 16:
+      if i == 16 and not data:
+        return
+      raise ValueError('EOF in rmmp cftc.')
+    if data == '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0':
+      break
+    chunk_type, chunk_size, sequence_id, ofs = struct.unpack('<4sLLL', data)
+    ct = chunk_type.rstrip(' ')
+    if not ct.isalpha() and ct == ct.lower():
+      raise ValueError('Bad rmmp chunk type: %r' % chunk_type)
+    if ofs < min_ofs:
+      raise ValueError('rmmp chunk %r ofs %s too small, expected >= %d' % (chunk_type, ofs, min_ofs))
+    min_ofs = ofs + 12 + chunk_size
+    # Sequence ID is not increasing, e.g. rmmp chunk 'clut' sequence_id 1119 too small, expected >= 1121.
+    #print (chunk_type, chunk_size, ofs)
+    if chunk_type == 'dib ' and not dib_ofs:
+      dib_chunk_size, dib_sequence_id, dib_ofs = chunk_size, sequence_id, ofs
+  if dib_ofs:
+    assert dib_ofs >= read_ofs
+    if not fskip(dib_ofs - read_ofs):
+      raise ValueError('EOF when seeking to rmmp div.')
+    data = fread(26)
+    if len(data) < 26:
+      raise ValueError('EOF in rmmp div.')
+    chunk_type, chunk_size, sequence_id, padding, header_size, width, height = struct.unpack('<4sLLHLLL', data)
+    if chunk_type != 'dib ':
+      raise ValueError('Bad rmmp dib chunk type.')
+    if chunk_size != dib_chunk_size:
+      raise ValueError('Mismatch rmmp dib chunk size.')
+    if chunk_size < 46:
+      raise ValueError('rmmp dib chunk too small.')
+    if sequence_id != dib_sequence_id:
+      raise ValueError('Mismatch rmmp dib sequence_id.')
+    if header_size < 40:  # See also analyze_bmp for the limit of 40.
+      raise ValueError('rmmp dib header too small.')
+    if padding and padding != 0xe500:
+      raise ValueError('Bad rmmp dib padding: %r', data[12 : 14])
+    # Some width and height values are unreasonable for set_video_dimens.
+    track_info = {'type': 'video', 'width': width, 'height': height}
+    if header_size != 64:
+      data = fread(8)
+      if len(data) >= 8:
+        codec, = struct.unpack('<4xL', data[:8])
+        track_info['codec'] = BMP_CODECS.get(codec, str(codec))
+    info['tracks'].append(track_info)
+
+
 # --- asf
 
 ASF_Header_Object = guid('75b22630-668e-11cf-a6d9-00aa0062ce6c')
@@ -7066,6 +7136,7 @@ FORMAT_ITEMS = (
     ('wmv',),  # From 'asf'.
     ('wma',),  # From 'asf'.
     ('avi', (0, 'RIFF', 8, 'AVI ')),
+    ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     # \1 is the version number, but there is no version later than 1 in 2017.
     ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
@@ -7676,6 +7747,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_asf(fread, info, fskip)
   elif format == 'avi':
     analyze_avi(fread, info, fskip)
+  elif format == 'rmmp':
+    analyze_rmmp(fread, info, fskip)
   elif format == 'mpeg-ps':
     analyze_mpeg_ps(fread, info, fskip)
   elif format == 'mpeg-cdxa':
