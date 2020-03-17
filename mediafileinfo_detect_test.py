@@ -858,6 +858,31 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'mpeg-ps', 'hdr_av_packet_count': 2, 'hdr_skip_count': 0, 'subformat': 'dvd-video', 'pes_audio_at': 3, 'hdr_packet_count': 5, 'pes_video_at': 0,
                       'tracks': [track_info_audio, track_info_video0]})
 
+  def test_analyze_mpeg_cdxa(self):
+    data_hdr = 'RIFF\xc4\x9d\x0b\x02CDXAfmt \x10\0\0\0\0\0\0\0\x11\x11\x58\x41\x02\0\0\0\0\0\0\x00data\xa0\x9d\x0b\x02'
+    data_sechdr = '\0\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\0\x03\x40\x46\x02\x02\0\x60\0\x02\0\x60\x00'
+    data_null_sector = ''.join((data_sechdr, '\0' * 2324, '????'))
+    data_packhdr = '\0\0\1\xba\x21\0\1\x1c\x21\x80\x1b\x91'
+    data_video = '\0\0\1\xe0\x00\x5c\x60\x2e\x31\0\1\xfd\x2d\x11\0\1\xb6\xcb\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\xb3\x16\0\xf0\xc4\x02\xcf\x60\xa4\0\0\1\xb8'
+    data_audio = '\0\0\1\xc0\0\x0b\x40\x20\x21\0\1\xce\x41\xff\xfd\xb0\x84'
+    self.assertEqual(mediafileinfo_detect.detect_format(data_hdr[:20])[0], 'mpeg-cdxa')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_hdr)[0], 'mpeg-cdxa')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr[:-8]),
+                     {'format': 'mpeg-cdxa'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr),
+                     {'format': 'mpeg-cdxa'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr + data_sechdr),
+                     {'format': 'mpeg-cdxa'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, ''.join((data_hdr, data_sechdr, '\0\0\1\xba'))),
+                     {'format': 'mpeg-cdxa'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, ''.join((data_hdr, data_sechdr, data_packhdr, data_video))),
+                     {'format': 'mpeg-cdxa', 'pes_video_at': 64, 'hdr_skip_count': 0, 'subformat': 'mpeg-1', 'hdr_packet_count': 1, 'hdr_av_packet_count': 1,
+                      'tracks': [{'width': 352, 'codec': 'mpeg-1', 'type': 'video', 'header_ofs': 64, 'height': 240}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, ''.join((data_hdr, data_null_sector, data_null_sector, data_sechdr, data_packhdr, data_video, data_audio))),
+                     {'format': 'mpeg-cdxa', 'pes_video_at': 64, 'pes_audio_at': 0, 'hdr_skip_count': 0, 'subformat': 'mpeg-1', 'hdr_packet_count': 2, 'hdr_av_packet_count': 2,
+                      'tracks': [{'width': 352, 'codec': 'mpeg-1', 'type': 'video', 'header_ofs': 64, 'height': 240},
+                                 {'channel_count': 2, 'codec': 'mp2', 'header_ofs': 0, 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'mpeg-1', 'type': 'audio'}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

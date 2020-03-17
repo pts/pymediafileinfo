@@ -3048,7 +3048,7 @@ def analyze_mpeg_video(fread, info, fskip):
 # --- Multiplexed MPEG.
 
 
-def analyze_mpeg_ps(fread, info, fskip):
+def analyze_mpeg_ps(fread, info, fskip, format='mpeg-ps'):
   # Based on: https://en.wikipedia.org/wiki/MPEG_program_stream
   # Also based on: Use http://www.hampa.ch/mpegdemux/
   #   http://www.hampa.ch/mpegdemux/mpegdemux-0.1.4.tar.gz
@@ -3082,7 +3082,7 @@ def analyze_mpeg_ps(fread, info, fskip):
     raise ValueError('Too short for mpeg-ps.')
   if not header.startswith('\0\0\1\xba'):
     raise ValueError('mpeg-ps signature not found.')
-  info['format'] = 'mpeg-ps'
+  info['format'] = format  # 'mpeg-ps'.
   if len(header) < 12:
     return
   maybe_dvd, never_dvd = 0, True
@@ -3297,6 +3297,84 @@ def analyze_mpeg_ps(fread, info, fskip):
   info['hdr_packet_count'] = packet_count
   info['hdr_av_packet_count'] = av_packet_count
   info['hdr_skip_count'] = skip_count
+
+
+def analyze_mpeg_cdxa(fread, info, fskip):
+  # https://github.com/Kurento/gst-plugins-bad/blob/master/gst/cdxaparse/gstcdxaparse.c
+  # https://en.wikipedia.org/wiki/Video_CD
+  data = fread(20)
+  if len(data) < 16:
+    raise ValueError('Too short for cdxa.')
+  if not (data.startswith('RIFF') and data[8 : 16] == 'CDXAfmt ' and (len(data) < 20 or data[17 : 20] == '\0\0\0')):
+    raise ValueError('cdxa signature not found.')
+  info['format'] = 'mpeg-cdxa'
+  if len(data) < 20:
+    return
+  size, = struct.unpack('<L', data[16 : 20])
+  if not fskip(size):
+    raise ValueError('EOF in cdxa fmt.')
+  data = fread(8)
+  if len(data) < 8:
+    return
+  if not data.startswith('data'):
+    raise ValueError('Expected cdxa data.')
+
+  def yield_sectors():
+    do_strip0 = True
+    while 1:
+      data = fread(24)
+      if len(data) < 24:
+        break
+      if not data.startswith('\0\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\0'):
+        raise ValueError('Bad cdxa sector sync.')
+      data = fread(2324)
+      if not data:
+        break
+      is_short = len(data) < 2324
+      if do_strip0:
+        if data.lstrip('\0'):
+          do_strip0 = False
+          if not data.startswith('\0\0\1\xba'):
+            raise ValueError('Expected mpeg-ps header in cdxa.')
+        else:
+          data = ''
+      if data:
+        yield data
+      if is_short:
+        break
+      edc = fread(4)  # Checksum.
+      if len(edc) < 4:
+        break
+
+  it = yield_sectors()
+  try:
+    buf = [0, it.next()]  # Reads first mpeg-ps header.
+  except StopIteration:
+    return  # raise ValueError('EOF before cdxa mpeg-ps header.')
+
+  def mpeg_ps_fread(size):
+    result = ''
+    while size > 0:
+      bufi, bufs = buf
+      if not bufs:
+        try:
+          buf[1] = bufs = it.next()
+        except StopIteration:
+          break
+      bufc = len(bufs)
+      size -= bufc - bufi
+      if size < 0:
+        result += bufs[bufi : bufc + size]
+        buf[0] = bufc + size
+        return result
+      result += bufs[bufi:]  # TODO(pts): Avoid copying.
+      buf[0], buf[1] = 0, ''
+    return result
+
+  def mpeg_ps_fskip(size):
+    return len(mpeg_ps_fread(size)) == size
+
+  analyze_mpeg_ps(mpeg_ps_fread, info, mpeg_ps_fskip, format='mpeg-cdxa')
 
 
 # --- mpeg-ts (MPEG TS).
@@ -6973,7 +7051,7 @@ FORMAT_ITEMS = (
     # \1 is the version number, but there is no version later than 1 in 2017.
     ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
-    ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXA')),
+    ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
@@ -7582,6 +7660,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_avi(fread, info, fskip)
   elif format == 'mpeg-ps':
     analyze_mpeg_ps(fread, info, fskip)
+  elif format == 'mpeg-cdxa':
+    analyze_mpeg_cdxa(fread, info, fskip)
   elif format == 'mpeg-ts':
     analyze_mpeg_ts(fread, info, fskip)
   elif format == 'mpeg-video':
