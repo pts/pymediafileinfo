@@ -7578,6 +7578,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/CorelDRAW
     # https://www.ntfs.com/corel-draw-format.htm
     ('cdr', (0, 'RIFF', 8, ('CDR', 'cdr'), 11, tuple('456789ABCD'), 12, 'vrsn', 17, '\0\0\0')),
+    # http://fileformats.archiveteam.org/wiki/SHW_(Corel)
+    ('corelshow', (0, 'RIFF', 8, 'shv4LIST')),
 
     # Compressed archive.
 
