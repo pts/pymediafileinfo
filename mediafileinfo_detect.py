@@ -7340,8 +7340,8 @@ FORMAT_ITEMS = (
     # Can also be .webm as a subformat.
     ('mkv', (0, '\x1a\x45\xdf\xa3')),
     # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
-    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 4, lambda header: (is_mp4(header), 26))),
-    ('mp4', (0, '\0\0\0', 4, 'ftyp', 4, lambda header: (is_mp4(header), 26))),
+    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 12, lambda header: (is_mp4(header), 26))),
+    ('mp4', (0, '\0\0\0', 4, 'ftyp', 8, lambda header: (is_mp4(header), 26))),
     ('f4v',),  # From 'mp4'.
     ('webm',),  # From 'mp4'.
     ('mov',),  # From 'mp4'.
@@ -7680,7 +7680,7 @@ FORMAT_ITEMS = (
     ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
     ('xml-comment', (0, '<!--', 392, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
     ('xml-comment', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
-    ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 5, lambda header: (header[:5].lower() == '<?php', 200))),
+    ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 7, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('html', (0, '<', 392, lambda header: adjust_confidence(100, count_is_html(header)))),
@@ -7778,18 +7778,22 @@ class FormatDb(object):
           fbp2[prefix2].append(format_spec)
         else:
           fbp2[prefix2] = [format_spec]
+      fps = 0
       for i in xrange(0, len(spec), 2):
         size, pattern = spec[i], spec[i + 1]
+        if size < fps:
+          raise ValueError('Specs for format %s not in increasing order.' % format)
         if isinstance(pattern, str):
-          hps = max(hps, size + len(pattern))
+          fps = size + len(pattern)
         elif isinstance(pattern, tuple):
           assert pattern, 'Empty pattern tuple.'
           assert len(set(len(s) for s in pattern)) == 1, (
               'Non-uniform pattern choice sizes for %s: %r' %
               (format, pattern))
-          hps = max(hps, size + len(pattern[0]))
+          fps = size + len(pattern[0])
         else:
-          hps = max(hps, size)
+          fps = size
+        hps = max(hps, fps)
     self.header_preread_size = hps  # Typically 64, we have 392.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
