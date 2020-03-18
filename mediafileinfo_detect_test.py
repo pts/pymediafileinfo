@@ -1000,6 +1000,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sgi_rgb, data1),
                      {'format': 'sgi-rgb', 'codec': 'rle', 'height': 513, 'width': 515})
 
+  def test_analyze_ani(self):
+    data1 = 'RIFF????ACONLIST\x2e\0\0\0INFOINAM\x14\0\0\0Disappearing Cheese\0IART\6\0\0\0lynne\0anih' + '24000000240000001800000019000000000000000000000000000000000000000a0000000300000072617465640000000a0000000a0000000a0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000003c0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000002800000005000000640000007365712064000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f0000000e00000010000000110000001200000013000000140000001500000016000000170000004c495354944800006672616d69636f6efe0200000000020001002120000000000000e802000016000000'.decode('hex')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ani')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:16])[0], 'ani')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ani, data1),
+                     {'format': 'ani', 'tracks': [{'type': 'video', 'codec': 'uncompressed', 'width': 33, 'height': 32}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

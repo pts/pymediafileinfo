@@ -1881,6 +1881,74 @@ def analyze_rmmp(fread, info, fskip):
     info['tracks'].append(track_info)
 
 
+def analyze_ani(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Windows_Animated_Cursor
+  # https://www.daubnet.com/en/file-format-ani
+  # https://web.archive.org/web/20130530192915/http://oreilly.com/www/centers/gff/formats/micriff
+  data = fread(16)
+  if len(data) < 16:
+    raise ValueError('Too short for ani.')
+  if not (data.startswith('RIFF') and data[8 : 12] == 'ACON' and data[12 : 16] in ('LIST', 'anih', 'seq ', 'rate')):
+    raise ValueError('ani signature not found.')
+  info['format'], info['tracks'] = 'ani', []
+  chunk_id, had_anih = data[12 : 16], False
+  width = height = None
+  while 1:
+    size = fread(4)
+    if len(size) < 4:
+      break
+    size0, = struct.unpack('<L', size)
+    size = size0 + (size0 & 1)
+    if chunk_id in ('rate', 'seq '):
+      if not fskip(size):
+        break
+    elif chunk_id == 'LIST':
+      if size < 4:
+        raise ValueError('ani LIST too small.')
+      list_id = fread(4)
+      if len(list_id) < 4:
+        break
+      if list_id == 'fram':
+        if not had_anih:
+          raise ValueError('Missing ani anih.')
+        data = fread(16)
+        if len(data) < 16:
+          break
+        item_id, item_size, reserved, item_type, image_count, width, height = struct.unpack('<4sLHHHBB', data)
+        if item_id != 'icon':
+          raise ValueError('Bad ani fram item_id: %r' % item_id)
+        if item_size < 10:
+          raise ValueError('Bad ani fram item_size: %d' % item_size)
+        if reserved:
+          raise ValueError('Bad ani fram reserved: %d' % reserved)
+        if item_type not in (1, 2):
+          raise ValueError('Bad ani fram item_type: %d' % item_type)
+        if image_count != 1:
+          raise ValueError('Bad ani fram image_count: %d' % image_count)
+        break
+      if not fskip(size - 4):
+        break
+    elif chunk_id == 'anih':
+      if had_anih:
+        raise ValueError('Duplicate ani anih.')
+      had_anih = True
+      data = fread(36)
+      if len(data) < 36:
+        raise ValueError
+      size2, frame_count, step_count, width, height, bit_count, plane_count, display_rate, flags = struct.unpack('<9L', data)
+      if size != size2:
+        raise ValueError('ani anih size mismatch.')
+      if not flags & 1:
+        break
+    else:
+      raise ValueError('Unknown ani chunk_id: %r' % chunk_id)
+    chunk_id = fread(4)
+    if len(chunk_id) < 4:
+      break
+  if width is not None and height is not None:
+    info['tracks'].append({'type': 'video', 'codec': 'uncompressed', 'width': width, 'height': height})
+
+
 # --- asf
 
 ASF_Header_Object = guid('75b22630-668e-11cf-a6d9-00aa0062ce6c')
@@ -7290,6 +7358,7 @@ FORMAT_ITEMS = (
     ('wma',),  # From 'asf'.
     ('avi', (0, 'RIFF', 8, 'AVI ')),
     ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
+    ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
     # \1 is the version number, but there is no version later than 1 in 2017.
     ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
@@ -7914,6 +7983,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_avi(fread, info, fskip)
   elif format == 'rmmp':
     analyze_rmmp(fread, info, fskip)
+  elif format == 'ani':
+    analyze_ani(fread, info, fskip)
   elif format == 'mpeg-ps':
     analyze_mpeg_ps(fread, info, fskip)
   elif format == 'mpeg-cdxa':
