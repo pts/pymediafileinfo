@@ -1499,6 +1499,23 @@ def analyze_ivf(fread, info, fskip):
     info['tracks'].append({'type': 'video', 'codec': get_windows_video_codec(codec), 'width': width, 'height': height})
 
 
+def analyze_amv(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/MTV_Video_(.AMV)
+  # https://wiki.multimedia.cx/index.php/AMV
+  # http://svn.rot13.org/cgi-bin/viewvc.cgi/amv/amv.pl?view=markup
+  # Samples: https://samples.ffmpeg.org/amv/
+  header = fread(72)
+  if len(header) < 32:
+    raise ValueError('Too short for amv.')
+  if not (header.startswith('RIFF') and header[8 : 16] == 'AMV LIST' and header[20 : 32] == 'hdrlamvh\x38\0\0\0'):
+    raise ValueError('amv signature not found.')
+  info['format'], info['tracks'] = 'amv', []
+  if len(header) >= 72:
+    width, height = struct.unpack('<LL', header[64 : 72])
+    info['tracks'].append({'type': 'video', 'codec': 'mjpeg', 'width': width, 'height': height})  # Modified MJPEG codec.
+    info['tracks'].append({'type': 'audio', 'codec': 'adpcm'})  # Modified ADPCM codec.
+
+
 # --- Windows
 
 # FourCC.
@@ -7374,6 +7391,7 @@ FORMAT_ITEMS = (
     ('dv', (0, '\x1f\x07\x00')),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
+    ('amv', (0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')),
 
     # Video (single elementary stream, no audio).
 
@@ -8195,6 +8213,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_pcpaint_pic(fread, info, fskip)
   elif format == 'ivf':
     analyze_ivf(fread, info, fskip)
+  elif format == 'amv':
+    analyze_amv(fread, info, fskip)
   elif format == 'wmf':
     analyze_wmf(fread, info, fskip)
   elif format == 'dvi':

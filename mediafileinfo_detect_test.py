@@ -1016,6 +1016,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'cdr')
     self.assertEqual(mediafileinfo_detect.detect_format(data1[:20])[0], 'cdr')
 
+  def test_analyze_amv(self):
+    data1 = 'RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'amv')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:32])[0], 'amv')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_amv, data1),
+                     {'format': 'amv',
+                      'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
+                                 {'type': 'audio', 'codec': 'adpcm'}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
