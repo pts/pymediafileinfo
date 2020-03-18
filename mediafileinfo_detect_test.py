@@ -954,6 +954,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ftc, data1),
                      {'format': 'ftc', 'codec': 'fractal'})
 
+  def test_analyze_fif(self):
+    data1 = 'FIF\1\x75\0\3\2\0\0\1\2\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fif')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:4])[0], 'fif')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fif, data1[:4]),
+                     {'format': 'fif', 'codec': 'fractal'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fif, data1),
+                     {'format': 'fif', 'codec': 'fractal', 'height': 513, 'width': 515})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

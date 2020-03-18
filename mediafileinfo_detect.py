@@ -7082,6 +7082,18 @@ def analyze_ftc(fread, info, fskip):
   # We don't know how to get width and height, the file format is not public.
 
 
+def analyze_fif(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Fractal_Image_Format
+  header = fread(14)
+  if len(header) < 4:
+    raise ValueError('Too short for fif.')
+  if not header.startswith('FIF\1'):
+    raise ValueError('fif signature not found.')
+  info['format'], info['codec'] = 'fif', 'fractal'
+  if len(header) >= 14:
+    info['width'], info['height'] = struct.unpack('<LL', header[6 : 14])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7318,6 +7330,7 @@ FORMAT_ITEMS = (
     # Adding this with xpos=0 and ypos=0 for better header matching of the most common case.
     ('utah-rle', (0, '\x52\xcc\0\0\0\0', 10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
     ('ftc', (0, 'FTC\0\1\1\2\1')),
+    ('fif', (0, 'FIF\1')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7940,6 +7953,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_utah_rle(fread, info, fskip)
   elif format == 'ftc':
     analyze_ftc(fread, info, fskip)
+  elif format == 'fif':
+    analyze_fif(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
