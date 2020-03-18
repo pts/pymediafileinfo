@@ -923,6 +923,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
                      {'format': 'rmmp', 'tracks': [{'codec': 'rle', 'height': 480, 'type': 'video', 'width': 640}]})
 
+  def test_detect_midi(self):
+    data1 = 'MThd\0\0\0\6\0\0\0\1'
+    data2 = 'MThd\0\0\0\6\0\2\3'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'midi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'midi')
+    self.assertEqual(mediafileinfo_detect.detect_format('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2)[0], 'midi-rmid')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
