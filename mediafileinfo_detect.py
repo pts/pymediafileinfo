@@ -7560,6 +7560,9 @@ FORMAT_ITEMS = (
     # https://fossies.org/linux/xfig/doc/FORMAT3.2
     # TODO(pts): For width= and height=, get paper size from line 5 in version 3.2 only.
     ('fig', (0, '#FIG ', 5, ('1', '2', '3'), 6, '.')),
+    # http://fileformats.archiveteam.org/wiki/Xar_(vector_graphics)
+    # http://site.xara.com/support/docs/webformat/spec/XARFormatDocument.pdf
+    ('xara', (0, 'XARA\xa3\xa3\r\n\2\0\0\0', 13, ('\0', '\1', '\2', '\3'), 14, '\0\0', 16, ('CXW', 'CXN'), 23, '\0\0\0\0')),
 
     # Compressed archive.
 

@@ -1007,6 +1007,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ani, data1),
                      {'format': 'ani', 'tracks': [{'type': 'video', 'codec': 'uncompressed', 'width': 33, 'height': 32}]})
 
+  def test_detect_xar(self):
+    data1 = 'XARA\xa3\xa3\r\n\2\0\0\0\x25\0\0\0CXN????\0\0\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xara')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
