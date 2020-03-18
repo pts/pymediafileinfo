@@ -7070,6 +7070,18 @@ def analyze_utah_rle(fread, info, fskip):
       raise ValueError('Bad utah-rle cmaplen.')
 
 
+def analyze_ftc(fread, info, fskip):
+  # http://cd.textfiles.com/wthreepack/wthreepack-1/COMPRESS/FIFDEMO.ZIP
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for ftc.')
+  # We don't know how long the signature is: 3..16 bytes.
+  if not header.startswith('FTC\0\1\1\2\1'):
+    raise ValueError('ftc signature not found.')
+  info['format'], info['codec'] = 'ftc', 'fractal'
+  # We don't know how to get width and height, the file format is not public.
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7305,6 +7317,7 @@ FORMAT_ITEMS = (
     ('utah-rle', (0, '\x52\xcc',         10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
     # Adding this with xpos=0 and ypos=0 for better header matching of the most common case.
     ('utah-rle', (0, '\x52\xcc\0\0\0\0', 10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
+    ('ftc', (0, 'FTC\0\1\1\2\1')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7925,6 +7938,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_cmuwm(fread, info, fskip)
   elif format == 'utah-rle':
     analyze_utah_rle(fread, info, fskip)
+  elif format == 'ftc':
+    analyze_ftc(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
@@ -7985,6 +8000,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xwd(fread, info, fskip)
   elif format == 'sun-icon':
     analyze_sun_icon(fread, info, fskip)
+  elif format == 'ftc':
+    analyze_ftc(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

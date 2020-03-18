@@ -947,6 +947,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff[:-4] + 'RMP3', data_bext, data_bext, 'bext\xff\0\0\0' + '?' * 256, data_mp3))),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
 
+  def test_analyze_ftc(self):
+    data1 = 'FTC\0\1\1\2\1\x80\2\x90\1\x18\0\1\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ftc')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'ftc')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ftc, data1),
+                     {'format': 'ftc', 'codec': 'fractal'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
