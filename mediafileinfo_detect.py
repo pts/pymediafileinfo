@@ -1516,6 +1516,86 @@ def analyze_amv(fread, info, fskip):
     info['tracks'].append({'type': 'audio', 'codec': 'adpcm'})  # Modified ADPCM codec.
 
 
+X4XM_AUDIO_CODECS = {
+    0: 'pcm',
+    1: 'adpcm',  # Modified.
+    2: 'adpcm2',  # Modified.
+}
+
+
+def analyze_4xm(fread, info, fskip):
+  # https://wiki.multimedia.cx/index.php/4xm_Format
+  # Samples: http://samples.mplayerhq.hu/game-formats/4xm/
+  data = fread(36)
+  if len(data) < 36:
+    raise ValueError('Too short for 4xm.')
+  if not (data.startswith('RIFF') and data[8 : 16] == '4XMVLIST' and data[20 : 28] == 'HEADLIST' and data[32 : 36] == 'HNFO'):
+    raise ValueError('4xm signature not found.')
+  info['format'], info['tracks'] = '4xm', []
+  head_size, hnfo_size = struct.unpack('<L8xL', data[16 : 32])
+  if hnfo_size < 4:
+    raise ValueError('4xm hnfo_size too small.')
+  if head_size < hnfo_size + 12:
+    raise ValueError('4xm hnfo_size too large, exceeds head_size.')
+  size = hnfo_size - 4 + (hnfo_size & 1)
+  if fskip(size):
+    def parse_list_items(items_size, list_id):
+      while items_size >= 8:
+        data = fread(8)
+        if len(data) < 8:
+          raise ValueError('EOF in 4xm list item size.')
+        chunk_id, chunk_size = struct.unpack('<4sL', data)
+        items_size -= chunk_size + 8
+        if items_size < 0:
+          raise ValueError('4xm list chunk too small.')
+        #print (list_id, chunk_id, chunk_size)
+        chunk_delta = (chunk_size & 1)
+        item_id = None
+        if list_id in ('HEAD', 'TRK_') and chunk_id == 'LIST':
+          item_id = fread(4)
+          if len(item_id) < 4:
+            raise ValueError('EOF in 4xm sublist item ID.')
+          #print (list_id, chunk_id, item_id, chunk_size)
+          chunk_size -= 4
+          if ((list_id == 'HEAD' and item_id == 'TRK_') or
+              (list_id == 'TRK_' and item_id in ('VTRK', 'STRK'))):
+            if chunk_size < 4:
+              raise ValueError('4xm list item %s too small.' % item_id)
+            parse_list_items(chunk_size, item_id)
+            chunk_size = 0
+        elif ((list_id == 'VTRK' and chunk_id == 'vtrk') or
+              (list_id == 'STRK' and chunk_id == 'strk')):
+          if chunk_size > 1023:
+            raise ValueError('Chunk %s too long: %d' % (chunk_id, chunk_size))
+          data = fread(chunk_size)
+          if len(data) < chunk_size:
+            raise ValueError('EOF in 4xm chunk %s.' % chunk_id)
+          chunk_size = 0
+          if chunk_id == 'vtrk':
+            if len(data) < 36:
+              raise ValueError('4xm vtrk chunk too small.')
+            width, height = struct.unpack('<LL', data[28 : 36])
+            info['tracks'].append({'type': 'video', 'codec': '4xm', 'width': width, 'height': height})
+          elif chunk_id == 'strk':
+            if len(data) < 40:
+              raise ValueError('4xm strk chunk too small.')
+            codec, channel_count, sample_rate, sample_size = struct.unpack('<4xL20xLLL', data)
+            codec = X4XM_AUDIO_CODECS.get(codec, str(codec))
+            info['tracks'].append({'type': 'audio', 'codec': codec})
+            set_channel_count(info['tracks'][-1], codec, channel_count)
+            set_sample_rate(info['tracks'][-1], codec, sample_rate)
+            set_sample_size(info['tracks'][-1], codec, sample_size)
+        if not fskip(chunk_size + chunk_delta):
+          if item_id:
+            raise ValueError('EOF in 4xm list %s.' % item_id)
+          else:
+            raise ValueError('EOF in 4xm chunk %s.' % chunk_id)
+      if items_size:
+        raise ValueError('4xm list remainder too small: %d' % items_size)
+
+    parse_list_items(head_size - size - 16, 'HEAD')
+
+
 # --- Windows
 
 # FourCC.
@@ -7392,6 +7472,7 @@ FORMAT_ITEMS = (
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
     ('amv', (0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')),
+    ('4xm', (0, 'RIFF', 8, '4XMVLIST', 20, 'HEADLIST', 32, 'HNFO')),
 
     # Video (single elementary stream, no audio).
 
@@ -8215,6 +8296,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ivf(fread, info, fskip)
   elif format == 'amv':
     analyze_amv(fread, info, fskip)
+  elif format == '4xm':
+    analyze_4xm(fread, info, fskip)
   elif format == 'wmf':
     analyze_wmf(fread, info, fskip)
   elif format == 'dvi':

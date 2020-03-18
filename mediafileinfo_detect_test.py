@@ -1025,6 +1025,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                       'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
                                  {'type': 'audio', 'codec': 'adpcm'}]})
 
+  def test_analyze_4xm(self):
+    data1 = 'RIFF????4XMVLIST\x72\1\0\0HEADLIST\x6e\0\0\0HNFO'
+    data2 = data1 + 'name)\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6_8k.4xa\x00\x00info\x1f\x00\x00\x00Packed with 4xmovie v. 1.0.0.3\x00\x00std_\x08\x00\x00\x00\xf3&\x00\x00\x00\x00\xc8@LIST\xf0\x00\x00\x00TRK_LIST~\x00\x00\x00VTRKname&\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6.avi\x00vtrkD\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00LIST^\x00\x00\x00STRKname"\x00\x00\x00E:\\brett\\ToyStory2\\TS2_7884Hz.wav\x00strk(\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\x01\x00\x00\x00\xcc\x1e\x00\x00\x10\x00\x00\x00'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], '4xm')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], '4xm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data1),
+                     {'format': '4xm', 'tracks': []})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data2),
+                     {'format': '4xm',
+                      'tracks': [{'type': 'video', 'codec': '4xm', 'width': 240, 'height': 112},
+                                 {'type': 'audio', 'codec': 'adpcm2', 'channel_count': 1, 'sample_rate': 7884, 'sample_size': 16}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
