@@ -7513,6 +7513,9 @@ FORMAT_ITEMS = (
     # http://review-tech.appspot.com/bmf-file.html
     # https://github.com/digipres/digipres.github.io/blob/master/_sources/registries/trid/triddefs_xml/bmf-corel.trid.xml
     ('corel-bmf', (0, '@CorelBMF\n\rCorel Corporation\n\r')),
+    # http://fileformats.archiveteam.org/wiki/BMF_%28Dmitry_Shkarin%29
+    # https://github.com/digipres/digipres.github.io/blob/master/_sources/registries/trid/triddefs_xml/bitmap-bmf-1x.trid.xml
+    ('shkarin-bmf', (0, '\x81\x8a', 2, ('\x31', '\x32'), 10, '\0\0\0\0', 18, '\0\0')),
 
     # * It's not feasible to detect
     #   http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is
