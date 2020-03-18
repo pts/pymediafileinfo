@@ -7026,6 +7026,33 @@ def analyze_cmuwm(fread, info, fskip):
     info['width'], info['height'] = struct.unpack(fmt + 'LL', header[4 : 12])
 
 
+def analyze_utah_rle(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Utah_RLE
+  # http://www.fileformat.info/format/utah/egff.htm
+  # http://paulbourke.net/dataformats/urt/
+  # Samples: ftp://ftp.uni-potsdam.de/pub/unix/graphics/imageprocessing/urt/urt-img.tar
+  header = fread(15)
+  if len(header) < 2:
+    raise ValueError('Too short for utah-rle.')
+  if not header.startswith('\x52\xcc'):
+    raise ValueError('utal-rle signature not found.')
+  info['format'], info['codec'] = 'utah-rle', 'rle'
+  if len(header) >= 15:
+    (xpos, ypos, xsize, ysize, flags, ncolors, pixelbits, ncmap, cmaplen,
+    ) = struct.unpack('<4H5B', header[2 : 15])
+    info['width'], info['height'] = xsize, ysize
+    if flags > 15:
+      raise ValueError('Bad utah-rle flags.')
+    if not 1 <= ncolors <= 5:
+      raise ValueError('Bad utah-rle ncolors.')
+    if pixelbits != 8:
+      raise ValueError('Bad utah-rle pixelbits.')
+    if ncmap > 5:
+      raise ValueError('Bad utah-rle ncmap.')
+    if cmaplen > 8:
+      raise ValueError('Bad utah-rle cmaplen.')
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7258,6 +7285,9 @@ FORMAT_ITEMS = (
     ('ybm', (0, '!!')),
     ('fbm', (0, '%bitmap\0')),
     ('cmuwm', (0, ('\xf1\0\x40\xbb', '\xbb\x40\0\xf1'))),
+    ('utah-rle', (0, '\x52\xcc',         10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
+    # Adding this with xpos=0 and ypos=0 for better header matching of the most common case.
+    ('utah-rle', (0, '\x52\xcc\0\0\0\0', 10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7873,6 +7903,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_fbm(fread, info, fskip)
   elif format == 'cmuwm':
     analyze_cmuwm(fread, info, fskip)
+  elif format == 'utah-rle':
+    analyze_utah_rle(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

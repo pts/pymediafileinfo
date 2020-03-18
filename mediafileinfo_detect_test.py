@@ -812,6 +812,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data2),
                      {'format': 'bmp', 'height': 480, 'width': 640})
 
+  def test_analyze_utah_rle(self):
+    data1 = '\x52\xcc\x1c\0\x2c\0\x3e\0\x32\0\x05\x03\x08\0\x08'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'utah-rle')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_utah_rle, data1),
+                     {'format': 'utah-rle', 'codec': 'rle', 'height': 50, 'width': 62})
+
   def test_detect_fig(self):
     self.assertEqual(mediafileinfo_detect.detect_format('#FIG 3.2\n')[0], 'fig')
 
