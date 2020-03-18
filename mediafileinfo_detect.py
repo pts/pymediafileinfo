@@ -7153,6 +7153,32 @@ def analyze_spix(fread, info, fskip):
   info['width'], info['height'] = struct.unpack(fmt + 'LL', header[4 : 12])
 
 
+def analyze_sgi_rgb(fread, info, fskip):
+  # http://paulbourke.net/dataformats/sgirgb/sgiversion.html
+  # https://www.fileformat.info/format/sgiimage/egff.htm
+  # http://fileformats.archiveteam.org/wiki/SGI_(image_file_format)
+  # http://reality.sgi.com/grafica/sgiimage.html
+  # As indicated in sgiversion.html, only big endian is supported.
+  header = fread(12)
+  if len(header) < 12:
+    raise ValueError('Too short for sgi-rgb.')
+  (magic, storage, bpc, dimension, width, height, zsize,
+  ) = struct.unpack('>HBBHHHH', header[:12])
+  if magic != 474:
+    raise ValueError('sgi-rgb signature not found.')
+  if storage > 1:
+    raise ValueError('Bad sgi-rgb storage.')
+  if bpc not in (1, 2):
+    raise ValueError('Bad sgi-rgb bpc.')
+  if dimension not in (1, 2, 3):
+    raise ValueError('Bad sgi-rgb dimension.')
+  if dimension == 3 and zsize not in (1, 2, 3, 4, 5):
+    raise ValueError('Bad sgi-rgb zsize.')
+  info['format'] = 'sgi-rgb'
+  info['codec'] = ('uncompressed', 'rle')[storage]
+  info['width'], info['height'] = width, height
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7391,6 +7417,7 @@ FORMAT_ITEMS = (
     ('ftc', (0, 'FTC\0\1\1\2\1')),
     ('fif', (0, 'FIF\1')),
     ('spix', (0, 'spix', 24, lambda header: (is_spix(header), 812))),
+    ('sgi-rgb', (0, '\x01\xda', 2, ('\0', '\1'), 3, ('\1', '\2'), 4, ('\0\1', '\0\2', '\0\3'), 12, lambda header: (len(header) >= 12 and (header[5] != '\3' or (header[10] == '\0' and 1 <= ord(header[11]) <= 5)), 10))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8019,6 +8046,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_fif(fread, info, fskip)
   elif format == 'spix':
     analyze_spix(fread, info, fskip)
+  elif format == 'sgi-rgb':
+    analyze_sgi_rgb(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

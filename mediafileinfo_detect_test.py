@@ -994,6 +994,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_spix, data2),
                      {'format': 'spix', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
+  def test_analyze_sgi_rgb(self):
+    data1 = '\x01\xda\1\2\0\3\2\3\2\1\0\5'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'sgi-rgb')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sgi_rgb, data1),
+                     {'format': 'sgi-rgb', 'codec': 'rle', 'height': 513, 'width': 515})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
