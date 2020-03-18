@@ -7126,6 +7126,33 @@ def analyze_fif(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('<LL', header[6 : 14])
 
 
+def is_spix(header):
+  if len(header) < 24:
+    return False
+  header = header[:24]
+  allowed_depths = (1, 2, 4, 8, 16, 24, 32, 40)
+  for fmt in '<>':
+    signature, width, height, depth, wpl, palette_color_count = struct.unpack(fmt + '4s5L', header)
+    # Width and height limit imposed in spixio.c are 1000000
+    if signature == 'spix' and not width >> 24 and not height >> 24 and depth in allowed_depths and wpl > 0 and palette_color_count <= 256:
+      return True
+  return False
+
+
+def analyze_spix(fread, info, fskip):
+  # https://github.com/DanBloomberg/leptonica/blob/cdef566863f2234114317e9a80710b7abba1760e/src/spixio.c#L446-L452
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for spix.')
+  if not header.startswith('spix'):
+    raise ValueError('spix signature not found.')
+  if not is_spix(header):
+    raise ValueError('Bad spix header.')
+  info['format'], info['codec'] = 'spix', 'uncompressed'
+  fmt = '<>'[header[12] == '\0']  # Big endian depth.
+  info['width'], info['height'] = struct.unpack(fmt + 'LL', header[4 : 12])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7363,6 +7390,7 @@ FORMAT_ITEMS = (
     ('utah-rle', (0, '\x52\xcc\0\0\0\0', 10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
     ('ftc', (0, 'FTC\0\1\1\2\1')),
     ('fif', (0, 'FIF\1')),
+    ('spix', (0, 'spix', 24, lambda header: (is_spix(header), 812))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7989,6 +8017,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ftc(fread, info, fskip)
   elif format == 'fif':
     analyze_fif(fread, info, fskip)
+  elif format == 'spix':
+    analyze_spix(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

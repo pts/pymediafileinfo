@@ -984,6 +984,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fif, data1),
                      {'format': 'fif', 'codec': 'fractal', 'height': 513, 'width': 515})
 
+  def test_analyze_spix(self):
+    data1 = 'spix\3\2\0\0\1\2\0\0(\0\0\0????\0\1\0\0'
+    data2 = 'spix\0\0\2\3\0\0\2\1\0\0\0(????\0\0\1\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'spix')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'spix')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_spix, data1),
+                     {'format': 'spix', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_spix, data2),
+                     {'format': 'spix', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
