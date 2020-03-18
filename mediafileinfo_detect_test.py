@@ -812,6 +812,27 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data2),
                      {'format': 'bmp', 'height': 480, 'width': 640})
 
+  def test_analyze_rdi(self):
+    data_bmp = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
+    data1 = 'RIFF????RDIB' + data_bmp
+    data2 = 'RIFF????RDIBdata' + data_bmp
+    data3 = 'RIFF????RDIBdata????' + data_bmp
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rdi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:14])[0], 'rdi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'rdi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2[:16])[0], 'rdi')
+    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'rdi')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data1),
+                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data1[:14]),
+                     {'format': 'rdi'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data2),
+                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data2[:16]),
+                     {'format': 'rdi'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data3),
+                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+
   def test_analyze_utah_rle(self):
     data1 = '\x52\xcc\x1c\0\x2c\0\x3e\0\x32\0\x05\x03\x08\0\x08'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'utah-rle')

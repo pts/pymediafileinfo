@@ -1877,7 +1877,7 @@ def analyze_rmmp(fread, info, fskip):
       data = fread(8)
       if len(data) >= 8:
         codec, = struct.unpack('<4xL', data[:8])
-        track_info['codec'] = BMP_CODECS.get(codec, str(codec))
+        track_info['codec'] = DIB_CODECS.get(codec, str(codec))
     info['tracks'].append(track_info)
 
 
@@ -5074,7 +5074,7 @@ def analyze_xml(fread, info, fskip):
           break
 
 
-BMP_CODECS = {
+DIB_CODECS = {
     0: 'uncompressed',
     1: 'rle',
     2: 'rle',
@@ -5088,30 +5088,62 @@ BMP_CODECS = {
 }
 
 
+def populate_dib(info, data, format):
+  # Should be preceded by: data = fread(34).
+  if len(data) < 22:
+    print len(data)
+    raise ValueError('Too short for %s dib.' % format)
+  if not data.startswith('BM'):
+    raise ValueError('%s dib signature not found.' % format)
+  if data[6 : 10] != '\0\0\0\0' or data[15 : 18] != '\0\0\0':
+    raise ValueError('Bad %s dib data.'  % format)
+  b = ord(data[14])
+  if not 12 <= b <= 127:
+    raise ValueError('Bad %s dib info size: %d' % (format, b))
+  info['format'] = format
+  if b < 40 and len(data) >= 12:
+    info['width'], info['height'] = struct.unpack(
+        '<HH', data[18 : 22])
+  elif b >= 40 and len(data) >= 26:
+    info['width'], info['height'] = struct.unpack(
+        '<LL', data[18 : 26])
+    if len(data) >= 34 and b != 64:
+      codec, = struct.unpack('<L', data[30 : 34])
+      info['codec'] = DIB_CODECS.get(codec, str(codec))
+
+
 
 def analyze_bmp(fread, info, fskip):
   # https://en.wikipedia.org/wiki/BMP_file_format
-  header = fread(34)
-  if len(header) < 22:
+  data = fread(34)
+  if len(data) < 22:
     raise ValueError('Too short for bmp.')
-  if not header.startswith('BM'):
-    raise ValueError('bmp signature not found.')
-  if header[6 : 10] != '\0\0\0\0' or header[15 : 18] != '\0\0\0':
-    raise ValueError('Bad bmp header.')
-  b = ord(header[14])
-  if not 12 <= b <= 127:
-    raise ValueError('Bad bmp info size: %d' % b)
-  info['format'] = 'bmp'
-  # TODO(pts): Detect codec other than 'uncompressed'.
-  if b < 40 and len(header) >= 12:
-    info['width'], info['height'] = struct.unpack(
-        '<HH', header[18 : 22])
-  elif b >= 40 and len(header) >= 26:
-    info['width'], info['height'] = struct.unpack(
-        '<LL', header[18 : 26])
-    if len(header) >= 34 and b != 64:
-      codec, = struct.unpack('<L', header[30 : 34])
-      info['codec'] = BMP_CODECS.get(codec, str(codec))
+  if not data.startswith('BM'):
+    raise ValueError('bmp signature not found.' )
+  populate_dib(info, data, 'bmp')
+
+
+def analyze_rdi(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/RDIB
+  # https://www.aelius.com/njh/wavemetatools/doc/riffmci.pdf
+  # We don't support the ``extended RDIB'', because it has hard to find any
+  # sample files.
+  header = fread(20 + 34)
+  if len(header) < 14:
+    raise ValueError('Too short for rdi.')
+  has_data = header[12 : 16] == 'data'
+  if not (header.startswith('RIFF') and header[8 : 12] == 'RDIB' and (has_data or header[12 : 14] == 'BM')):
+    raise ValueError('rdi signature not found.' )
+  info['format'] = 'rdi'
+  if has_data:
+    # If there is a 4-byte chunk_size field after 'data', then header[26 :
+    # 30] becomes '\0\0\0\0' (dib_data[6 : 10]). This is how we detect the
+    # presence of chunk_size.
+    header = header[20 - 4 * (len(header) >= 30 and header[16 : 18] == 'BM' and header[22 : 26] == '\0\0\0\0' and header[26 : 30] != '\0\0\0\0'):]
+  else:
+    header = header[12:]
+  if len(header) >= 22:
+    populate_dib(info, header, 'rdi')
 
 
 def analyze_flic(fread, info, fskip):
@@ -7341,6 +7373,8 @@ FORMAT_ITEMS = (
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
+    ('rdi', (0, 'RIFF', 8, 'RDIBBM')),
+    ('rdi', (0, 'RIFF', 8, 'RDIBdata')),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
@@ -7979,6 +8013,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mp4(fread, info, fskip)
   elif format == 'bmp':
     analyze_bmp(fread, info, fskip)
+  elif format == 'rdi':
+    analyze_rdi(fread, info, fskip)
   elif format == 'flic':
     analyze_flic(fread, info, fskip)
   elif format == 'mng':
