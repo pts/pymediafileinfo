@@ -930,6 +930,23 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'midi')
     self.assertEqual(mediafileinfo_detect.detect_format('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2)[0], 'midi-rmid')
 
+  def test_analyze_wav(self):
+    data_riff = 'RIFF\x44\xc2\1\0WAVE'
+    data_pcm = 'fmt \x12\0\0\0\1\0\1\0\x11\x2b\0\0\x22\x56\0\0\2\0\x10\0'
+    data_mp3 = 'fmt \x1e\0\0\0\x55\0\1\0\x40\x1f\0\0\xd0\x07\0\0 \1\0\0\0'
+    data_bext = 'bext\5\0\0\0??????'  # Round 5 to 6, to word boundary.
+    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_pcm)[0], 'wav')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_mp3)[0], 'wav')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_bext)[0], 'wav')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, data_riff + data_pcm),
+                     {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'pcm', 'type': 'audio', 'sample_rate': 11025, 'sample_size': 16}]}),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, data_riff + data_mp3),
+                     {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff, data_bext, data_bext, data_mp3))),
+                     {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff[:-4] + 'RMP3', data_bext, data_bext, 'bext\xff\0\0\0' + '?' * 256, data_mp3))),
+                     {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

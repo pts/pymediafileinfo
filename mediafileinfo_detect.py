@@ -4720,13 +4720,30 @@ def analyze_wav(fread, info, fskip):
   header = fread(36)
   if len(header) < 36:
     raise ValueError('Too short for wav.')
-  if not header.startswith('RIFF') or header[8 : 12] != 'WAVE':
+  if not header.startswith('RIFF') or header[8 : 12] not in ('WAVE', 'RMP3'):
     raise ValueError('wav signature not found.')
   info['format'] = 'wav'
+  while header[12 : 16] == 'bext':  # Skip 'bext' chunk(s).
+    chunk_size, = struct.unpack('<L', header[16 : 20])
+    chunk_size += chunk_size & 1
+    i = chunk_size - (len(header) - 20)
+    if i < 0:
+      header = header[:12] + header[20 + chunk_size:]
+    else:
+      header = header[:12]
+      if not fskip(i):
+        raise ValueError('EOF in wav bext chunk.')
+    if len(header) < 36:
+      header += fread(36 - len(header))
+      if len(header) < 36:
+        raise ValueError('EOF after bext chunk.')
   if header[12 : 16] != 'fmt ':
     raise ValueError('wav fmt chunk missing.')
-  wave_format, channel_count, sample_rate, _, _, sample_size = (
-      struct.unpack('<HHLLHH', header[20 : 36]))
+  fmt_size, wave_format, channel_count, sample_rate, _, _, sample_size = (
+      struct.unpack('<LHHLLHH', header[16 : 36]))
+  # Observation: 234 x fmt_size=16, 10 x fmt_size=18, 2 x fmt_size=50, 1 fmt_size=30.
+  if not 16 <= fmt_size <= 80:
+    raise ValueError('Bad wav fmt_size: %d' % fmt_size)
   info['tracks'] = []
   info['tracks'].append({
       'type': 'audio',
@@ -7317,7 +7334,8 @@ FORMAT_ITEMS = (
 
     # Audio.
 
-    ('wav', (0, 'RIFF', 8, 'WAVE')),
+    # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
+    ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ')))),
     # https://en.wikipedia.org/wiki/ID3
     # http://id3.org/id3v2.3.0
     # ID3v1 is at the end of the file, so we don't care.
