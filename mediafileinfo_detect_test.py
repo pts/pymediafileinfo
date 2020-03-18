@@ -1011,6 +1011,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data1 = 'XARA\xa3\xa3\r\n\2\0\0\0\x25\0\0\0CXN????\0\0\0\0'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xara')
 
+  def test_detect_cdr(self):
+    data1 = 'RIFF????CDR9vrsn\2\0\0\0DISP'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'cdr')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:20])[0], 'cdr')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

@@ -7575,6 +7575,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/CorelDRAW
     # https://github.com/LibreOffice/libcdr/blob/04b3c20882653adf4727a4dcf18fa1b577c0f20e/src/lib/CDRParser.cpp#L228
     ('cdr-old', (0, 'WLm\0')),
+    # http://fileformats.archiveteam.org/wiki/CorelDRAW
+    # https://www.ntfs.com/corel-draw-format.htm
+    ('cdr', (0, 'RIFF', 8, ('CDR', 'cdr'), 11, tuple('456789ABCD'), 12, 'vrsn', 17, '\0\0\0')),
 
     # Compressed archive.
 
