@@ -7344,6 +7344,33 @@ def analyze_sgi_rgb(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_xv_pm(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/PM_(XV_image)
+  # Reader code: https://github.com/ingowald/updated-xv/blob/master/xvpm.c
+  # Reader code: xv-3.10a/xvpm.c
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for xv-pm.')
+  if header.startswith('VIEW\0\0\0') and header[7] != '\0':
+    fmt = '>'
+  elif header.startswith('WEIV') and header[4] != '\0' and header[5 : 8] == '\0\0\0':
+    fmt = '<'
+  else:
+    raise ValueError('xv-pm signature not found.')
+  info['format'], info['codec'] = 'xv-pm', 'uncompressed'
+  (magic, component_count, height, width, band_count, pixel_format,
+  ) = struct.unpack(fmt + '6L', header[:24])
+  info['width'], info['height'] = width, height
+  if component_count not in (1, 3, 4):
+    raise ValueError('Bad xv-pm component_count: %d' % component_count)
+  if band_count != 1:
+    raise ValueError('Bad xv-pm band_count: %d' % band_count)
+  if pixel_format not in (0x8001, 0x8004):
+    raise ValueError('Bad xv-pm pixel_format: 0x%x' % pixel_format)
+  if pixel_format == 0x8004 and component_count != 1:
+    raise ValueError('Bad xv-pm indexed component_count: %d' % component_count)
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7586,6 +7613,8 @@ FORMAT_ITEMS = (
     ('fif', (0, 'FIF\1')),
     ('spix', (0, 'spix', 24, lambda header: (is_spix(header), 812))),
     ('sgi-rgb', (0, '\x01\xda', 2, ('\0', '\1'), 3, ('\1', '\2'), 4, ('\0\1', '\0\2', '\0\3'), 12, lambda header: (len(header) >= 12 and (header[5] != '\3' or (header[10] == '\0' and 1 <= ord(header[11]) <= 5)), 10))),
+    ('xv-pm', (0, 'VIEW\0\0\0', 7, ('\1', '\3', '\4'), 16, '\0\0\0\1\0\0\x80', 23, ('\1', '\4'))),
+    ('xv-pm', (0, 'WEIV', 4, ('\1', '\3', '\4'), 5, '\0\0\0', 16, '\1\0\0\0', 20, ('\1', '\4'), 21, '\x80\0\0')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8242,6 +8271,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_spix(fread, info, fskip)
   elif format == 'sgi-rgb':
     analyze_sgi_rgb(fread, info, fskip)
+  elif format == 'xv-pm':
+    analyze_xv_pm(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

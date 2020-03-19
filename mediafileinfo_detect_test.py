@@ -1000,6 +1000,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sgi_rgb, data1),
                      {'format': 'sgi-rgb', 'codec': 'rle', 'height': 513, 'width': 515})
 
+  def test_analyze_xv_pm(self):
+    data1 = 'VIEW\0\0\0\4\0\0\2\1\0\0\2\3\0\0\0\1\0\0\x80\1'
+    data2 = 'WEIV\4\0\0\0\1\2\0\0\3\2\0\0\1\0\0\0\1\x80\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xv-pm')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'xv-pm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, data1),
+                     {'format': 'xv-pm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, data2),
+                     {'format': 'xv-pm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+
   def test_analyze_ani(self):
     data1 = 'RIFF????ACONLIST\x2e\0\0\0INFOINAM\x14\0\0\0Disappearing Cheese\0IART\6\0\0\0lynne\0anih' + '24000000240000001800000019000000000000000000000000000000000000000a0000000300000072617465640000000a0000000a0000000a0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000003c0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000002800000005000000640000007365712064000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f0000000e00000010000000110000001200000013000000140000001500000016000000170000004c495354944800006672616d69636f6efe0200000000020001002120000000000000e802000016000000'.decode('hex')
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ani')
