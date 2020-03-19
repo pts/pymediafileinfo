@@ -242,14 +242,21 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_preview = '\xc5\xd0\xd3\xc6 \0\0\0\x79\x69\7\0\0\0\0\0\0\0\0\0\x99\x69\7\0\xfd\x66\4\0\xff\xff\0\0'
     data_line1 = '%!PS-Adobe-3.0\tEPSF-3.0\r\n'
     data_more = '%%Creator: (ImageMagick)\n%%Title:\t(image.eps2)\r\n%%CreationDate: (2019-10-22T21:27:41+02:00)\n%%BoundingBox:\t-1 -0.8\t \t34 56.2\r\n%%HiResBoundingBox: 0\t0\t3 5\r%%LanguageLevel:\t2\r%%Pages: 1\r%%EndComments\nuserdict begin end'
+    data_mps = '%!PS\n%%BoundingBox: 10 20 31 40\n'
     self.assertEqual(mediafileinfo_detect.detect_format(data_line1)[0], 'ps')
     self.assertEqual(mediafileinfo_detect.detect_format(data_preview)[0], 'ps')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_mps)[0], 'ps')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_mps.replace('\n', '\r\n'))[0], 'ps')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_line1),
                      {'format': 'ps', 'subformat': 'eps', 'has_preview': False})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_line1 + data_more),
                      {'format': 'ps', 'subformat': 'eps', 'has_preview': False, 'height': 57, 'width': 35})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_preview + data_line1 + data_more),
                      {'format': 'ps', 'subformat': 'eps', 'has_preview': True, 'height': 57, 'width': 35})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_mps),
+                     {'format': 'ps', 'subformat': 'mps', 'has_preview': False, 'height': 20, 'width': 21})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_mps.replace('\n', '\r\n')),
+                     {'format': 'ps', 'subformat': 'mps', 'has_preview': False, 'height': 20, 'width': 21})
 
   def test_analyze_mp4_jp2(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mp4, self.JP2_HEADER),

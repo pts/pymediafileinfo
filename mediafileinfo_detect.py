@@ -5868,7 +5868,7 @@ def analyze_pam(fread, info, fskip):
 
 def analyze_ps(fread, info, fskip):
   # https://web.archive.org/web/20070204021414/http://partners.adobe.com/public/developer/en/ps/5002.EPSF_Spec.pdf
-  header = fread(15)
+  header = fread(21)
   if len(header) < 15:
     raise ValueError('Too short for ps.')
   has_preview = False
@@ -5878,11 +5878,14 @@ def analyze_ps(fread, info, fskip):
     eps_ofs, = struct.unpack('<L', header[4 : 8])
     has_preview = True
     assert eps_ofs >= len(header)
-    header = fskip(eps_ofs - len(header)) and fread(15)
+    header = fskip(eps_ofs - len(header)) and fread(21)
     if len(header or '') < 15:
       raise ValueError('EOF before eps section.')
-  if not (header.startswith('%!PS-Adobe-') and
-          header[11] in '123' and header[12] == '.'):
+  if not ((header.startswith('%!PS-Adobe-') and
+           header[11] in '123' and header[12] == '.') or
+          header.startswith('%!PS\r\n%%BoundingBox: ') or
+          (header.startswith('%!PS') and header[4] in '\r\n' and
+           header[5 : 20] == '%%BoundingBox: ')):
     raise ValueError('ps signature not found.')
   info['format'], info['has_preview'] = 'ps', has_preview
   i = 0
@@ -5903,7 +5906,9 @@ def analyze_ps(fread, info, fskip):
     if not data:
       break
   header = header.split('\n')
-  if ' EPSF-' in header[0]:
+  if header[0] == '%!PS':
+    info['subformat'] = 'mps'  # Old version: '%%Creator: MetaPost\n'.
+  elif ' EPSF-' in header[0]:
     info['subformat'] = 'eps'
   else:
     info['subformat'] = 'ps'
@@ -7697,6 +7702,8 @@ FORMAT_ITEMS = (
 
     ('pdf', (0, '%PDF-1.')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
+    ('ps', (0, '%!PS', 4, ('\n', '\r'), 5, '%%BoundingBox: ')),
+    ('ps', (0, '%!PS\r\n%%BoundingBox: ')),
     ('ps', (0, '\xc5\xd0\xd3\xc6', 5, '\0\0\0', 8, lambda header: (ord(header[4]) >= 30, 2))),
     # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
