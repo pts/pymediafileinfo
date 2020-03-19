@@ -7429,6 +7429,48 @@ def analyze_imlib_argb(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def count_is_imlib_eim(header):
+  if len(header) < 13:  # Prerequisite: header = fread(14)
+    return 0
+  d = header[5] == '\r'
+  header = header.replace('\r\n', '\n')
+  if not (header.startswith('EIM 1\nIMAGE ') and header[12 : 13] in '-0123456789'):
+    return 0
+  return (13 + d) * 100
+
+
+def analyze_imlib_eim(fread, info, fskip):
+  # Reader code: search for `fprintf(f, "IMAGE %i' in Imlib/load.c in https://ftp.gnome.org/pub/gnome/sources/imlib/1.9/imlib-1.9.15.tar.gz
+  # Reader code: search for `fprintf(f, "IMAGE %i' in https://stuff.mit.edu/afs/athena/project/windowmgr/src/imlib-1.9.8/Imlib/load.c
+  header = fread(14)
+  if len(header) < 13:  # Sic 13, because of the repace below.
+    raise ValueError('Too short for imlib-eim.')
+  header = header.replace('\r\n', '\n')
+  if not (header.startswith('EIM 1\nIMAGE ') and header[12 : 13] in '-0123456789'):
+    raise ValueError('imlib-eim signature not found.')
+  info['format'], info['codec'] = 'imlib-eim', 'uncompressed'
+  header += fread(1024 - 14).replace('\r\n', '\n')
+  # Allow any character but '\n' in the 2nd argument (``iden'') of IMAGE.
+  i = header.find('\n', 6)
+  if i < 0:
+    header += fread(1536).replace('\r\n', '\n')
+    i = header.find('\n', 6)
+  if i >= 0:
+    header = header[6 : i][::-1].split(' ', 9)
+    if len(header) < 9:
+      raise ValueError('Too few items in imlib-eim image line.')
+    header = ' '.join(header[:9])[::-1].split(' ')
+    try:
+      header = map(int, header)
+    except ValueError:
+      raise ValueError('Bad number in imlib-eim image line.')
+    if header[0] < 0:
+      raise ValueError('Bad imlib-eim width: %d' % header[0])
+    if header[1] < 0:
+      raise ValueError('Bad imlib-eim height: %d' % header[1])
+    info['width'], info['height'] = header[:2]
+
+
 def analyze_farbfeld(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Farbfeld
   header = fread(16)
@@ -7686,6 +7728,7 @@ FORMAT_ITEMS = (
     ('xv-pm', (0, 'VIEW\0\0\0', 7, ('\1', '\3', '\4'), 16, '\0\0\0\1\0\0\x80', 23, ('\1', '\4'))),
     ('xv-pm', (0, 'WEIV', 4, ('\1', '\3', '\4'), 5, '\0\0\0', 16, '\1\0\0\0', 20, ('\1', '\4'), 21, '\x80\0\0')),
     ('imlib-argb', (0, 'ARGB ', 5, tuple('123456789'), 32, lambda header: adjust_confidence(600, count_is_imlib_argb(header)))),
+    ('imlib-eim', (0, 'EIM 1', 14, lambda header: adjust_confidence(500, count_is_imlib_eim(header)))),
     ('farbfeld', (0, 'farbfeld')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
@@ -8350,6 +8393,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xv_pm(fread, info, fskip)
   elif format == 'imlib-argb':
     analyze_imlib_argb(fread, info, fskip)
+  elif format == 'imlib-eim':
+    analyze_imlib_eim(fread, info, fskip)
   elif format == 'farbfeld':
     analyze_farbfeld(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):

@@ -1035,6 +1035,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_argb, data1.replace('\n', '\r\n')),
                      {'format': 'imlib-argb', 'codec': 'uncompressed', 'height': 45, 'width': 123})
 
+  def test_analyze_imlib_eim(self):
+    data1 = 'EIM 1\nIMAGE 9'
+    data_filename = 'Hello, World!\t\r\fThis is a filename!\r\vThe answer is 42 43'
+    data2 = 'EIM 1\nIMAGE 16605 ' + data_filename + ' 123 45 7 6 5 4 3 2 1\n'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'imlib-eim')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'imlib-eim')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2.replace('\n', '\r\n'))[0], 'imlib-eim')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_eim, data1),
+                     {'format': 'imlib-eim', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_eim, data2),
+                     {'format': 'imlib-eim', 'codec': 'uncompressed', 'height': 45, 'width': 123})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_eim, data2.replace('\n', '\r\n')),
+                     {'format': 'imlib-eim', 'codec': 'uncompressed', 'height': 45, 'width': 123})
+
   def test_analyze_farbfeld(self):
     data1 = 'farbfeld\0\0\2\3\0\0\2\1'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'farbfeld')
