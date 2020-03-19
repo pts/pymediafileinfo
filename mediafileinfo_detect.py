@@ -7387,6 +7387,48 @@ def analyze_xv_pm(fread, info, fskip):
     raise ValueError('Bad xv-pm indexed component_count: %d' % component_count)
 
 
+def parse_imlib_argb_header(header):
+  if len(header) < 11:  # Prerequisite: header = fread(32)
+    raise ValueError('Too short for imlib-argb.')
+  if not header.startswith('ARGB '):
+    raise ValueError('imlib-argb signature not found.')
+  header = header[:32].replace('\r', '\n')
+  i = header.find('\n')
+  if i < 0:
+    raise ValueError('Newline missing in first %d bytes of imlib-argb header.' % len(header))
+  header = header[:i]
+  magic, width, height, alpha = header.split(' ')
+  try:
+    width = int(width)
+  except ValueError:
+    raise ValueError('Bad imlib-argb width: %r' % width)
+  if width <= 0:
+    raise ValueError('Bad imlib-argb width: %d: width')  # Consistent with FormatDb.
+  try:
+    height = int(height)
+  except ValueError:
+    raise ValueError('Bad imlib-argb height: %r' % height)
+  if height <= 0:
+    raise ValueError('Bad imlib-argb height: %d' % height)
+  if alpha not in '01':
+    raise ValueError('Bad imlib-argb alpha: %r' % alpha)
+  return i + 1, width, height
+
+
+def count_is_imlib_argb(header):
+  try:
+    return parse_imlib_argb_header(header)[0] * 100
+  except ValueError:
+    return 0
+
+
+def analyze_imlib_argb(fread, info, fskip):
+  # Reader code: https://downloads.sourceforge.net/enlightenment/imlib2-1.6.1.tar.bz2 loader_argb.c
+  _, width, height = parse_imlib_argb_header(fread(32))
+  info['format'], info['codec'] = 'imlib-argb', 'uncompressed'
+  info['width'], info['height'] = width, height
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7631,6 +7673,7 @@ FORMAT_ITEMS = (
     ('sgi-rgb', (0, '\x01\xda', 2, ('\0', '\1'), 3, ('\1', '\2'), 4, ('\0\1', '\0\2', '\0\3'), 12, lambda header: (len(header) >= 12 and (header[5] != '\3' or (header[10] == '\0' and 1 <= ord(header[11]) <= 5)), 10))),
     ('xv-pm', (0, 'VIEW\0\0\0', 7, ('\1', '\3', '\4'), 16, '\0\0\0\1\0\0\x80', 23, ('\1', '\4'))),
     ('xv-pm', (0, 'WEIV', 4, ('\1', '\3', '\4'), 5, '\0\0\0', 16, '\1\0\0\0', 20, ('\1', '\4'), 21, '\x80\0\0')),
+    ('imlib-argb', (0, 'ARGB ', 5, tuple('123456789'), 32, lambda header: adjust_confidence(600, count_is_imlib_argb(header)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8292,6 +8335,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_sgi_rgb(fread, info, fskip)
   elif format == 'xv-pm':
     analyze_xv_pm(fread, info, fskip)
+  elif format == 'imlib-argb':
+    analyze_imlib_argb(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
