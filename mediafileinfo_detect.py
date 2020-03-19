@@ -7429,6 +7429,18 @@ def analyze_imlib_argb(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_farbfeld(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Farbfeld
+  header = fread(16)
+  if len(header) < 8:
+    raise ValueError('Too short for farbfeld.')
+  if not header.startswith('farbfeld'):
+    raise ValueError('farbfeld signature not found.')
+  info['format'], info['codec'] = 'farbfeld', 'uncompressed'
+  if len(header) >= 16:
+    info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7674,6 +7686,7 @@ FORMAT_ITEMS = (
     ('xv-pm', (0, 'VIEW\0\0\0', 7, ('\1', '\3', '\4'), 16, '\0\0\0\1\0\0\x80', 23, ('\1', '\4'))),
     ('xv-pm', (0, 'WEIV', 4, ('\1', '\3', '\4'), 5, '\0\0\0', 16, '\1\0\0\0', 20, ('\1', '\4'), 21, '\x80\0\0')),
     ('imlib-argb', (0, 'ARGB ', 5, tuple('123456789'), 32, lambda header: adjust_confidence(600, count_is_imlib_argb(header)))),
+    ('farbfeld', (0, 'farbfeld')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8337,6 +8350,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xv_pm(fread, info, fskip)
   elif format == 'imlib-argb':
     analyze_imlib_argb(fread, info, fskip)
+  elif format == 'farbfeld':
+    analyze_farbfeld(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
