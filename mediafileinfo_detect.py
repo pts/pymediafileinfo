@@ -5867,13 +5867,24 @@ def analyze_pam(fread, info, fskip):
 
 
 def analyze_ps(fread, info, fskip):
+  # https://web.archive.org/web/20070204021414/http://partners.adobe.com/public/developer/en/ps/5002.EPSF_Spec.pdf
   header = fread(15)
   if len(header) < 15:
     raise ValueError('Too short for ps.')
+  has_preview = False
+  if header.startswith('\xc5\xd0\xd3\xc6') and ord(header[4]) >= 30 and header[5 : 8] == '\0\0\0':
+    # EPS binary header, assuming that 32 <= eps_ofs <= 255.
+    # Format: magic, eps_ofs, eps_size, wmf_ofs, wmf_size, tiff_ofs, tiff_size, checksum = struct.unpack('<46LH', header[:30])
+    eps_ofs, = struct.unpack('<L', header[4 : 8])
+    has_preview = True
+    assert eps_ofs >= len(header)
+    header = fskip(eps_ofs - len(header)) and fread(15)
+    if len(header or '') < 15:
+      raise ValueError('EOF before eps section.')
   if not (header.startswith('%!PS-Adobe-') and
           header[11] in '123' and header[12] == '.'):
     raise ValueError('ps signature not found.')
-  info['format'] = 'ps'
+  info['format'], info['has_preview'] = 'ps', has_preview
   i = 0
   data, header = header, ''
   for _ in xrange(8):
@@ -7686,6 +7697,7 @@ FORMAT_ITEMS = (
 
     ('pdf', (0, '%PDF-1.')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
+    ('ps', (0, '\xc5\xd0\xd3\xc6', 5, '\0\0\0', 8, lambda header: (ord(header[4]) >= 30, 2))),
     # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
