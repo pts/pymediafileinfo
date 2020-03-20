@@ -621,6 +621,7 @@ MP4_VIDEO_CODECS = {
     'vp10': 'vp10',
     'vp11': 'vp11',
     'jpeg': 'jpeg',  # For qtif.
+    'kpcd': 'photocd',  # For pict.
 }
 
 # See all on: http://mp4ra.org/codecs.html
@@ -7735,6 +7736,34 @@ def analyze_alias_pix(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_photocd(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Photo_CD
+  # https://www.fileformat.info/format/photocd/egff.htm
+  # https://github.com/OpenPrinting/cups-filters/blob/master/cupsfilters/image-photocd.c
+  # https://mcampos-quinn.github.io/2018/12/20/pcd-normalization.html
+  # http://tedfelix.com/PhotoCD/
+  #
+  # We could be much smarter about the dimensions, e.g. we could get the
+  # dimensions of the highest-resolutin image (number 6, e.g. display
+  # file.pcd'[6]') in the .pcd file). Maybe tedfelix.com can advise.
+  header = fread(32)
+  if len(header) < 32:
+    raise ValueError('Too short for photocd.')
+  if header[:36].rstrip('\xff'):
+    raise ValueError('photcd signature not found.')
+  info['format'] = info['codec'] = 'photocd'
+  header += fread(41)
+  if len(header) >= 72:
+    width, height = 768, 512  # TODO(pts): Usage the largest resolution.
+    if (ord(header[72]) & 63) != 8:
+      width, height = height, width
+    if fskip(2048 - len(header)):
+      data = fread(7)
+      if len(data) == 7 and data != 'PCD_IPI':
+        raise ValueError('Bad photocd sector 1 signature.')
+    info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8039,6 +8068,7 @@ FORMAT_ITEMS = (
     ('alias-pix', (4, '\0\0\0\0\0', 9, ('\x08', '\x18'))),
     # http://fileformats.archiveteam.org/wiki/BRender_PIX
     ('brender-pix', (0, '\0\0\0\x12\0\0\0\x08\0\0\0\2\0\0\0\2')),
+    ('photocd', (0, '\xff' * 32)),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8719,6 +8749,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_cups_raster(fread, info, fskip)
   elif format == 'alias-pix':
     analyze_alias_pix(fread, info, fskip)
+  elif format == 'photocd':
+    analyze_photocd(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
