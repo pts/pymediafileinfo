@@ -7500,6 +7500,70 @@ def analyze_jpc(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
+def parse_wbmp_header(header):
+  # For simplicity and lack of examples online, we don't support key=value
+  # extension header, and we assume that all reserved bits are 0.
+  if len(header) < 2:
+    raise ValueError('Too short for wbmp.')
+  if not (header[0] == '\0' and header[1] in '\0\x80'):
+    raise ValueError('wbmp signature not found.')
+  b, i = ord(header[1]), 2
+  while b & 0x80:  # Skip extension header.
+    if i >= len(header):
+      raise ValueError('EOF in wbmp extension header.')
+    b = ord(header[i])
+    i += 1
+    if b not in (0, 0x80):
+      raise ValueError('Bad wbmp extension header type.')
+    while 1:
+      if i >= len(header):
+        raise ValueError('EOF in wbmp extension data.')
+      i += 1
+      if ord(header[i -1]) < 0x80:
+        break
+  width = c = 0
+  while 1:
+    if i >= len(header):
+      raise ValueError('EOF in wbmp width.')
+    c += 7
+    if c > 14:  # Heuristic guess based on WAP speeds and bandwidth costs.
+      raise ValueError('wbmp width too long.')
+    b = ord(header[i])
+    i += 1
+    width = width << 7 | (b & 0x7f)
+    if b < 0x80:
+      break
+  height = c = 0
+  while 1:
+    if i >= len(header):
+      raise ValueError('EOF in wbmp height.')
+    c += 7
+    if c > 14:  # Heuristic guess based on WAP speeds and bandwidth costs.
+      raise ValueError('wbmp height too long.')
+    b = ord(header[i])
+    i += 1
+    height = height << 7 | (b & 0x7f)
+    if b < 0x80:
+      break
+  return i, width, height
+
+
+def count_is_wbmp(header):
+  try:
+    return parse_wbmp_header(header)[0] * 100
+  except ValueError:
+    return 0
+
+
+def analyze_wbmp(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/WBMP
+  # https://fossies.org/linux/netpbm/converter/pbm/wbmptopbm.c
+  # http://www.wapforum.org/what/technical/SPEC-WAESpec-19990524.pdf
+  _, width, height = parse_wbmp_header(fread(32))
+  info['format'], info['codec'] = 'wbmp', 'uncompressed'
+  info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -7792,6 +7856,8 @@ FORMAT_ITEMS = (
     ('imlib-eim', (0, 'EIM 1', 14, lambda header: adjust_confidence(500, count_is_imlib_eim(header)))),
     ('farbfeld', (0, 'farbfeld')),
     ('fpx',),  # From 'olecf'.
+    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
+    ('wbmp', (0, '\0', 1, ('\0', '\x80'), 392, lambda header: adjust_confidence(300, count_is_wbmp(header)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8461,6 +8527,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_imlib_eim(fread, info, fskip)
   elif format == 'farbfeld':
     analyze_farbfeld(fread, info, fskip)
+  elif format == 'wbmp':
+    analyze_wbmp(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
