@@ -7500,6 +7500,50 @@ def analyze_jpc(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
+def analyze_olecf(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
+  # http://forensicswiki.org/wiki/OLE_Compound_File
+  header = fread(76)
+  if len(header) < 8:
+    raise ValueError('Too short for olecf.')
+  if not (header.startswith('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1') or
+          header.startswith('\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e')):
+    raise ValueError('olecf signature not found.')
+  info['format'] = 'olecf'
+  if len(header) < 76:
+    return
+  (magic, clid, minor_version, dll_version, byte_order, sector_shift,
+   mini_sector_shift, reserved0, reserved1, reserved2, csect_fat,
+   sect_dir_start, signature, mini_sector_cutoff, sect_mini_fat_start,
+   csect_mini_fat, sect_dif_start, sect_dif,
+  ) = struct.unpack('<8s16sHHHHHHLLLLLLLLLL', header[:76])
+  if byte_order != 0xfffe:
+    raise ValueError('Bad olecf byte_order.')
+  # http://fileformats.archiveteam.org/wiki/FlashPix
+  if (magic[0] == '\xd0' and 9 <= sector_shift <= 18 and
+      not reserved0 and not reserved1 and not reserved2 and
+      clid == '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'):
+    root_dir_ofs = 512 + (sect_dir_start << sector_shift)
+    if fskip(root_dir_ofs - len(header)):
+      data = fread(96)
+      if len(data) == 96:
+        (name_utf16, name_count, mse, bflags, sid_left_sib, sid_right_sib,
+         sid_child, clsid,
+        ) = struct.unpack('<64sHBBLLL16s', data)
+        if (name_utf16.startswith('R\0') and 2 <= name_count <= 64 and
+            mse == 5 and
+            sid_left_sib == 0xffffffff and sid_right_sib == 0xffffffff):
+          if clsid == '\x00\x67\x61\x56\x54\xc1\xce\x11\x85\x53\x00\xaa\x00\xa1\xf9\x5b':
+            # http://fileformats.archiveteam.org/wiki/FlashPix
+            # http://graphcomp.com/info/specs/livepicture/fpx.pdf
+            # pfx.pdf also contains a nice description of olecf.
+            info['format'] = 'fpx'  # Kodak FlashPix.
+            # Finding the image with the largest resolution and returning
+            # its name would be way too complicated: we'd have to navigate
+            # the FAT chains and directory structures.
+            return
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7747,6 +7791,7 @@ FORMAT_ITEMS = (
     ('imlib-argb', (0, 'ARGB ', 5, tuple('123456789'), 32, lambda header: adjust_confidence(600, count_is_imlib_argb(header)))),
     ('imlib-eim', (0, 'EIM 1', 14, lambda header: adjust_confidence(500, count_is_imlib_eim(header)))),
     ('farbfeld', (0, 'farbfeld')),
+    ('fpx',),  # From 'olecf'.
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -7974,8 +8019,8 @@ FORMAT_ITEMS = (
     # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
     ('jbf', (0, 'JASC BROWS FILE\0')),
     ('java-class', (0, '\xca\xfe\xba\xbe')),
-    # OLE compound file, including Thumbs.db
-    # http://forensicswiki.org/wiki/OLE_Compound_File
+    # OLE compound file == composite document file, including Thumbs.db and
+    # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
     ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
     ('avidemux-mpeg-index', (0, 'ADMY')),
     ('avidemux-project', (0, '//AD')),
@@ -8420,6 +8465,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
     info['codec'] = 'lzma'
+  elif format == 'olecf':
+    analyze_olecf(fread, info, fskip)
   elif format in ('mp4', 'mp4-wellknown-brand', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
   elif format == 'swf':

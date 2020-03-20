@@ -1105,6 +1105,26 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                       'tracks': [{'type': 'video', 'codec': '4xm', 'width': 240, 'height': 112},
                                  {'type': 'audio', 'codec': 'adpcm2', 'channel_count': 1, 'sample_rate': 7884, 'sample_size': 16}]})
 
+  def test_analyze_fpx(self):
+    data1 = ''.join((
+        '\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',  # olecf magic.
+        '\0' * 20,
+        '\xfe\xff',  # byte_order.
+        '\x09\0',  # sector_shift.
+        '\0' * 16,
+        '\1\0\0\0',  # sect_dir_start.
+        '\0' * 972,
+        'R\0' + '\0' * 62,
+        '\x16\0\5\0\xff\xff\xff\xff\xff\xff\xff\xff\3\0\0\0',
+        '\x00\x67\x61\x56\x54\xc1\xce\x11\x85\x53\x00\xaa\x00\xa1\xf9\x5b',  #  clsid.
+    ))
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'olecf')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'olecf')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_olecf, data1[:8]),
+                     {'format': 'olecf'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_olecf, data1),
+                     {'format': 'fpx'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
