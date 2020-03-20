@@ -7588,6 +7588,40 @@ def analyze_gd(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_gd2(fread, info, fskip):
+  # https://github.com/libgd/libgd/blob/577dc4475dc58bb1f3da81f91be440353a16120b/src/gd_gd2.c#L30-L58
+  header = fread(19)
+  if len(header) < 19:
+    raise ValueError('Too short for gd2.')
+  (magic, version, width, height, chunk_size, format,
+   x_chunk_count, y_chunk_count, is_truecolor,
+  ) = struct.unpack('>4s7HB', header[:19])
+  if magic != 'gd2\0':
+    raise ValueError('gd2 signature not found.')
+  if version not in (1, 2):
+    raise ValueError('Bad gd2 version: %d' % version)
+  if not chunk_size:
+    raise ValueError('Bad gd2 chunk_size.')
+  if not 1 <= format <= 4:
+    raise ValueError('Bad gd2 format: %d' % format)
+  if version > 1:
+    if is_truecolor != (format > 2):
+      raise ValueError('Bad gd2 is_truecolor.')
+    if not is_truecolor:
+      data = fread(2)
+      if len(data) == 2:
+        color_count, = struct.unpack('>H', data)
+        if not 1 <= color_count <= 256:
+          raise ValueError('Bad gd2 palette color count: %d' % color_count)
+  info['format'] = 'gd2'
+  info['codec'] = ('flate', 'uncompressed')[format & 1]
+  if not width:
+    raise ValueError('Bad gd2 width.')
+  if not height:
+    raise ValueError('Bad gd2 height.')
+  info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -7883,6 +7917,7 @@ FORMAT_ITEMS = (
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('wbmp', (0, '\0', 1, ('\0', '\x80'), 392, lambda header: adjust_confidence(300, count_is_wbmp(header)))),
     ('gd', (0, '\xff', 1, ('\xfe', '\xff'), 7, lambda header: (len(header) >= 7 and header[2 : 4] != '\0\0' and header[4 : 6] != '\0\0' and ord(header[6]) == (header[1] == '\xfe'), 102))),
+    ('gd2', (0, 'gd2\0\0', 5, ('\1', '\2'), 10, '\0', 11, ('\1', '\2', '\3', '\4'), 19, lambda header: (len(header) >= 19 and header[4 : 6] != '\0\0' and header[6 : 8] != '\0\0' and header[8 : 10] != '\0\0' and (header[5] == '\1' or ord(header[18]) == (header[13] in '\3\4')), 104))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8556,6 +8591,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_wbmp(fread, info, fskip)
   elif format == 'gd':
     analyze_gd(fread, info, fskip)
+  elif format == 'gd2':
+    analyze_gd2(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
