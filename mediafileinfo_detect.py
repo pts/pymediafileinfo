@@ -7483,6 +7483,23 @@ def analyze_farbfeld(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
+def analyze_jpc(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/JPEG_2000_codestream
+  # Annex A of http://www.hlevkin.com/Standards/fcd15444-1.pdf
+  header = fread(24)
+  if len(header) < 6:
+    raise ValueError('Too short for jpc.')
+  if not (header.startswith('\xff\x4f\xff\x51\0') and
+          # 1..10 components.
+          ord(header[5]) % 3 == 2 and 41 <= ord(header[5]) <= 68):
+    raise ValueError('jpc signature not found.')
+  info['format'], info['codec'] = 'jpc', 'jpeg2000'
+  if len(header) >= 24:
+    (magic, lsiz, rsiz, xsiz, ysiz, xosiz, yosiz,
+    ) = struct.unpack('>4sHHLLLL', header[:24])
+    info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -7736,8 +7753,9 @@ FORMAT_ITEMS = (
     ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
     ('qtif', (0, '\0\0\0', 4, 'idsc')),
     # JPEG-2000 container format.
-    # TODO(pts): Add detection and analyzing of elementary stream (bitstream) format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
+    # JPEG-2000 codestream (elementary stream, bitstream).
+    ('jpc', (0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
@@ -8420,6 +8438,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     if len(fread(12)) != 12:
       raise ValueError('Too short for jp2 header.')
     analyze_mp4(fread, info, fskip)
+  elif format == 'jpc':
+    analyze_jpc(fread, info, fskip)
   elif format == 'bmp':
     analyze_bmp(fread, info, fskip)
   elif format == 'rdi':

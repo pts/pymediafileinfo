@@ -588,5 +588,22 @@ elements. Some elements are truncated.
     01000000: compression=1
     86090000: data_size==(chunk_size + 46)
     ...
+* format=jpc
+  ff4f: SOC marker
+  ff51: SIZ marker
+  0029: Lsiz=39+2 (39 bytes to follow, Lsiz==(38 + 3 * Csiz) )
+  0000: Rsiz=0 (capabilities)
+  0000013f: Xsiz=319 (width=(Xsiz - XOsiz))
+  00000190: Ysiz=400 (height=(Ysiz - YOsiz))
+  00000000: XOsiz=0
+  00000000: YOsiz=0
+  0000013f: XTsiz=319
+  00000190: YTsiz=400
+  00000000: XTOsiz=0
+  00000000: YTOsiz=0
+  0001: Csiz=1 (grayscale) (what is the point of >4 components? is it possible?; allow 1 <= Csiz <= 10)
+  07: Ssiz[0]=7
+  01: XRsiz[0]=1
+  01: YRsiz[0]=1
 
 __END__
