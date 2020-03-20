@@ -7622,6 +7622,105 @@ def analyze_gd2(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def parse_cups_raster_header(header):
+  # http://fileformats.archiveteam.org/wiki/CUPS_Raster
+  # https://www.cups.org/doc/spec-raster.html
+  if len(header) < 408 and len(header) != 4:
+    raise ValueError('Too short for cups-raster.')
+  if header[:4] not in ('RaSt', 'tSaR', 'RaS2', '2SaR', 'RaS3', '3SaR'):
+    raise ValueError('cups-raster signature not found.')
+  if len(header) == 4:
+    return 400, None, None, None, None
+  fmt = '<>'[header[0] == 'R']
+  (magic, media_class, media_color, media_type, output_type,
+   advance_distance, advance_media, collate, cut_media, duplex,
+   hw_resolution_x, hw_resolution_y, imaging_llx, imaging_lly, imaging_urx,
+   imaging_ury, insert_sheet, jog, leading_edge, margin_left_origin,
+   margin_bttom_origin, manual_feed, media_position, media_weight,
+   mirror_print, negative_print, num_copies, orientation, output_face_up,
+   pt_width, pt_height, separations, tray_switch, tumble, cups_width,
+   cups_height, cups_media_type, cups_bits_per_color, cups_bits_per_pixel,
+   cups_bytes_per_line, cups_color_order, cups_color_space,
+  ) = struct.unpack(fmt + '4s64s64s64s64s7L4l26L', header[:408])
+  dict_obj = locals()
+  for name in (
+      'hw_resolution_x', 'hw_resolution_y', 'pt_width', 'pt_height',
+      'cups_width', 'cups_height', 'cups_bits_per_color',
+      'cups_bits_per_pixel', 'cups_bytes_per_line'):
+    if not dict_obj[name]:
+       raise ValueError('Expected nonzero cups-raster %s.' % name)
+  if imaging_urx < imaging_llx:
+    raise ValueError('Bad cups-raster imaging x.')
+  if imaging_ury < imaging_lly:
+    raise ValueError('Bad cups-raster imaging y.')
+  c = 400  # Because of magic. Our caller will subtract this.
+  log2_sub = '\x00\x00\x0c\x13\x19\x1d #%\')+,./0234566789::;<<==>??@@AABBBCCDDEEEFFFGGGHHHIIIJJJKKKKLLLLMMMMNNNNOOOOOPPPPPQQQQQRRRRRSSSSSSTTTTTTUUUUUUVVVVVVVWWWWWWWXXXXXXXXYYYYYYYYZZZZZZZZ[[[[[[[[[\\\\\\\\\\\\\\\\\\]]]]]]]]]]^^^^^^^^^^^___________```````````aaaaaaaaaaaaabbbbbbbbbbbbbcccccccccccccd'
+  for name, upper_bound in (
+      ('advance_media', 5),
+      ('collate', 2),
+      ('cut_media', 5),
+      ('duplex', 2),
+      ('insert_sheet', 2),
+      ('jog', 4),
+      ('leading_edge', 4),
+      ('manual_feed', 2),
+      ('media_position', 256),
+      ('mirror_print', 2),
+      ('negative_print', 2),
+      ('num_copies', 1024),
+      ('orientation', 4),
+      ('output_face_up', 2),
+      ('separations', 2),
+      ('tray_switch', 2),
+      ('tumble', 2),
+      ('cups_bits_per_color', 17),  # TOOD(pts): Only allow 1, 2, 4, 8 and 16.
+      ('cups_bits_per_pixel', 240),  # TOOD(pts): Only allow 1...
+      ('cups_color_order', 3),
+      ('cups_color_space', 128),  # Maximum current value is 62.
+  ):
+    # TODO(pts): Accept larger (<256) values, but increment c less.
+    if dict_obj[name] >= upper_bound:
+      raise ValueError('Bad cups-raster %s, must be less than %d: %d' %
+                       (name, dict_obj[name], upper_bound))
+    # The smaller the upper bound, the larger c becomes, thus the more sure
+    # we are that header is of cups-raster.
+    if 257 <= upper_bound <= 1024:
+      c -= ord(log2_sub[4])
+      upper_bound >>= 2
+    c += 400 - ord(log2_sub[upper_bound])  # TODO(pts): Precompute this.
+  for data in (media_class, media_color, media_type, output_type):
+    c += 100 * (64 - len(data.rstrip('\0')))
+  def fix_asciiz(data):
+    return data.split('\0', 1)[0]
+  media_class = fix_asciiz(media_class)
+  media_color = fix_asciiz(media_color)
+  media_type = fix_asciiz(media_type)
+  output_type = fix_asciiz(output_type)
+  if media_class == 'PwgRaster':
+    c += 100 * len(media_class)
+  if output_type == 'Automatic':
+    c += 100 * len(output_type)
+  return c, pt_width, pt_height, cups_width, cups_height
+
+
+def count_is_cups_raster(header):
+  try:
+    return parse_cups_raster_header(header)[0]
+  except ValueError:
+    return 0
+
+
+def analyze_cups_raster(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/CUPS_Raster
+  # https://www.cups.org/doc/spec-raster.html
+  _, pt_width, pt_height, cups_width, cups_height = (
+      parse_cups_raster_header(fread(408)))
+  info['format'] = 'cups-raster'
+  if pt_width is not None:
+    (info['pt_width'], info['pt_height'], info['width'], info['height'],
+    ) = pt_width, pt_height, cups_width, cups_height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -7783,6 +7882,7 @@ FORMAT_ITEMS = (
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
     ('mpeg-ps', (0, '\0\0\1\xba')),
+    # is_mpeg_ts indeed needs 392 bytes.
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
     # .ifo and .bup files on a video DVD.
@@ -7836,8 +7936,8 @@ FORMAT_ITEMS = (
     ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('xv-thumbnail', (0, 'P7 332\n')),
-    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
-    ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 392, lambda header: adjust_confidence(400, count_is_pam(header)))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 408, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xbm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xbm(header)))),  # '#define test_width 42'.
     ('xpm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xpm1(header)))),  # '#define test_format 1'. XPM1.
     ('xpm', (0, '! XPM2', 6, ('\r', '\n'))),  # XPM2.
@@ -7914,10 +8014,11 @@ FORMAT_ITEMS = (
     ('imlib-eim', (0, 'EIM 1', 14, lambda header: adjust_confidence(500, count_is_imlib_eim(header)))),
     ('farbfeld', (0, 'farbfeld')),
     ('fpx',),  # From 'olecf'.
-    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
-    ('wbmp', (0, '\0', 1, ('\0', '\x80'), 392, lambda header: adjust_confidence(300, count_is_wbmp(header)))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('wbmp', (0, '\0', 1, ('\0', '\x80'), 408, lambda header: adjust_confidence(300, count_is_wbmp(header)))),
     ('gd', (0, '\xff', 1, ('\xfe', '\xff'), 7, lambda header: (len(header) >= 7 and header[2 : 4] != '\0\0' and header[4 : 6] != '\0\0' and ord(header[6]) == (header[1] == '\xfe'), 102))),
     ('gd2', (0, 'gd2\0\0', 5, ('\1', '\2'), 10, '\0', 11, ('\1', '\2', '\3', '\4'), 19, lambda header: (len(header) >= 19 and header[4 : 6] != '\0\0' and header[6 : 8] != '\0\0' and header[8 : 10] != '\0\0' and (header[5] == '\1' or ord(header[18]) == (header[13] in '\3\4')), 104))),
+    ('cups-raster', (0, ('RaSt', 'tSaR', 'RaS2', '2SaR', 'RaS3', '3SaR'), 408, lambda header: adjust_confidence(400, count_is_cups_raster(header)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8131,13 +8232,14 @@ FORMAT_ITEMS = (
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
     ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
-    ('xml-comment', (0, '<!--', 392, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
-    ('xml-comment', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('xml-comment', (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
+    ('xml-comment', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 7, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
-    # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
-    ('html', (0, '<', 392, lambda header: adjust_confidence(100, count_is_html(header)))),
-    ('html', (0, WHITESPACE, 392, lambda header: adjust_confidence(12, count_is_html(header)))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
+    ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
     ('xhtml',),  # From 'html' and 'xml'.
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
@@ -8247,7 +8349,7 @@ class FormatDb(object):
         else:
           fps = size
         hps = max(hps, fps)
-    self.header_preread_size = hps  # Typically 64, we have 392.
+    self.header_preread_size = hps  # Typically 64, we have 408.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
     self.formats = frozenset(item[0] for item in FORMAT_ITEMS)
@@ -8593,6 +8695,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_gd(fread, info, fskip)
   elif format == 'gd2':
     analyze_gd2(fread, info, fskip)
+  elif format == 'cups-raster':
+    analyze_cups_raster(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
