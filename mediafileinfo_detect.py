@@ -7721,6 +7721,20 @@ def analyze_cups_raster(fread, info, fskip):
     ) = pt_width, pt_height, cups_width, cups_height
 
 
+def analyze_alias_pix(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Alias_PIX
+  # http://www.martinreddy.net/gfx/2d/PIX.txt
+  # Used on IRIX. Software: Alias 3D, PowerAnimator, Wavefront.
+  header = fread(10)
+  if len(header) < 10:
+    raise ValueError('Too short for alias-pix.')
+  width, height, x_offset, y_offset, bpc = struct.unpack('>5H', header[:10])
+  if x_offset or y_offset or bpc not in (8, 24):
+    raise ValueError('alias-pix signature not found.')
+  info['format'], info['codec'] = 'alias-pix', 'rle'
+  info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8019,6 +8033,10 @@ FORMAT_ITEMS = (
     ('gd', (0, '\xff', 1, ('\xfe', '\xff'), 7, lambda header: (len(header) >= 7 and header[2 : 4] != '\0\0' and header[4 : 6] != '\0\0' and ord(header[6]) == (header[1] == '\xfe'), 102))),
     ('gd2', (0, 'gd2\0\0', 5, ('\1', '\2'), 10, '\0', 11, ('\1', '\2', '\3', '\4'), 19, lambda header: (len(header) >= 19 and header[4 : 6] != '\0\0' and header[6 : 8] != '\0\0' and header[8 : 10] != '\0\0' and (header[5] == '\1' or ord(header[18]) == (header[13] in '\3\4')), 104))),
     ('cups-raster', (0, ('RaSt', 'tSaR', 'RaS2', '2SaR', 'RaS3', '3SaR'), 408, lambda header: adjust_confidence(400, count_is_cups_raster(header)))),
+    # This is a very weak header without magic number, and the first 4 \s at
+    # offset 4 isn't for sure either -- but we don't have anything better to
+    # match on.
+    ('alias-pix', (4, '\0\0\0\0\0', 9, ('\x08', '\x18'))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8697,6 +8715,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_gd2(fread, info, fskip)
   elif format == 'cups-raster':
     analyze_cups_raster(fread, info, fskip)
+  elif format == 'alias-pix':
+    analyze_alias_pix(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
