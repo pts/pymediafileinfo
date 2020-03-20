@@ -8037,6 +8037,8 @@ FORMAT_ITEMS = (
     # offset 4 isn't for sure either -- but we don't have anything better to
     # match on.
     ('alias-pix', (4, '\0\0\0\0\0', 9, ('\x08', '\x18'))),
+    # http://fileformats.archiveteam.org/wiki/BRender_PIX
+    ('brender-pix', (0, '\0\0\0\x12\0\0\0\x08\0\0\0\2\0\0\0\2')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
