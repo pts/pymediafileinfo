@@ -7564,6 +7564,30 @@ def analyze_wbmp(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def analyze_gd(fread, info, fskip):
+  # gd_gd.c in libgd-2.2.5.tar.gz
+  header = fread(7)
+  if len(header) < 7:
+    raise ValueError('Too short for gd.')
+  magic, width, height, is_truecolor = struct.unpack('>HHHB', header[:7])
+  if magic < 0xfffe:
+    raise ValueError('gd signature not found.')
+  if is_truecolor != (magic == 0xfffe):
+    raise ValueError('Bad gd is_truecolor.')
+  if not is_truecolor:
+    data = fread(2)
+    if len(data) == 2:
+      color_count, = struct.unpack('>H', data)
+      if not 1 <= color_count <= 256:
+        raise ValueError('Bad gd palette color count: %d' % color_count)
+  info['format'], info['codec'] = 'gd', 'uncompressed'
+  if not width:
+    raise ValueError('Bad gd width.')
+  if not height:
+    raise ValueError('Bad gd height.')
+  info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -7858,6 +7882,7 @@ FORMAT_ITEMS = (
     ('fpx',),  # From 'olecf'.
     # 392 is arbitrary, but since mpeg-ts has it, we can also that much.
     ('wbmp', (0, '\0', 1, ('\0', '\x80'), 392, lambda header: adjust_confidence(300, count_is_wbmp(header)))),
+    ('gd', (0, '\xff', 1, ('\xfe', '\xff'), 7, lambda header: (len(header) >= 7 and header[2 : 4] != '\0\0' and header[4 : 6] != '\0\0' and ord(header[6]) == (header[1] == '\xfe'), 102))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -8529,6 +8554,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_farbfeld(fread, info, fskip)
   elif format == 'wbmp':
     analyze_wbmp(fread, info, fskip)
+  elif format == 'gd':
+    analyze_gd(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
