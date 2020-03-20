@@ -847,7 +847,7 @@ def analyze_mp4(fread, info, fskip):
           elif major_brand == 'f4v ':
             info['format'] = 'f4v'
           elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
-            info['format'] = 'jp2'
+            info['format'] = 'jp2'  # JPEG-2000.
           elif major_brand == 'mif1':
             # Contains items in /meta.
             info['format'] = 'isobmff-image'
@@ -859,7 +859,7 @@ def analyze_mp4(fread, info, fskip):
           brands.add(major_brand)
           brands = sorted(brands)
           info['brands'] = brands  # Example: ['isom', 'mp42'].
-        elif xytype == 'jp2h/ihdr':
+        elif xytype == 'jp2h/ihdr':  # JPEG-2000.
           if len(data) < 12:
             raise ValueError('EOF in jp2 ihdr.')
           # https://sno.phy.queensu.ca/~phil/exiftool/TagNames/Jpeg2000.html#ImageHeader
@@ -7735,7 +7735,8 @@ FORMAT_ITEMS = (
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
     ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
     ('qtif', (0, '\0\0\0', 4, 'idsc')),
-    # JPEG2000 container format.
+    # JPEG-2000 container format.
+    # TODO(pts): Add detection and analyzing of elementary stream (bitstream) format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
