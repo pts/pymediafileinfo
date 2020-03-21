@@ -8213,6 +8213,8 @@ FORMAT_ITEMS = (
     # Some of the files have a MacBinary header, which we don't detect.
     ('stuffit', (0, 'SIT!', 10, 'rLau')),
     ('stuffit', (0, 'StuffIt (c)1997')),
+    # http://fileformats.archiveteam.org/wiki/StuffIt_X#Identification
+    ('stuffitx', (0, 'StuffIt', 7, ('!', '?'))),
 
     # Compressed single file.
 
