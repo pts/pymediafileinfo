@@ -8208,6 +8208,11 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/AIN
     # JUP.DAT in JUP at https://weynans.lima-city.de/tools-en.htm
     ('ain', (0, '!', 1, ('\x11', '\x12'), 2, '\0\0\0\0\0\0')),
+    # http://fileformats.archiveteam.org/wiki/StuffIt
+    # `apt-get install unar' can extract it ('SIT!') on Linux.
+    # Some of the files have a MacBinary header, which we don't detect.
+    ('stuffit', (0, 'SIT!', 10, 'rLau')),
+    ('stuffit', (0, 'StuffIt (c)1997')),
 
     # Compressed single file.
 
