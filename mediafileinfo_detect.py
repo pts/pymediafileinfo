@@ -7808,6 +7808,41 @@ def analyze_olecf(fread, info, fskip):
             return
 
 
+def analyze_binhex(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/BinHex
+  # https://tools.ietf.org/html/rfc1741
+  # https://en.wikipedia.org/wiki/BinHex
+  # macutils/hexbin/hexbin.c in http://archive.ubuntu.com/ubuntu/pool/universe/m/macutils/macutils_2.0b3.orig.tar.gz
+  # Original software for hexbin.c: macutil-2.03b3, 1992-10-22.
+  # binhex_2.0.bin on https://macintoshgarden.org/apps/binhex-20
+  header = fread(13)
+  if len(header) < 13:
+    raise ValueError('Too short for binhex.')
+  if not (header.startswith('(This file ') or header.startswith('(Convert with')):
+    raise ValueError('binhex signature not found.')
+  header += fread(512 - len(header))
+  header = header.replace('\r', '\n')
+  i = header.find('\n')
+  while 0 < i < len(header) and header[i] == '\n':
+    i += 1
+  if not (0 < i < len(header) and header[i] in ':#'):
+    raise ValueError('binhex subformat signature not found.')
+  if header[i] == ':':
+    info['format'], info['subformat'], info['codec'] = 'binhex', 'hqx', 'rle'  # .hqx, BinHex 4.0
+  else:
+    i = header.find('\n', i) + 1
+    if i <= 0:
+      raise ValueError('EOF in binhex #TYPEAUTH line.')
+    while i < len(header) and header[i] == '\n':
+      i += 1
+    if i + 13 < len(header):
+      raise ValueError('EOF in binhex data.')
+    if header[i : i + 13] == '***COMPRESSED':
+      info['format'], info['subformat'], info['codec'] = 'binhex', 'hcx', 'uncompressed'  # .hcx, BinHex 2.0
+    else:
+      info['format'], info['subformat'], info['codec'] = 'binhex', 'hex', 'uncompressed'  # .hex, BinHex 1.0
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -8283,6 +8318,11 @@ FORMAT_ITEMS = (
     ('diet', (0, '\xb4\x4c\xcd\x21\x9d\x89\x64\x6c\x7a')),
     # https://github.com/pts/upxbc/blob/0c5c63aef8c5c3336945a92a3829078d64dfdee2/upxbc#L1239
     ('upxz', (0, 'UPXZ')),
+    ('binhex', (0, '(This file must be converted with BinHex 4.0)')),
+    ('binhex', (0, '(This file must be converted with BinHex.Hex)')),
+    ('binhex', (0, '(This file must be converted with BinHex')),
+    ('binhex', (0, '(This file ')),
+    ('binhex', (0, '(Convert with')),
 
     # Non-compressed, non-media.
 
@@ -8830,6 +8870,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_sun_icon(fread, info, fskip)
   elif format == 'ftc':
     analyze_ftc(fread, info, fskip)
+  elif format == 'binhex':
+    analyze_binhex(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):

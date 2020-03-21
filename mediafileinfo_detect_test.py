@@ -1194,6 +1194,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_olecf, data1),
                      {'format': 'fpx'})
 
+  def test_analyze_binhex(self):
+    data1 = '(Convert with\r#TEXT$\n***RESOURCE'
+    data2 = '(Convert with\r#TEXT$\n\n\n***COMPRESSED'
+    data4 = '(This file must be converted; you knew that already.)\n\n:'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'binhex')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'binhex')
+    self.assertEqual(mediafileinfo_detect.detect_format(data4)[0], 'binhex')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data1),
+                     {'format': 'binhex', 'subformat': 'hex', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data2),
+                     {'format': 'binhex', 'subformat': 'hcx', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data4),
+                     {'format': 'binhex', 'subformat': 'hqx', 'codec': 'rle'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
