@@ -8171,6 +8171,8 @@ def analyze_olecf(fread, info, fskip):
             # Finding the image with the largest resolution and returning
             # its name would be way too complicated: we'd have to navigate
             # the FAT chains and directory structures.
+            # src/PIL/FpxImagePlugin.py in Pillow-7.0.0.tar.gz uses
+            # `import olefile' to parse fpx.
             return
 
 
