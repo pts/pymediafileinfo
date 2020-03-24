@@ -8257,6 +8257,31 @@ def analyze_mcidas_area(fread, info, fskip):
     info['height'], info['width'] = struct.unpack(fmt + 'LL', header[32 : 40])
 
 
+def is_macbinary(header, expected_type):
+  # TODO(pts): Check checksum for MacBinary II and MacBinary III,
+  #            https://github.com/mietek/theunarchiver/wiki/MacBinarySpecs
+  return (len(header) >= 128 and header[0] == '\0' and
+          1 <= ord(header[1]) <= 63 and
+          header[74] == header[82] == '\0' and
+          header[65 : 69] == expected_type)
+
+
+def analyze_macpaint(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/MacPaint
+  # http://www.idea2ic.com/File_Formats/macpaint.pdf
+  # https://www.fileformat.info/format/macpaint/egff.htm
+  header = fread(128)
+  if len(header) < 12:
+    raise ValueError('Too short for macpaint.')
+  if not (is_macbinary(header, 'PNTG') or
+          (header[:4] in ('\0\0\0\2', '\0\0\0\3') and
+           header[4 : 12] in
+           ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))):
+    raise ValueError('macpaint signature not found.')
+  info['format'], info['codec'] = 'macpaint', 'rle'
+  info['width'], info['height'] = 576, 720
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8604,6 +8629,10 @@ FORMAT_ITEMS = (
     ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
     ('facesaver', (0, tuple(prefix[:6] for prefix in FACESAVER_PREFIXES), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
     ('mcidas-area', (0, ('\0\0\0\0\0\0\0\4', '\0\0\0\0\4\0\0\0'), 32, lambda header: adjust_confidence(800, count_is_mcidas_area(header)))),
+    # Not all macpaintfiles match this, some of them start with '\0' * 512,
+    # and they don't have any other header either, so no image data.
+    ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac
+    ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9309,6 +9338,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_facesaver(fread, info, fskip)
   elif format == 'mcidas-area':
     analyze_mcidas_area(fread, info, fskip)
+  elif format == 'macpaint':
+    analyze_macpaint(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
