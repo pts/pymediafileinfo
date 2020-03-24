@@ -3688,7 +3688,7 @@ def analyze_mpeg_cdxa(fread, info, fskip):
 # --- mpeg-ts (MPEG TS).
 
 
-def get_jpeg_dimensions(fread):
+def get_jpeg_dimensions(fread, header=''):
   """Returns (width, height) of a JPEG file.
 
   Args:
@@ -3717,11 +3717,15 @@ def get_jpeg_dimensions(fread):
           'EOF in jpeg: wanted=%d got=%d' % (size, len(data)))
     return data
 
-  data = fread(4)
+  data, header = header, None
   if len(data) < 4:
-    raise ValueError('Too short for jpeg.')
+    data += fread(4 - len(data))
+    if len(data) < 4:
+      raise ValueError('Too short for jpeg.')
+  if len(data) > 4:
+    raise ValueError('Preread too long for jpeg.')
   if not data.startswith('\xff\xd8\xff'):
-    raise ValueError('jpeg signature not found.')
+    raise ValueError('jpeg signature not found: %r.')
   m = ord(data[3])
   while 1:
     while m == 0xff:  # Padding.
@@ -3748,6 +3752,16 @@ def get_jpeg_dimensions(fread):
       raise ValueError('Marker expected.')
     m = ord(m[1])
   raise AssertionError('Internal JPEG parser error.')
+
+
+def analyze_jpeg(fread, info, fskip):
+  header = fread(3)
+  if len(header) < 3:
+    raise ValueError('Too short for jpeg.')
+  if not header.startswith('\xff\xd8\xff'):
+    raise ValueError('jpeg signature not found.')
+  info['format'] = info['codec'] = 'jpeg'
+  info['width'], info['height'] = get_jpeg_dimensions(fread, header)
 
 
 def get_string_fread(header):
@@ -8734,8 +8748,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
   elif format == 'gif':
     analyze_gif(fread, info, fskip)
   elif format == 'jpeg':
-    info['codec'] = 'jpeg'
-    info['width'], info['height'] = get_jpeg_dimensions(fread)
+    analyze_jpeg(fread, info, fskip)
   elif format == 'png':
     analyze_png(fread, info, fskip)
   elif format == 'jng':
