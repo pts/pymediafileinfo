@@ -8235,6 +8235,28 @@ def analyze_facesaver(fread, info, fskip):
         raise ValueError('Bad facesaver picdata: %r' % items)
 
 
+def count_is_mcidas_area(header):
+  if len(header) < 20:
+    return 0
+  fmt = '<>'[header[7] != '\0']
+  status, ftype, satid, ndate, ntime = struct.unpack(fmt + '5L', header[:20])
+  return (status == 0 and ftype == 4 and satid < 0x400 and ndate <= 196366 and ntime <= 235959) and 1650
+
+
+def analyze_mcidas_area(fread, info, fskip):
+  # https://www.ssec.wisc.edu/mcidas/doc/prog_man/2015/formats-1.html
+  # https://www.ssec.wisc.edu/mcidas/doc/misc_doc/area2.html
+  header = fread(40)
+  if len(header) < 20:
+    raise ValueError('Too short for mcidas-area.')
+  if not count_is_mcidas_area(header):
+    raise ValueError('mcidas signature not found.')
+  info['format'], info['codec'] = 'mcidas-area', 'uncompressed'
+  if len(header) >= 40:
+    fmt = '<>'[header[7] != '\0']
+    info['height'], info['width'] = struct.unpack(fmt + 'LL', header[32 : 40])
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8581,6 +8603,7 @@ FORMAT_ITEMS = (
     ('xloadimage-niff', (0, 'NIFF\0\0\0\1')),
     ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
     ('facesaver', (0, tuple(prefix[:6] for prefix in FACESAVER_PREFIXES), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
+    ('mcidas-area', (0, ('\0\0\0\0\0\0\0\4', '\0\0\0\0\4\0\0\0'), 32, lambda header: adjust_confidence(800, count_is_mcidas_area(header)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9284,6 +9307,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_sun_taac(fread, info, fskip)
   elif format == 'facesaver':
     analyze_facesaver(fread, info, fskip)
+  elif format == 'mcidas-area':
+    analyze_mcidas_area(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

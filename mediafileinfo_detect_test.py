@@ -14,6 +14,7 @@ This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
 Typical usage: mediafileinfo.py *.mp4
 """
 
+import struct
 import sys
 import unittest
 
@@ -1220,6 +1221,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'facesaver', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_facesaver, data1),
                      {'format': 'facesaver', 'codec': 'uncompressed', 'height': 45, 'width': 123})
+
+  def test_analyze_mcidas_area(self):
+    data1 = '\0\0\0\0\4\0\0\0\xb4\0\0\0\xcf\xc5\1\0\xfc\xc4\2\0\x2c\x0a\0\0\x38\x23\0\0\0\0\0\0\1\2\0\0\3\2\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'mcidas-area')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:24])[0], 'mcidas-area')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mcidas_area, data1[:24]),
+                     {'format': 'mcidas-area', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mcidas_area, data1),
+                     {'format': 'mcidas-area', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mcidas_area, struct.pack('>10L', *struct.unpack('<10L', data1))),
+                     {'format': 'mcidas-area', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_jpeg(self):
     data1 = '\xff\xd8\xff\xdb\x00\xc5\x00\x04\x03\x04\x05\x04\x03\x05\x05\x04\x05\x06\x06\x05\x06\x08\x0e\t\x08\x07\x07\x08\x11\x0c\r\n\x0e\x15\x12\x16\x15\x14\x12\x14\x13\x17\x1a!\x1c\x17\x18\x1f\x19\x13\x14\x1d\'\x1d\x1f"#%%%\x16\x1b)+($+!$%#\x01\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\x02\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\xff\xc0\x00\x11\x08\x00x\x00\xa0\x03\x01!\x00\x02\x11\x01\x03\x11\x02'
