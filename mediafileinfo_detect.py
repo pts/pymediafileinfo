@@ -8131,6 +8131,20 @@ def analyze_fits(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
+def analyze_xloadimage_niff(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/NIFF_(xloadimage)
+  # niff.c in xloadimage_4.1.orig.tar.gz
+  header = fread(16)
+  if len(header) < 8:
+    raise ValueError('Too short for xloadimage-niff.')
+  if not header.startswith('NIFF\0\0\0\1'):
+    raise ValueError('xloadimage-niff signature not found.')
+  info['format'], info['codec'] = 'xloadimage-niff', 'uncompressed'
+  if len(header) >= 16:
+    (magic, version, info['width'], info['height'],
+    ) = struct.unpack('>4sLLL', header)
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8474,6 +8488,7 @@ FORMAT_ITEMS = (
     ('brender-pix', (0, '\0\0\0\x12\0\0\0\x08\0\0\0\2\0\0\0\2')),
     ('photocd', (0, '\xff' * 32)),
     ('fits', (0, 'SIMPLE  = ', 80, lambda header: (len(header) >= 11 and header[10 : 80].split('/', 1)[0].strip(' ') == 'T', 180))),
+    ('xloadimage-niff', (0, 'NIFF\0\0\0\1')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9171,6 +9186,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_photocd(fread, info, fskip)
   elif format == 'fits':
     analyze_fits(fread, info, fskip)
+  elif format == 'xloadimage-niff':
+    analyze_xloadimage_niff(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
