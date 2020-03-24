@@ -6194,6 +6194,265 @@ def analyze_dvi(fread, info, fskip):
       break  # EOF in dvi command argument.
   raise ValueError('EOF in dvi command.')
 
+
+MAC_TYPE_MAP = {
+    'jpeg': ('jpeg', 'jpeg'),
+    'jfif': ('jpeg', 'jpeg'),
+    'png':  ('png', 'flate'),
+    'pngf': ('png', 'flate'),
+    'pngr': ('png', 'flate'),
+    'giff': ('gif', 'lzw'),
+    'gif':  ('gif', 'lzw'),
+    'bmpf': ('bmp', None),
+    'bmpp': ('bmp', None),
+    'bmp':  ('bmp', None),
+    'bmap':  ('bmp', None),
+    'epsf': ('ps', 'code'),
+    'eps':  ('ps', 'code'),
+    'pcx':  ('pcx', 'rle'),
+    'pcxf':  ('pcx', 'rle'),
+    'pcxx':  ('pcx', 'rle'),
+    'pict': ('pict', 'code'),
+    'targ': ('tga', None),
+    'tga': ('tga', None),
+    'tga1': ('tga', None),
+    'tpic': ('tga', None),
+    'iff': ('lbm', None),
+    'ilbm': ('lbm', None),
+    'tiff': ('tiff', None),
+    'tif':  ('tiff', None),
+    'qtif':  ('qtif', None),
+    'kpcd': ('photocd', 'photocd'),
+    'jp2': ('jpeg2000', None),
+    'jp': ('jpeg2000', None),
+    # TODO(pts): Add more, from types.lst.
+}
+
+
+def limit_fread_and_fskip(fread, fskip, data_size):
+  fread_up, fskip_up, remaining_ary = fread, fskip, [int(data_size)]
+  del data_size  # Save memory.
+
+  def fread(size):
+    data = fread_up(min(size, remaining_ary[0]))
+    remaining_ary[0] -= len(data)
+    return data
+
+  def fskip(size):
+    if size > remaining_ary[0]:
+      return False
+    remaining_ary[0] -= size
+    return fskip_up(size)
+
+  return fread, fskip
+
+
+def analyze_by_format(fread, info, fskip, format, data_size):
+  if format == 'bmp':  # TODO(pts): Add more, use map.
+    analyze_func = analyze_bmp
+  elif format == 'tiff':
+    analyze_func = analyze_tiff
+  elif format == 'jpeg':
+    analyze_func = analyze_jpeg
+  elif format == 'png':
+    analyze_func = analyze_png
+  elif format == 'jpeg2000':
+    analyze_func = analyze_jpeg2000
+  elif format == 'photocd':
+    analyze_func = analyze_photocd
+  elif format == 'lbm':
+    analyze_func = analyze_lbm
+  elif format == 'tga':
+    analyze_func = analyze_tga
+  elif format == 'qtif':
+    analyze_func = analyze_qtif  # TODO(pts): Isn't it analyze_tiff instead?
+  else:
+    info['format'] = format
+    return
+  if data_size is not None:
+    fread, fskip = limit_fread_and_fskip(fread, fskip, data_size)
+  analyze_func(fread, info, fskip)
+
+
+def count_is_pict_at_512(header):
+  if header[10 : 15] == '\x11\1\1\0\x0a':
+    return 500
+  elif header[10 : 16] in ('\0\x11\2\xff\x0c\0', '\0\x11\2\xff\0\1'):
+    return 600
+  else:
+    return 0
+
+
+def analyze_pict(fread, info, fskip, header=''):
+  # PICT: Apple QuickDraw vector graphics metadata (becore macOS with PDF).
+  # https://developer.apple.com/library/archive/documentation/mac/pdf/Imaging_With_QuickDraw/Appendix_A.pdf
+  # https://developer.apple.com/library/archive/documentation/mac/pdf/ImagingWithQuickDraw.pdf
+  # https://www-jlc.kek.jp/subg/ir/study/latex/netpbm-10.18.14/converter/ppm/picttoppm.c
+  # https://github.com/scummvm/scummvm/blob/master/image/pict.cpp
+  # https://github.com/jsummers/deark/blob/master/modules/pict.c
+  # http://mirror.informatimago.com/next/developer.apple.com/documentation/mac/QuickDraw/QuickDraw-461.html
+  # https://woofle.net/impdf/QD-A-PictureOpcodes.pdf
+  # https://github.com/ioquake/jedi-outcast/blob/master/utils/roq2/libim/impict.c
+  # https://github.com/ewilded/upload-scanner/blob/master/bin/lib/Image/ExifTool/PICT.pm
+  # http://fileformats.archiveteam.org/wiki/PackBits
+  # https://developer.apple.com/library/archive/documentation/mac/pdf/Imaging_With_QuickDraw/Appendix_A.pdf
+  # PixMap: http://mirror.informatimago.com/next/developer.apple.com/documentation/mac/QuickDraw/QuickDraw-202.html
+  if len(header) > 23:
+    raise ValueError('Initial header too long.')
+  if len(header) < 17:
+    header += fread(17 - len(header))
+    if len(header) < 16:
+      raise ValueError('Too short for pict.')
+  # If it starts with '\0', then ignore the first 512 bytes.
+  if not header[:16].rstrip('\0'):
+    header += fread(32 - len(header))
+    if len(header) == 32 and not header[16 : 32].rstrip('\0'):
+      if fskip(512 - 32):
+        header = fread(17)
+        if len(header) < 16:
+          raise ValueError('Too short for pict after 512 bytes.')
+  if header[10 : 15] == '\x11\1\1\0\x0a':
+    version, op, data = 1, 1, header[12:]
+    data = header[13:]
+  elif (header[10 : 14] in '\0\x11\2\xff' and
+        header[14 : 16] in ('\x0c\0', '\0\1')):
+    version, data = 2, header[16:]
+    op, = struct.unpack('>H', header[14 : 16])
+  else:
+    raise ValueError('pict signature not found.')
+  info['format'], info['subformat'] = 'pict', str(version)
+  top, left, bottom, right = struct.unpack('>2x4H', header[:10])  # picFrame.
+  if top > bottom or left > right:
+    raise ValueError('Bad pict picFrame.')
+  info['width'] = info['pt_width'] =  right - left
+  info['height'] = info['pt_height'] = bottom - top
+  if len(header) <= 16:
+    return
+  while 1:
+    #print 'op=0x%x %r' % (op, data)
+    if op == 0xff:  # OpEndPic.
+      break
+    elif op == 0xc00:  # HeaderOp.
+      assert len(data) <= 24
+      data += fread(24 - len(data))
+      if len(data) < 24:
+        raise ValueError('EOF in pict headerop.')
+      if version == 2 and data.startswith('\xff\xfe'):
+        info['subformat'] = '2ext'
+    elif op == 1:  # Clip.
+      if len(data) < 2:
+        data += fread(2 - len(data))
+        if len(data) < 2:
+          raise ValueError('EOF in pict clip.')
+      size, = struct.unpack('>H', data[:2])
+      if size != 10:
+        raise ValueError('Bad pict clip size.')
+      assert len(data) <= size
+      if len(data) < size:
+        data += fread(size - len(data))
+        if len(data) < size:
+          raise ValueError('EOF in pict clip.')
+    elif op == 0xa0:  # ShortComment.
+      assert not data
+      data = fread(2)
+      if len(data) < 2:
+        raise ValueError('EOF in pict shortcomment.')
+    elif op == 0xa1:  # LongComment.
+      assert not data
+      data = fread(4)
+      if len(data) < 4:
+        raise ValueError('EOF in pict longcomment size.')
+      size, = struct.unpack('>2xH', data)
+      if not fskip(size):
+        raise ValueError('EOF in pict longcomment.')
+    elif op in (0, 0x1e):  # NOP, DefHilite.
+      pass
+    elif op in (0x90, 0x91, 0x98, 0x99, 0x9a, 0x9b):  # BitsRect, BitsRgn, PackBitsRect, PackBitsRgn, DirectBitsRect, DirectBitsRgn.
+      assert not data
+      data = fread(14)
+      if len(data) < 14:
+        raise ValueError('EOF in pict sampled op.')
+      if op in (0x9a, 0x9b):
+        if not data.startswith('\0\0\0\xff'):
+          raise ValueError('Bad pict sampled baseaddr.')
+        fmt = '>6xHHHH'
+      else:
+        fmt = '>2xHHHH4x'
+      top, left, bottom, right = struct.unpack(fmt, data)  # bounds.
+      if top > bottom or left > right:
+        raise ValueError('Bad pict sampled bounds.')
+      info['sampled_format'], info['codec'], info['width'], info['height'] = 'pict', 'rle', right - left, bottom - top
+      break  # Found first sampled image, stop looking for more (for simplicity).
+    elif op == 0x8200:  # CompressedQuicktime.
+      assert not data
+      data = fread(72)
+      if len(data) < 72:
+        raise ValueError('EOF in pict compressedquicktime.')
+      size, matte_size, mask_size = struct.unpack('>L38xL22xL', data)
+      if size < 86 + 68 + 4:
+        raise ValueError('pict compressedquicktime size too small.')
+      skip_size = (matte_size and 4) + matte_size + mask_size
+      if not fskip(skip_size):
+        raise ValueError('EOF in pict matte or mask.')
+      data = fread(86)  # ImageDescription.
+      if len(data) < 86:
+        raise ValueError('EOF in pict imagedescription.')
+      (id_size, codec_tag, res1, res2, data_ref_index, id_version, vendor,
+       temporal_quality, quality, width, height, resolution_x, resolution_y,
+       data_size, frame_count, format_desc, depth, clut_id,
+      ) = struct.unpack('>L4sLHHL4sLLHHLLLH32sHH', data)
+      if id_size < 86:
+        raise ValueError('pict imagedescription too short.')
+      data_size = size - 68 - id_size - skip_size
+      if data_size < 0:
+        raise ValueError('pict compressedquicktime too small for data.')
+      info['width'], info['height'] = width, height
+      if not fskip(id_size - 86):
+        raise ValueError('EOF in pict imagedescription.')
+      codec_tag = codec_tag.strip().strip('.').lower()
+      if codec_tag in MAC_TYPE_MAP:
+        format, codec = MAC_TYPE_MAP[codec_tag]
+        info['sampled_format'] = format
+        if codec:
+          info['codec'] = codec
+        else:
+          subformat = info.pop('subformat')
+          try:
+            analyze_by_format(fread, info, fskip, format, data_size)
+          finally:
+            info['sampled_format'], info['format'] = info['format'], 'pict'
+            if 'subformat' in info:
+              info['sampled_subformat'] = info['subformat']
+            info['subformat'] = subformat
+      else:
+        info['sampled_format'] = ('?', codec_tag)[codec_tag.isalnum()]
+      break  # Found first sampled image, stop looking for more (for simplicity).
+    else:  # Unsupported op.
+      break
+    data = fread(version)  # Read next op.
+    if len(data) < version:
+      raise ValueError('EOF in pict op.')
+    op, = struct.unpack(('', '>B', '>H')[version], data)
+    data = ''
+
+
+def analyze_zeros32_64(fread, info, fskip):
+  header = fread(32)
+  if len(header) < 32:
+    raise ValueError('Too short for zeros32.')
+  if header.rstrip('\0'):
+    raise ValueError('zeros32 signature not found.')
+  header = fread(32)
+  if len(header) == 32 and not header.rstrip('\n'):
+    info['format'] = '?-zeros64'
+  else:
+    info['format'] = '?-zeros32'
+  if len(header) == 32 and fskip(512 - 64):
+    header = fread(16)  # At offset 512.
+    if count_is_pict_at_512(header):
+      analyze_pict(fread, info, fskip, header)
+
+
 def is_vp8(header):
   if len(header) < 10 or header[3 : 6] != '\x9d\x01\x2a':
     return False
@@ -8251,6 +8510,8 @@ FORMAT_ITEMS = (
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
+    ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
+    ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
     ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
     ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
     ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
@@ -8927,6 +9188,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_dvi(fread, info, fskip)
   elif format == 'emf':
     analyze_emf(fread, info, fskip)
+  elif format in ('?-zeros32', '?-zeros64'):
+    analyze_zeros32_64(fread, info, fskip)  # Maybe 'pict'.
   elif format == 'xwd':
     analyze_xwd(fread, info, fskip)
   elif format == 'sun-icon':

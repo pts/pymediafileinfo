@@ -676,6 +676,50 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data2),
                      {'format': 'emf', 'subformat': 'dual', 'height': 61, 'width': 58})
 
+  def test_analyze_pict(self):
+    data_zeros1 = '\0' * 32 + '?' * (512 - 32)
+    data_zeros2 = '\0' * 64 + '?' * (512 - 64)
+    data_rle = '\x90??\1\1\2\2\6\6\5\5????'
+    data_pict1 = '\0\0\0\0\0\0\2\1\2\3\x11\1\1\0\x0a\0\0\0\0\2\1\2\3\xff'
+    data_uqt_jpeg = '\x82\0\0\0\x15\x82\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x40\0\0\0\0\0\0\0\0\0\0\3\0\0\0\0\0\0\0\0\x56jpeg\0\0\0\0\0\0\0\0\0\1\0\x01appl\0\0\0\0\0\0\3\0\0\xa0\0\x78\0\x48\0\0\0\x48\0\0????\0\1\1???????????????????????????????\0\x18\xff\xff'
+    data_jpeg = '\xff\xd8\xff'
+    data_uqt_lbm = '\x82\0\0\0\x15\x82\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x40\0\0\0\0\0\0\0\0\0\0\3\0\0\0\0\0\0\0\0\x56iff \0\0\0\0\0\0\0\0\0\1\0\x01appl\0\0\0\0\0\0\3\0\0\xa0\0\x78\0\x48\0\0\0\x48\0\0????\0\1\1???????????????????????????????\0\x18\xff\xff'
+    data_lbm = 'FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5'
+    data_pict2 = '\0\0\0\0\0\0\2\1\2\3\0\x11\2\xff\0\1\0\x0a\0\0\0\0\2\1\2\3' + data_uqt_jpeg + data_jpeg
+    data_pict2ext = '\0\0\0\0\0\0\2\1\2\3\0\x11\2\xff\x0c\0\xff\xfe??????????????????????\0\1\0\x0a\0\0\0\0\2\1\2\3\0\xff'
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict1)[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict1[:16])[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_zeros1 + data_pict1[:15])[0], '?-zeros32')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict2)[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict2[:16])[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_zeros2 + data_pict2[:16])[0], '?-zeros64')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict2ext)[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_pict2ext[:16])[0], 'pict')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1 + data_rle),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1[:-1] + data_rle),
+                     {'format': 'pict', 'height': 1285, 'width': 771, 'codec': 'rle', 'sampled_format': 'pict', 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_zeros1 + data_pict1[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_zeros32_64, data_zeros1 + data_pict1[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict2),
+                     {'format': 'pict', 'height': 120, 'width': 160, 'codec': 'jpeg', 'sampled_format': 'jpeg', 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict2[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_zeros2 + data_pict2[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict2ext),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2ext', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict2ext[:16]),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict2ext[:-2] + data_uqt_lbm + data_lbm),
+                     {'format': 'pict', 'height': 261, 'width': 259, 'codec': 'uncompressed', 'sampled_format': 'lbm', 'sampled_subformat': 'pbm', 'subformat': '2ext', 'pt_height': 513, 'pt_width': 515})
+
   def test_analyze_minolta_raw(self):
     self.assertEqual(mediafileinfo_detect.detect_format('\0MRM\0\1\2\3\0PRD\0\0\0\x18')[0], 'minolta-raw')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x18'),

@@ -605,5 +605,389 @@ elements. Some elements are truncated.
   07: Ssiz[0]=7
   01: XRsiz[0]=1
   01: YRsiz[0]=1
+* format=pict
+  * info:
+    DirectBits* is non-palette sampled image, PackBits* and Bits* are palette sampled image
+    Which opcodes use RLE (packbits) compression? DirectBits* do, PackBits* do, Bits* (0x90) seems to do it as well, ImageMagic pict.c doesn't differentiate between Bits* and PackBits*.
+    It doesn't define the PixMap structure.
+    PICT can contain sampled images using the following opcodes:
+    * 0x8200 CompressedQuickTime for 4-byte codec images
+    * 0x8201 UncompressedQuickTime for 4-byte codec images
+    * 0x90, 0x91, 0x98, 0x99, 0x9a, 0x9b: BitsRect, BitsRgn, PackBitsRect, PackBitsRgn, DirectBitsRect, DirectBitsRgn for uncompressed and RLE sampled images.
+
+    ColorSpec => [
+        value => 'int16u',
+        rgb => 'RGBColor',
+    ],
+    ColorTable => [
+        ctSeed => 'int32u',
+        ctFlags => 'int16u',
+        ctSize => 'int16u',
+        ctTable => 'ColorSpec[$val{ctSize}+1]',
+    ],
+    BitMap => [
+        # (no baseAddr)
+        rowBytes => 'int16u',
+        bounds => 'Rect',
+    ],
+    PixMap => [
+        # Note: does not contain baseAddr
+        # (except for DirectBits opcodes in which it is loaded separately)
+        rowBytes => 'int16u',
+        bounds => 'Rect',
+        pmVersion => 'int16u',
+        packType => 'int16u',
+        packSize => 'int32u',
+        hRes => 'fixed32s',
+        vRes => 'fixed32s',
+        pixelType => 'int16u',
+        pixelSize => 'int16u',
+        cmpCount => 'int16u',
+        cmpSize => 'int16u',
+        planeBytes => 'int32u',
+        pmTable => 'int32u',
+        pmReserved => 'int32u',
+    ],
+    # BitsRect data for PICT version 1
+    BitsRect1 => [
+        bitMap => 'BitMap',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        dataSize => 'int16u',
+        bitData => 'binary[$val{dataSize}]',
+    ],
+    # BitsRgn data for PICT version 1
+    BitsRgn1 => [
+        bitMap => 'BitMap',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        maskRgn => 'Rgn',
+        dataSize => 'int16u',
+        bitData => 'binary[$val{dataSize}]',
+    ],
+    # BitsRect data for PICT version 2
+    BitsRect2 => [
+        pixMap => 'PixMap',
+        colorTable => 'ColorTable',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        pixData => \ 'GetPixData($val{pixMap}, $raf)',
+    ],
+    # BitsRgn data for PICT version 2
+    BitsRgn2 => [
+        pixMap => 'PixMap',
+        colorTable => 'ColorTable',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        maskRgn => 'Rgn',
+        pixData => \ 'GetPixData($val{pixMap}, $raf)',
+    ],
+    DirectBitsRect => [
+        baseAddr => 'int32u',
+        pixMap => 'PixMap',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        pixData => \ 'GetPixData($val{pixMap}, $raf)',
+    ],
+    DirectBitsRgn => [
+        baseAddr => 'int32u',
+        pixMap => 'PixMap',
+        srcRect => 'Rect',
+        dstRect => 'Rect',
+        mode => 'int16u',
+        maskRgn => 'Rgn',
+        pixData => \ 'GetPixData($val{pixMap}, $raf)',
+    ],
+
+    # http://developer.apple.com/documentation/QuickTime/INMAC/QT/iqImageCompMgr.a.htm
+    CompressedQuickTime => [
+        size => 'int32u',   # size NOT including size word
+        version => 'int16u',
+        matrix => 'int32u[9]',
+        matteSize => 'int32u',
+        matteRect => 'Rect',
+        mode => 'int16u',
+        srcRect => 'Rect',
+        accuracy => 'int32u',
+        maskSize => 'int32u',
+        matteDescr => 'Int32uData[$val{matteSize} ? 1 : 0]',
+        matteData => 'int8u[$val{matteSize}]',
+        maskRgn => 'int8u[$val{maskSize}]',
+        imageDescr => 'ImageDescription',
+        # size should be $val{imageDescr}->{dataSize}, but this is unreliable
+        imageData => q{binary[$val{size} - 68 - $val{maskSize} - $val{imageDescr}->{size} -
+                    ($val{matteSize} ? $val{mattSize} + $val{matteDescr}->{size} : 0)]
+        },
+    ],
+
+    # http://developer.apple.com/documentation/QuickTime/INMAC/QT/iqImageCompMgr.a.htm
+    UncompressedQuickTime => [
+        size => 'int32u',   # size NOT including size word
+        version => 'int16u',
+        matrix => 'int32u[9]',
+        matteSize => 'int32u',
+        matteRect => 'Rect',
+        matteDescr => 'Int32uData[$val{matteSize} ? 1 : 0]',
+        matteData => 'binary[$val{matteSize}]',
+        subOpcodeData => q{
+            binary[ $val{size} - 50 -
+                    ($val{matteSize} ? $val{mattSize} + $val{matteDescr}->{size} : 0)]
+        },
+    ],
+
+    # http://developer.apple.com/documentation/QuickTime/APIREF/imagedescription.htm
+    # https://developer.apple.com/library/archive/documentation/QuickTime/QTFF/QTFFAppenA/QTFFAppenA.html
+    ImageDescription => [
+        size => 'int32u',   # size INCLUDING size word, typically 86 bytes.
+        cType => 'string[4]',  # Compression identifier, e.g. 'jpeg', codec
+        res1 => 'int32u',
+        res2 => 'int16u',
+        dataRefIndex => 'int16u',
+        version => 'int16u',
+        revision => 'int16u',
+        vendor => 'string[4]',
+        temporalQuality => 'int32u',
+        quality => 'int32u',
+        width => 'int16u',
+        height => 'int16u',
+        hRes => 'fixed32u',
+        vRes => 'fixed32u',
+        dataSize => 'int32u',
+        frameCount => 'int16u',
+        nameLen => 'int8u',
+        compressor => 'string[31]', e.g. '\x0cPhoto - JPEG\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+        depth => 'int16u',
+        clutID => 'int16u',  # Color lookup table ID, -1==none.
+        clutData => 'binary[$val{size}-86]',  # Usually empty.
+    ],
+
+    HeaderOp:
+    $"FFFF FFFF" /* version; always -1 (long) for version 2 */
+    $"0002 0000 0002 0000 00AA 0000 006E 0000" /* fixed-point bounding rectangle for picture */
+    $"0000 0000" /* reserved */
+
+    $"001E" /* v2 DefHilite opcode to use default hilite color */
+
+  00 * 512: zero header
+  0357: picSize=855 (to be ignored for version 2)
+  : pic_frame (bounding box at 72 DPI)
+    0000: top=0
+    0000: left=0
+    0200: bottom=512
+    0300: right=768
+  0011: opcode=VersionOp
+    02ff: version; version=1 systems would read NOP+VersionOp(version=2)+OpEndPic
+  0c00: opcode=HeaderOp
+    fffe: version=-2 (extended version 2)
+    00000048: resolution_x=72
+    00000048: resolution_y=72
+    0000: ?
+    : bounding_box
+      0000: top=0
+      0000: left=0
+      0200: bottom=512
+      0300: right=768
+    00000000: ?
+  0001: opcode=Clip
+    000a: Clip size=10
+    : clip_rect
+      0000: top=0
+      0000: left=0
+      0200: bottom=512
+      0300: right=768
+  00a0: opcode=ShortComment
+    00de: kind=222
+  00a1: opcode=LongComment
+    00dc: kind=220
+    01d4: size=468
+    000001d46170706c00000100524742206d6e74726170706c000002970000000000000002000001ba000001d4000000000000000079a98000b27600000000000034c91b3802792dc55b8b0f42171a093e79aa000000000000000000000000000000000000000000360036003600000000000000000000000001ce02850360045d057f06c5083209c50b800d620f6d11a214001688193b1c191f22225825ba294a2d0730f1350a39513dc7426d47424c47517c56e25c786240683a6e6574c27b52821489099032978d9f1da6e0aed8b704bf65c7fad0c5d9c5e2fbec67f608ffe0ffff000001ce02850360045d057f06c5083209c50b800d620f6d11a214001688193b1c191f22225825ba294a2d0730f1350a39513dc7426d47424c47517c56e25c786240683a6e6574c27b52821489099032978d9f1da6e0aed8b704bf65c7fad0c5d9c5e2fbec67f608ffe0ffff000001ce02850360045d057f06c5083209c50b800d620f6d11a214001688193b1c191f22225825ba294a2d0730f1350a39513dc7426d47424c47517c56e25c786240683a6e6574c27b52821489099032978d9f1da6e0aed8b704bf65c7fad0c5d9c5e2fbec67f608ffe0ffff00001650686f746f2059434320524742205374616e6461726400: comment data
+  8200: opcode=CompressedQuicktime
+    000c009a: size=786586
+    0000: version=0
+    000100000000000000000000000000000001000000000000000000000000000040000000: matrix of 9 u32s
+    00000000: matte_size=0
+    0000000000000000: matte_rect
+    0040: transfer_mode=0x40=0(srcCopy)+64(ditherCopy)
+    0000000002000300: src_rect
+    00000300: accuracy=0x300
+    00000000: mask_size=0
+    : matte_data=''
+    : mask_data=''
+    00000056: ImageDescription_size=86
+    6b706364: codec_tag='kpcd'
+    00000000: res1
+    0000: res2
+    0000: data_ref_index
+    0000: version
+    0000: revision
+    00000000: vendor='\0\0\0\0' (could be ='appl')
+    00000000: temporal_quality=0
+    00000300: quality=0x300
+    0300: width=768
+    0200: height=512
+    00480000: x_resolution=72 dpi (72 << 16)
+    00480000: y_resolution=72 dpi (72 << 16)
+    000c0000: image_size=786432 (correct here, but unreliable in general)
+    0001: unknown data of size 2
+    08: format_desc_size=8
+    50686f746f204344: format_desc='Photo CD'
+    0000000000000000000000000000000000000000000000: format_desc_padding: start(@format_desc_size) + 32 == end(@format_desc_padding)
+    0020: bits_per_pixel=32
+    ffff: id_padding: start(@id_size) + id_size == end(@id_padding)
+    ff * 32: photocd_header
+    ...: photocd_data: start(@photocd_header) + image_size == end(@photcd_data)
+  0007: opcode=PnSize
+    00ae: pen_height
+    006e: pen_width
+  0007: opcode=PnSize
+    0001: pen_height
+    0001: pen_width
+  0003: opcode=TxFont
+    0000: text_font=0
+  0004: opcode=TxFace
+    00: text_face=0
+  00: word padding before next opcode
+  000d: opcode=TxSize
+    000c: text_size=14
+  0028: opcode=LongText
+    0028: x
+    0023: y
+    10: text_size=16
+    517569636b54696d65aa20616e642061: text='QuickTime\xaa and a'
+  00: word padding before next opcode
+  0028: opcode=LongText
+    0040: x
+    0014: y
+    15: text_size=21
+    50686f746f204344204465636f6d70726573736f72: text='Photo CD Decompressor'
+  0028: opcode=LongText
+    0058: x
+    0002: y
+    1e: text_size=30
+    617265206e656564656420746f2075736520746869732070696374757265: text='are needed to use this picture'
+  00: word padding before next opcode
+  0000: opcode=NOP
+  00a0: opcode=ShortComment
+    00dd: kid=221
+  00ff: opcode=OpEndPic
+* format=pict
+  00 * 512: zero header
+  0200: pic_size=512
+  : pic_frame
+    0000: top=0
+    0000: left=0
+    0078: bottom=120
+    00a0: right=160
+  0011: opcode=VersionOp
+    02ff: version; version=1 systems would read NOP+VersionOp(version=2)+OpEndPic
+  0c00: opcode=HeaderOp
+    fffe: version=-2 (extended version 2)
+    00000048: resolution_x=72
+    00000048: resolution_y=72
+    0000: ??
+    : bounding_box
+      0000: top=0
+      0000: left=0
+      0078: bottom=120
+      00a0: right=160
+    00000000: ??
+  0001: opcode=Clip
+    000a: Clip size=10
+    : clip_rect
+      0000: top=0
+      0000: left=0
+      0078: bottom=120
+      00a0: right=160
+  8200: opcode=CompressedQuicktime
+    00001582: size=5506
+    0000: version
+    000100000000000000000000000000000001000000000000000000000000000040000000: matrix (36 bytes)
+    00000000: matte_size=0
+    0000000000000000: matte_rect
+    0040: transfer_mode=0x40=0(srcCopy)+64(ditherCopy)
+    00000000007800a0: src_rect
+    00000300: accuracy=0x300
+    00000000: mask_size=0
+    : matte_data=''
+    : mask_data=''
+    00000056: ImageDescription_size=86
+    6a706567: codec_tag='jpeg'
+    00000000: res1
+    0000: res2
+    0000: data_ref_index
+    0001: version
+    0001: revision
+    6170706c: vendor='appl'
+    00000000: temporal_quality=0
+    00000300: quality=0x300
+    00a0: width=160
+    0078: height=120
+    00480000: resolution_x=(72 << 16)
+    00480000: resolution_y=(72 << 16)
+    000087ac: data_size=34732 (unreliable, incorrect)
+    0001: frame_count=1
+    0b: format_desc_size=11
+    466f746f202d204a504547: format_desc='Foto - JPEG'
+    0000000000000000000000000000000000000000: format_desc_padding
+    0018: depth=24
+    ffff: clut_id=-1
+    : clut_data='' (empty)
+    ffd8: JPEG SOI marker, image starts here
+    ffe000104a46494600010100004800480000ffdb004300030202020202030202020303030304060404040404080606050609080a0a090809090a0c0f0c0a0b0e0b09090d110d0e0f101011100a0c12131210130f101010ffdb00430103030304030408040408100b090b1010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010ffc0001108007800a003012200021101031101ffc4001b0001010100030101000000000000000000000908040607050affc4003c1000010401040200040206060b000000000200010304050607111208130914212216231517193132d41824565795a5343738525373768593b4b5ffc4001c0101000105010100000000000000000000000403050607080201ffc400331100020102040208040603000000000000000102031104050621314107123251617191b11322528114424362a1d1167292ffda000c03010002110311003f00e7fecbadff00fed7edf7f885dfe516f3f1936bb506cbec7e9bdb4d53731f6b2987f9cf7cb8f90ce02f6dc9a61ea46004fc0ca2cfc8b7d59ff7b7d5fd451528518d377465f9feb7cdb52e1a384c7b8b829292b46dba4d7b3611115531008888022ccbbf7e7c6d1ecc642f695c2c16358ea9c7cc55ecd0a327a6ad4944a3ef1cf6885d989848fe910caec71101fadff74fcddcf30b7f378e79a3ceeb5b187c4cf0c95cb0d8239295228a48c4258e4612739c4d85ddda63919bb9b0f5127154275e30db8b36169de8d739cfa2abce3f0693dd4a7c5afdb1e2fcdd935c1b2ae6bef20764f6bfe7e2d73b9fa7f196f19eaf9ac7fce0cd7e3f675e9fd522ed3bf2d2017d01f817ecff006f2ebcfbfa7cf899fdebff009164ff009751ed15078a97246ccc3743194c69db1388a92977c7ab15e8e32f7fecb09fd3e7c4cfef5ffc8b27fcbaee3a1bca0f1f371fd21a4f76b4fcd62cdc1c7d7a972c7c8db9e72ebd423af65a3964ece62c2e22ec45c8b3bbb3b344a4458a97347aafd0ce4f283542bd552ef6e2d7a28c7dcfd0322895b4fe4cef66cbd9a5f82b5de41b174b911c2dd94ace34a3299a5901ab9bf58fb933f638ba49f79f062e4eefbcf633e243b67aebe5301bb14ff056724f5c3f3bd9e5c55891fd41cfb3f8eb763390b8919e38c039299dd57862212d9ec6b8d41d17e739327570ebe3d35ce2be65e70ddffcb91b091115735b044440111100444401111005393cccf3bb2199c84db61b09a96c52c652999b27a9b1b60a396eca05cfa6a4a0ece300937dd28bf32bb702feae5e6ed1f114f293f4556b3e3c685bf90ad9497d47a9ee44fea06a9243dc68b3b8f63f60c919c840e23d388ddcda49402762875eb7e489be7a35d014e74e19de690bdf7a706b6b729b5ceff9570b7cdbdd58888a19bdc22220088880222203597883e6eea0da0cb57d11ba797c8663425af5578a698cec4f82ea2318142cfc9156611162807f859bb46dd98825a998ec8e3f2f8fab96c4deaf768dd842c56b35e519229e231620900c5dd88485d9d9d9f876767650056d3f87b7949f8135045b1fae6fe427c1ea2b90c1a764e7db1e36fca6ecf0f5617368e7330fab3f5091bb38b34b24832a856b3eac8d2fd24680a78ba53ce32b85aa455e704bb4b9c92fa92ddfd4bf776a99a2229c73b8444401111005d3b78372f13b3db67a8b72b3517babe0a9bcc107621f989c9d82083b089b87b2538c3bf5761efd9fe8cebb8ac09f14fdc88031fa33686a4b5ce696693525f02864f6c422275eab89fd01c4dcee761fa973103fdacff778a93ea45c8c8f49e4bfe419c50c04afd593bcadf4ade5bf2ba564fbda302ea2cfe5b55ea0c9ea9cfdbf9aca662e4d90bb3fac43db3ca6e721f506611e489df816666e7e8cccbe7222b51d9708469c5420ac970411110f411110044440111100444405a5f13b7abf5efb2785d61766f66729f389cefdbc737e111ef27d2300fcd028e6ea0dd43ddd3977175ec2a61fc30f7220d37bb99cdb9bb2d78a1d658d196b3943214b25da5de408c487ed017824b664e6df578c19899fed2a78ae7467d782671febbc8a3a7f3cad86a4ad4e5f3c3fd65c97845de2bc82222aa61e111100522fe2199fcb663ca6d498ec95bf757c153c763f1e1eb11f4c05523b0e1cb33397e6d898b92e5fefe39e1999aba28f7e7cff00b59ebaff00b67ff32aa8d8aec7dcdb1d0e4232cfaab6b85295bc3e782f66d19f5111403a602222008888022220088880222203d47c5ccfe5b4d7919b6f91c2dbf96b136a4a38f33f589f305a946bce1c133b7dd14b20f3fbdbb72cececced6d543af1e3fd7fed9ff00d6186ffdd895c553b0bd9673b74d108acc70d34b7707bf94b6f77ea11114a34c0444401483f88163b214bcadd5f66e51b104390871b62a492c44236226a1046f246eedc18b491c81cb72dd809bf7b3b2af8a7a7c53f6de70c868cddea91583865864d377cca68fd511091d8aac21f4372363b9d8bea3c440df6bbfdd1f12af0365f44f8f860b51469cff00561282f3da4bd7ab6fb98111115bcea50888802222008888022220088880f49f1ab1d90ca790bb6b5b1946c5b9835562ec1470445210c5159092591d859dd842303327fdc2224efc333bab7aa59fc3436de7d51be76f5fcd1586a3a271b24a334534623f3b6c4a08a3900b9321285ed9723c70518f24dcb0954c53f0aad0b9cd3d30e3e188cea9e161fa7057f3936ede9d57f70888a49a94222200bcdbc88d9dc7efaed1e7b6f6c8d70bd661f98c4d999859aae423fba093bb81b80b97e59b80f678a4945bf897a4a2f8d26acc9183c5d5c0e2218aa0ed383524fc53ba200e471d90c4642d6272d46c52bd4a63af66b5888a39609409c4e330266712126767676e59d9d9d71d6e3f88a78c1f8632d67c84d1edce2f377228b3d8f8aa756a56cc786b6cf18f568e5216691e4e0bdf233f6379b80c38ad738384accecdd3b9e61f5165d4f1f877da5bafa65ce3f67eaacf984445e0bd844440111100444401116a2f057c60fd786b62d6faa5ba690d2172bcb3c32d4f6065adb3fb06a7262f1146cc22f333f25d2401eadedee1ea31737645b338cdb0d91e0aa63f16ed082f57c125e2dedefb1b8bc22d8cfd49ec9d0fd318ef97d4faa7ae6331ec87a4d0f71fc8aa5da30907d51bb768cfb749a49f87e09682445748c545591c639a6635b37c6d5c7621de736dbfe97825b2f0411117a20044440111101c7c8e3b1f97c7dac4e5a8d7bb46ec275ecd6b110c914f118b89c6604cec4242eececedc3b3bb3a957e66786790d8cc84db81b7f5ac5ddbfbb333183b9492e0e532e061949f9728089d9a395febcbb466fdba1cb571153a94d54566653a53566374a62fe3e1fe684bb506eca4bf9b35c9db6f1574ff3f28a95efdfc3574ceb0c85ed55b2b9dafa632372629e4c25e8dff45b91147cb40518b9d5166f69f4eb28bb9080b440cdc605dcbd9fdccd9ecb061772b46e4305626e7d0730b1c16381022f4ce0e514bd5a40edd08bab9705c3fd15be74a54f89d3fa7b58e53a960bf07552a96de12da4bbf6e6977c6ebc4e9c888a999404444011761d0db7dadb7335043a5b40e98c8677293757f45385cfd60e621ec90bf8628d88c18a437101ecdd9d996e2d8cf863ff00a26a2dfcd43ff0e6fc3b8797fe51faecdaff00cb19842dfee904ebdc29caa70463b9eeaacab4e43ad8faa94b9456f27e497bbb2f133b78a5e296a6f243533d8b056315a2b15308e5f2e22dd8cb862f95add99d8a72176777767188498899ddc024ae7a3f47e99d01a671da3746e1abe2b0d8a85a0a952067eb18f2eeeeeefcb91113b91193b91111113bbbbbbfd1c763b1f88c7d5c4e268d7a54694215eb56af10c7141100b0846002ccc2222ccccccdc3333332e42b852a4a9af1398f586b3c66adc429545d4a31ecc2f7b78b7b5e4fbedb2d9736c888aa986844440111100444401111005c7c8e3b1f97c7dac4e5a8d7bb46ec275ecd6b110c914f118b89c6604cec4242eececedc3b3bb3a221f5371775c4f05d7de0878cdaf7e7ecfe03fc3b90bdeafeb980b274fd1d3ab7e557fbaa8f610ea5f92fcf622fe37ecbcfff0065d6c07f6bf707fc4297f2888a9ba507c8c970dacb3fc253f854b1753aabbe4ddbc15ef65e1c07ecbad80fed7ee0ff008852fe51770d0df0f8f19b45fa66bba5f21aa6dd7b83722b39dc81c9d7af57188a187d50491f22eee32465dbb131390f02c4454a0b91f6beb4d438883a73c654b3ee95bf9566681c069dd3fa531306034b60b1f87c5d5ede8a58faa15e08bb1399758c19847922227e1beaeeeffbdd7d144550c6a73954939cdddbe2c22221e422220088880ff: JPEG image data
+    ffd9: JPEG trailer
+    009a: opcode=DirectBitsRect; This is a full-zero preview image with packbits
+      000000ff828000000000007800a000000004000000000048000000480000001000200003000800000000000000000000000000000000007800a000000000007800a00040: DirectBitsRect header
+      000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100000a81008100810081008100: image data
+    00ff: opcode=OpEndPic
+  009a: opcode=DirectBitsRect (Is it a bug in ImageMagick export?) (Does DirectBits mean no palette?)
+    000000ff: (baseAddr) fake size + fake OpEndPic
+    8280: version=0x8280 (or row_bytes?)
+    : bounds, used for (RLE) compression
+      0000: top=0
+      0000: left=0
+      0078: bottom=120
+      00a0: right=160
+    0000: pack_type=0 (0, 1, 2, 3 or 4)
+    00040000: pack_size=262144
+    00000048: resolution_x=72
+    00000048: resolution_y=72
+    0000: pixel_type=0
+    0010: pixel_size1=16
+    0020: pixel_size2=32 (why?)
+    0003: colormap_count=3
+    0008: colormap_size=8
+    00000000: plane_bytes=0
+    00000000: pm_table=0
+    00000000: pm_reserved=0
+    : src_rect
+      0000: top=0
+      0000: left=0
+      0078: bottom=120
+      00a0: right=160
+    : dst_rect
+      0000: top=0
+      0000: left=0
+      0078: bottom=120
+      00a0: right=160
+    0040: transfer_mode=0x40=0(srcCopy)+64(ditherCopy)
+    : Is this a bug in picttoppm.c? There shouldn't be a region now, and it expects one.
+    000a: line_size=10 (for packbits == codec=rle); why is it so small? is this a tile?
+    8100: repeat 129 times 0 (packbits compression, http://fileformats.archiveteam.org/wiki/PackBits)
+    8100: repeat 129 times 0
+    8100: repeat 129 times 0
+    8100: repeat 129 times 0
+    8100: repeat 129 times 0
+    : So far, line 0 has 161.25*pixel_size2 bytes, so it fits the width=160.
+    000a...: There will be 120 full-zero lines in total.
+    : no size indicator of DirectBitsRect content
+  00ff: opcode=OpEndPic
+  009a: opcode=DirectBitsRect; Is the presence of a new op after opcode=OpEndPic a bug in ImageMagick export?
+  ...: The same image is repeated again. Is this a bug in ImageMagick export?
+  00ff: opcode=OpEndPic
 
 __END__
