@@ -8145,6 +8145,49 @@ def analyze_xloadimage_niff(fread, info, fskip):
     ) = struct.unpack('>4sLLL', header)
 
 
+def analyze_sun_taac(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Sun_TAAC_image
+  # Also known as VFF and Sun IFF.
+  # libim/imiff.c in imtools_v3.0.tar.gz
+  header = fread(512)
+  if len(header) < 6:
+    raise ValueError('Too short for sun-taac.')
+  first_bytes = '\r\nabcdefghijklmnopqrstuvwxyz'
+  if not (header.startswith('ncaa') and
+          header[4] in first_bytes and header[5] in first_bytes):
+    raise ValueError('sun-taac signature not found.')
+  info['format'], info['codec'] = 'sun-taac', 'uncompressed'
+  if len(header) <= 6:
+    return
+  header = header.replace('\r', '\n')
+  while 1:
+    i = header.find('\f\n', 4)
+    if i >= 0:
+      break
+    if len(header) == 2048:
+      raise ValueError('sun-taac header too long.')
+    elif len(header) not in (512, 1024):
+      raise ValueError('EOF in sun-taac header.')
+    header += fread(len(header)).replace('\r', '\n')
+  for line in header[4 : i].replace(';', '\n').split('\n'):
+    line = line.strip()
+    if '=' in line:
+      key, value = line.split('=', 1)
+      key, value = key.strip(), value.strip()
+      if not (key.isalpha() and key.lower() == key):
+        raise ValueError('Bad sun-taac key: %r' % key)
+      if key == 'size':
+        value = value.split()
+        if len(value) != 2:
+          raise ValueError('Bad sun-taac size item count.')
+        try:
+          info['width'], info['height'] = map(int, value)
+        except ValueError:
+          raise ValueError('Bad sun-taac size: %r' % value)
+    elif line:
+      raise ValueError('Bad sun-taac header line.')
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8489,6 +8532,7 @@ FORMAT_ITEMS = (
     ('photocd', (0, '\xff' * 32)),
     ('fits', (0, 'SIMPLE  = ', 80, lambda header: (len(header) >= 11 and header[10 : 80].split('/', 1)[0].strip(' ') == 'T', 180))),
     ('xloadimage-niff', (0, 'NIFF\0\0\0\1')),
+    ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9188,6 +9232,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_fits(fread, info, fskip)
   elif format == 'xloadimage-niff':
     analyze_xloadimage_niff(fread, info, fskip)
+  elif format == 'sun-taac':
+    analyze_sun_taac(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
