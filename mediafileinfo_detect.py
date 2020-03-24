@@ -8188,6 +8188,53 @@ def analyze_sun_taac(fread, info, fskip):
       raise ValueError('Bad sun-taac header line.')
 
 
+FACESAVER_PREFIXES = ('FirstName:', 'LastName:', 'E-mail:', 'Telephone:', 'Company:', 'Address1:', 'Address2:', 'CityStateZip:', 'PicData:', 'Image:')
+
+
+def count_is_facesaver(header):
+  for prefix in FACESAVER_PREFIXES:
+    if header.startswith(prefix):
+      return 100 * len(prefix)
+  return 0
+
+
+def analyze_facesaver(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/FaceSaver
+  # http://www.fileformat.info/format/face/egff.htm
+  data = fread(16)
+  if len(data) < 6:
+    raise ValueError('Too short for facesaver.')
+  for prefix in FACESAVER_PREFIXES:
+    if data.startswith(prefix):
+      break
+  else:
+    raise ValueError('facesaver signature not found.')
+  info['format'], info['codec'] = 'facesaver', 'uncompressed'
+  if len(data) == data.find(':') + 1:
+    return
+  data += fread(512 - len(data))
+  while 1:
+    i1, i2 = data.find('\n\n'), data.find('\n\r\n')
+    if i1 >= 0 or i2 >= 0:
+      break
+    if len(header) == 2048:
+      raise ValueError('facesaver header too long.')
+    elif len(header) not in (512, 1024):
+      raise ValueError('EOF in facesaver header.')
+    header += fread(len(header))
+  if i1 >= 0 and i2 >= 0 and i2 < i1:
+    i1 = i2
+  for line in data[:i1].replace('\r\n', '\n').split('\n'):
+    if line.startswith('PicData:'):  # Contains actual pixels.
+      items = line[line.find(':') + 1:].strip().split()
+      if len(items) != 3:
+        raise ValueError('Bad facesaver picdata item count.')
+      try:
+        info['width'], info['height'] = map(int, items[:2])
+      except ValueError:
+        raise ValueError('Bad facesaver picdata: %r' % items)
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8533,6 +8580,7 @@ FORMAT_ITEMS = (
     ('fits', (0, 'SIMPLE  = ', 80, lambda header: (len(header) >= 11 and header[10 : 80].split('/', 1)[0].strip(' ') == 'T', 180))),
     ('xloadimage-niff', (0, 'NIFF\0\0\0\1')),
     ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
+    ('facesaver', (0, tuple(prefix[:6] for prefix in FACESAVER_PREFIXES), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9234,6 +9282,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_xloadimage_niff(fread, info, fskip)
   elif format == 'sun-taac':
     analyze_sun_taac(fread, info, fskip)
+  elif format == 'facesaver':
+    analyze_facesaver(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
