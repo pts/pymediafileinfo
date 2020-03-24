@@ -1183,6 +1183,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_photocd, data1),
                      {'format': 'photocd', 'codec': 'photocd', 'height': 768, 'width': 512})
 
+  def test_analyze_fits(self):
+    data1 = ''.join(s + ' ' * (80 - len(s)) for s in (
+        "SIMPLE  =      T / Fits standard\nBITPIX  = -32 / Bits per pixel\nNAXIS   =  2 / Number of axes\nNAXIS1  =   515\nNAXIS2  =  513/ Axis Length\nOBJECT  = 'Cassiopeia A'\nEND".split('\n')))
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fits')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:80])[0], 'fits')
+    self.assertEqual(mediafileinfo_detect.detect_format('SIMPLE  = T')[0], 'fits')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, data1[:80] + 'END' + ' ' * 77),
+                     {'format': 'fits'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, data1),
+                     {'format': 'fits', 'height': 513, 'width': 515})
+
   def test_analyze_jpeg(self):
     data1 = '\xff\xd8\xff\xdb\x00\xc5\x00\x04\x03\x04\x05\x04\x03\x05\x05\x04\x05\x06\x06\x05\x06\x08\x0e\t\x08\x07\x07\x08\x11\x0c\r\n\x0e\x15\x12\x16\x15\x14\x12\x14\x13\x17\x1a!\x1c\x17\x18\x1f\x19\x13\x14\x1d\'\x1d\x1f"#%%%\x16\x1b)+($+!$%#\x01\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\x02\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\xff\xc0\x00\x11\x08\x00x\x00\xa0\x03\x01!\x00\x02\x11\x01\x03\x11\x02'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpeg')

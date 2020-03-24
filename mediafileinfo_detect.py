@@ -8089,6 +8089,47 @@ def analyze_photocd(fread, info, fskip):
     info['width'], info['height'] = width, height
 
 
+def analyze_fits(fread, info, fskip):
+  # http://justsolve.archiveteam.org/wiki/Flexible_Image_Transport_System
+  # https://en.wikipedia.org/wiki/FITS
+  # https://fits.gsfc.nasa.gov/standard40/fits_standard40aa-le.pdf
+  # http://www.stsci.edu/itt/review/dhb_2011/Intro/intro_ch23.html
+  data = fread(80)
+  if len(data) < 11:
+    raise ValueError('Too short for fits.')
+  if not data.startswith('SIMPLE  = '):
+    raise ValueError('fits signature not found.')
+  if data[10 : 80].split('/', 1)[0].strip(' ') != 'T':
+    raise ValueError('Bad fits simple value.')
+  info['format'] = 'fits'
+  if len(data) < 80:
+    return
+  # To get info['codec'], we'd need to analyze "ZCMPTYPE= '...'" within
+  # "XTENSION= 'BINTABLE'" after the primary data array.
+  dimens = {}
+  while 1:
+    data = fread(80)
+    if len(data) < 80:
+      raise ValueError('EOF in fits card.')
+    key = data[:8].rstrip(' ')
+    if not (key.replace('-', 'A').replace('_', 'A').isalnum() and key.upper() == key and key[0].isalpha()):
+      raise ValueError('Bad fits key: %r' % key)
+    if data[8 : 10] == '= ':
+      value = data[10 : 80].split('/', 1)[0].strip(' ')
+      if key in ('NAXIS1', 'NAXIS2'):
+        dimen_key = ('width', 'height')[key == 'NAXIS2']
+        try:
+          dimens[dimen_key] = int(value)
+        except ValueError:
+          raise ValueError('Bad fits %s value: %r' % (key, value))
+    elif data[8 : 10].rstrip(' '):
+      raise ValueError('Bad definition for fits key: %s' % key)
+    elif key == 'END':
+      break
+  if 'width' in dimens and 'height' in dimens:
+    info['width'], info['height'] = dimens['width'], dimens['height']
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8429,6 +8470,7 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/BRender_PIX
     ('brender-pix', (0, '\0\0\0\x12\0\0\0\x08\0\0\0\2\0\0\0\2')),
     ('photocd', (0, '\xff' * 32)),
+    ('fits', (0, 'SIMPLE  = ', 80, lambda header: (len(header) >= 11 and header[10 : 80].split('/', 1)[0].strip(' ') == 'T', 180))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9124,6 +9166,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_alias_pix(fread, info, fskip)
   elif format == 'photocd':
     analyze_photocd(fread, info, fskip)
+  elif format == 'fits':
+    analyze_fits(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
