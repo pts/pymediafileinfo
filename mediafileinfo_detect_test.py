@@ -258,9 +258,21 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_mps.replace('\n', '\r\n')),
                      {'format': 'ps', 'subformat': 'mps', 'has_preview': False, 'height': 20, 'width': 21})
 
-  def test_analyze_mp4_jp2(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mp4, self.JP2_HEADER),
-                     {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352})
+  def test_analyze_jpeg2000(self):
+    self.assertEqual(mediafileinfo_detect.detect_format(self.JP2_HEADER)[0], 'jp2')
+    expected = {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352}
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mp4, self.JP2_HEADER), expected)
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jp2, self.JP2_HEADER), expected)
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg2000, self.JP2_HEADER), expected)
+    data1 = '\xff\x4f\xff\x51\0\x29'
+    data2 = '\xff\x4f\xff\x51\0\x2f\0\0\0\0\2\3\0\0\2\1\0\0\0\0\0\0\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpc')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'jpc')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpc, data1),
+                     {'format': 'jpc', 'codec': 'jpeg2000'})
+    expected = {'format': 'jpc', 'codec': 'jpeg2000', 'height': 513, 'width': 515}
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpc, data2), expected)
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg2000, data2), expected)
 
   def test_analyze_pnot(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnot, '\0\0\0\x14pnot\1\2\3\4\0\0PICT\0\1\0\0\0\x0aPICT..' + self.JP2_HEADER),
@@ -1057,16 +1069,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'farbfeld', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_farbfeld, data1),
                      {'format': 'farbfeld', 'codec': 'uncompressed', 'height': 513, 'width': 515})
-
-  def test_analyze_jpc(self):
-    data1 = '\xff\x4f\xff\x51\0\x29'
-    data2 = '\xff\x4f\xff\x51\0\x2f\0\0\0\0\2\3\0\0\2\1\0\0\0\0\0\0\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpc')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'jpc')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpc, data1),
-                     {'format': 'jpc', 'codec': 'jpeg2000'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpc, data2),
-                     {'format': 'jpc', 'codec': 'jpeg2000', 'height': 513, 'width': 515})
 
   def test_analyze_wbmp(self):
     data_dimens = '\x84\3\x84\1'

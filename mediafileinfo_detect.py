@@ -736,10 +736,11 @@ def parse_isobmff_infe_box(version, flags, data):
   return {item_id: (item_protection_index, item_type)}
 
 
-def analyze_mp4(fread, info, fskip):
+def analyze_mp4(fread, info, fskip, header=''):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
   # Also apple.com has some .mov docs.
 
+  data, header = header, None
   info['format'] = 'mov'
   info['brands'] = []
   info['tracks'] = []
@@ -753,6 +754,36 @@ def analyze_mp4(fread, info, fskip):
   primary_item_id_ary = []
   ipco_boxes = []
   ipma_values = []
+
+  def process_ftyp(data):
+    # See also: http://www.ftyps.com/
+    # See also: http://www.ftyps.com/3gpp.html
+    # Typically major_brand in (
+    #    'qt  ', 'dash', 'MSNV', 'M4A ', 'M4V ', 'f4v ',
+    #    '3gp5', 'avc1', 'iso2', 'iso5', 'iso6', 'isom', 'mp41', 'mp42').
+    if len(data) < 8:
+      raise ValueError('EOF in mp4 ftyp.')
+    major_brand, info['minor_version'] = struct.unpack('>4sL', data[:8])
+    # Usually 0, but has some high (binary) value for major_brand ==
+    # 'qt '.
+    info['minor_version'] = int(info['minor_version'])
+    if major_brand == 'qt  ':
+      info['format'] = 'mov'
+    elif major_brand == 'f4v ':
+      info['format'] = 'f4v'
+    elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
+      info['format'] = 'jp2'  # JPEG-2000.
+    elif major_brand == 'mif1':
+      # Contains items in /meta.
+      info['format'] = 'isobmff-image'
+    else:
+      info['format'] = 'mp4'
+    info['subformat'] = major_brand.strip()
+    brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
+    brands.discard('\0\0\0\0')
+    brands.add(major_brand)
+    brands = sorted(brands)
+    info['brands'] = brands  # Example: ['isom', 'mp42'].
 
   def process_box(size):
     """Dumps the box, and must read it (size bytes)."""
@@ -832,34 +863,7 @@ def analyze_mp4(fread, info, fskip):
         if len(data) != size:
           raise ValueError('EOF in mp4 box, xtype=%r' % xtype)
         if xytype == '/ftyp':
-          # See also: http://www.ftyps.com/
-          # See also: http://www.ftyps.com/3gpp.html
-          # Typically major_brand in (
-          #    'qt  ', 'dash', 'MSNV', 'M4A ', 'M4V ', 'f4v ',
-          #    '3gp5', 'avc1', 'iso2', 'iso5', 'iso6', 'isom', 'mp41', 'mp42').
-          if len(data) < 8:
-            raise ValueError('EOF in mp4 ftyp.')
-          major_brand, info['minor_version'] = struct.unpack('>4sL', data[:8])
-          # Usually 0, but has some high (binary) value for major_brand ==
-          # 'qt '.
-          info['minor_version'] = int(info['minor_version'])
-          if major_brand == 'qt  ':
-            info['format'] = 'mov'
-          elif major_brand == 'f4v ':
-            info['format'] = 'f4v'
-          elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
-            info['format'] = 'jp2'  # JPEG-2000.
-          elif major_brand == 'mif1':
-            # Contains items in /meta.
-            info['format'] = 'isobmff-image'
-          else:
-            info['format'] = 'mp4'
-          info['subformat'] = major_brand.strip()
-          brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
-          brands.discard('\0\0\0\0')
-          brands.add(major_brand)
-          brands = sorted(brands)
-          info['brands'] = brands  # Example: ['isom', 'mp42'].
+          process_ftyp(data)
         elif xytype == 'jp2h/ihdr':  # JPEG-2000.
           if len(data) < 12:
             raise ValueError('EOF in jp2 ihdr.')
@@ -958,42 +962,57 @@ def analyze_mp4(fread, info, fskip):
   xtype_path = ['']
   toplevel_xtypes = set()
   while 1:
-    data = fread(8)
-    if len(data) != 8:
-      # Sometimes this happens, there is a few bytes of garbage, but we
-      # don't reach it, because we break after 'moov' earlier below.
-      toplevel_xtypes.discard('free')
-      toplevel_xtypes.discard('skip')
-      toplevel_xtypes.discard('wide')
-      toplevel_xtypes.discard('junk')
-      if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
-        # This happens. The mdat can be any video, we could process
-        # recursively. (But it's too late to seek back.)
-        # TODO(pts): Convert this to bad_file_mdat_only error.
-        # TODO(pts): Allow mpeg file (from mac).
-        raise ValueError('mov file with only an mdat box.')
-      if 'moov' in toplevel_xtypes:  # Can't happen, see break below.
-        raise AssertionError('moov forgotten.')
-      raise ValueError('mp4 moov box not found.')
-    size, xtype = struct.unpack('>L4s', data)
-    if size == 1:  # Read 64-bit size.
-      data = fread(8)
+    if len(data) < 8:
+      data = fread(8 - len(data))
       if len(data) < 8:
-        raise ValueError('EOF in top-level 64-bit mp4 box size.')
-      size, = struct.unpack('>Q', data)
-      if size < 16:
-        raise ValueError('64-bit mp4 box size too small.')
-      size -= 16
-    elif size >= 8:
-      size -= 8
-    else:
-      # We don't allow size == 0 (meaning until EOF), because we want to
-      # finish the small track parameter boxes first (before EOF).
-      raise ValueError('mp4 box size too small for xtype %r: %d' % (xtype, size))
+        # Sometimes this happens, there is a few bytes of garbage, but we
+        # don't reach it, because we break after 'moov' earlier below.
+        toplevel_xtypes.discard('free')
+        toplevel_xtypes.discard('skip')
+        toplevel_xtypes.discard('wide')
+        toplevel_xtypes.discard('junk')
+        if 'mdat' in toplevel_xtypes and len(toplevel_xtypes) == 1:
+          # This happens. The mdat can be any video, we could process
+          # recursively. (But it's too late to seek back.)
+          # TODO(pts): Convert this to bad_file_mdat_only error.
+          # TODO(pts): Allow mpeg file (from mac).
+          raise ValueError('mov file with only an mdat box.')
+        if 'moov' in toplevel_xtypes:  # Can't happen, see break below.
+          raise AssertionError('moov forgotten.')
+        raise ValueError('mp4 moov box not found.')
+    size, xtype = struct.unpack('>L4s', data[:8])
     toplevel_xtypes.add(xtype)
-    xtype_path.append(xtype)
-    process_box(size)
-    xtype_path.pop()
+    if size >= 8 and xtype in ('ftyp', 'jP  '):
+      if size > 16383 + 8:
+        raise ValueError('mp4 %s box size too large.' % xtype)
+      if len(data) < size:
+        data += fread(size - len(data))
+        if len(data) < size:
+          raise ValueError('EOF in mp4 %s box.' % xtype)
+      if xtype == 'ftyp':
+        process_ftyp(data[8 : size])
+      data = data[size:]
+    elif len(data) > 8:
+      raise ValueError('mp4 preread too long.')
+    else:
+      data = ''
+      if size == 1:  # Read 64-bit size.
+        data = fread(8)
+        if len(data) < 8:
+          raise ValueError('EOF in top-level 64-bit mp4 box size.')
+        size, = struct.unpack('>Q', data)
+        if size < 16:
+          raise ValueError('64-bit mp4 box size too small.')
+        size -= 16
+      elif size >= 8:
+        size -= 8
+      else:
+        # We don't allow size == 0 (meaning until EOF), because we want to
+        # finish the small track parameter boxes first (before EOF).
+        raise ValueError('mp4 box size too small for xtype %r: %d' % (xtype, size))
+      xtype_path.append(xtype)
+      process_box(size)
+      xtype_path.pop()
     if info['format'] == 'jp2':
       if xtype == 'jp2h':  # All JP2 track parameters already found, stop looking.
         break
@@ -1051,6 +1070,59 @@ def analyze_mp4(fread, info, fskip):
       subformat = ISOBMFF_IMAGE_SUBFORMATS.get(codec)
       if subformat:
         info['subformat'] = subformat
+
+
+def is_jp2(header):
+  return (len(header) >= 28 and
+          header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+          header[16 : 20] == 'ftyp' and
+          header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
+
+
+def analyze_jp2(fread, info, fskip):
+  header = fread(28)
+  if len(header) < 28:
+    raise ValueError('Too short for jp2.')
+  if not is_jp2(header):
+    raise ValueError('jp2 signature not found.')
+  info['format'] = 'jp2'  # analyze_mp4 also sets it from ftyp.
+  analyze_mp4(fread, info, fskip, header)
+
+
+def is_jpc(header):
+  return (len(header) >= 6 and
+          header.startswith('\xff\x4f\xff\x51\0') and
+          # 1..10 components.
+          ord(header[5]) % 3 == 2 and 41 <= ord(header[5]) <= 68)
+
+
+def analyze_jpc(fread, info, fskip, header=''):
+  # http://fileformats.archiveteam.org/wiki/JPEG_2000_codestream
+  # Annex A of http://www.hlevkin.com/Standards/fcd15444-1.pdf
+  if len(header) < 24:
+    header += fread(24 - len(header))
+  if len(header) < 6:
+    raise ValueError('Too short for jpc.')
+  if not is_jpc(header):
+    raise ValueError('jpc signature not found.')
+  info['format'], info['codec'] = 'jpc', 'jpeg2000'
+  if len(header) >= 24:
+    (magic, lsiz, rsiz, xsiz, ysiz, xosiz, yosiz,
+    ) = struct.unpack('>4sHHLLLL', header[:24])
+    info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
+
+
+def analyze_jpeg2000(fread, info, fskip):
+  header = fread(28)
+  if len(header) < 6:
+    raise ValueError('Too short for jpeg2000.')
+  if is_jp2(header):
+    info['format'] = 'jp2'  # analyze_mp4 also sets it from ftyp.
+    analyze_mp4(fread, info, fskip, header)
+  elif is_jpc(header):
+    analyze_jpc(fread, info, fskip, header)
+  else:
+    raise ValueError('jpeg2000 signature not found.')
 
 
 def analyze_pnot(fread, info, fskip):
@@ -3719,13 +3791,6 @@ def get_track_info_from_analyze_func(header, analyze_func, track_info=None):
   return track_info
 
 
-def is_jp2(header):
-  return (len(header) >= 28 and
-          header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
-          header[16 : 20] == 'ftyp' and
-          header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
-
-
 def get_mpeg_ts_es_track_info(header, stream_type):
   if not isinstance(header, str):
     raise TypeError
@@ -3748,6 +3813,10 @@ def get_mpeg_ts_es_track_info(header, stream_type):
     elif is_jp2(header):
       track_info = get_track_info_from_analyze_func(
           buffer(header, 12), analyze_mp4,
+          {'type': 'video', 'codec': 'mjpeg2000'})
+    elif is_jpc(header):
+      track_info = get_track_info_from_analyze_func(
+          buffer(header, 12), analyze_jpc,
           {'type': 'video', 'codec': 'mjpeg2000'})
     else:
       return {'type': 'video', 'codec': 'not-mjpeg'}
@@ -7484,23 +7553,6 @@ def analyze_farbfeld(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
-def analyze_jpc(fread, info, fskip):
-  # http://fileformats.archiveteam.org/wiki/JPEG_2000_codestream
-  # Annex A of http://www.hlevkin.com/Standards/fcd15444-1.pdf
-  header = fread(24)
-  if len(header) < 6:
-    raise ValueError('Too short for jpc.')
-  if not (header.startswith('\xff\x4f\xff\x51\0') and
-          # 1..10 components.
-          ord(header[5]) % 3 == 2 and 41 <= ord(header[5]) <= 68):
-    raise ValueError('jpc signature not found.')
-  info['format'], info['codec'] = 'jpc', 'jpeg2000'
-  if len(header) >= 24:
-    (magic, lsiz, rsiz, xsiz, ysiz, xosiz, yosiz,
-    ) = struct.unpack('>4sHHLLLL', header[:24])
-    info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
-
-
 def parse_wbmp_header(header):
   # For simplicity and lack of examples online, we don't support key=value
   # extension header, and we assume that all reserved bits are 0.
@@ -8819,9 +8871,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
   elif format == 'dts':
     analyze_dts(fread, info, fskip)
   elif format == 'jp2':
-    if len(fread(12)) != 12:
-      raise ValueError('Too short for jp2 header.')
-    analyze_mp4(fread, info, fskip)
+    analyze_jp2(fread, info, fskip)
   elif format == 'jpc':
     analyze_jpc(fread, info, fskip)
   elif format == 'bmp':
