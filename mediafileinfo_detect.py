@@ -7683,6 +7683,7 @@ def analyze_sgi_rgb(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/SGI_(image_file_format)
   # http://reality.sgi.com/grafica/sgiimage.html
   # As indicated in sgiversion.html, only big endian is supported.
+  # This format is also called as IRIX or IRIX RGB.
   header = fread(12)
   if len(header) < 12:
     raise ValueError('Too short for sgi-rgb.')
