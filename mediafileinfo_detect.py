@@ -6307,6 +6307,20 @@ def limit_fread_and_fskip(fread, fskip, data_size):
   return fread, fskip
 
 
+def get_string_fread_fskip(data):
+  i_ary = [0]
+
+  def fread(n):
+    result = data[i_ary[0] : i_ary[0] + n]
+    i_ary[0] += len(result)
+    return result
+
+  def fskip(n):
+    return len(fread(n)) == n
+
+  return fread, fskip
+
+
 def analyze_by_format(fread, info, fskip, format, data_size):
   if format == 'bmp':  # TODO(pts): Add more, use map.
     analyze_func = analyze_bmp
@@ -8362,6 +8376,109 @@ def analyze_fit(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+# Based on: https://en.wikipedia.org/wiki/Apple_Icon_Image_format
+#
+# It's unlikely that new entries will be added here, becase new icons tend
+# to be compressed, and this dict contains only the uncompressed ones.
+ICNS_FIXED_SIZE_FORMATS = {
+    'icon': (128, 32, 32),
+    'icn#': (256, 32, 32),
+    'icm#': (48, 16, 12),
+    'icm4': (96, 16, 12),
+    'icm8': (192, 16, 12),
+    'ics#': (64, 16, 16),
+    'ics4': (128, 16, 16),
+    'ics8': (256, 16, 16),
+    'is32': (768, 16, 16),
+    's8mk': (256, 16, 16),
+    'icl4': (512, 32, 32),
+    'icl8': (1024, 32, 32),
+    'il32': (3072, 32, 32),
+    'l8mk': (1024, 32, 32),
+    'ich#': (288, 48, 48),
+    'ich4': (1152, 48, 48),
+    'ich8': (2304, 48, 48),
+    'ih32': (6912, 48, 48),
+    'h8mk': (2304, 48, 48),
+    'it32': (49152, 128, 128),
+    't8mk': (16384, 128, 128),
+    'ic04': (0, 16, 16),
+    'ic05': (0, 32, 32),
+    'icsb': (0, 36, 36),
+    'icsb': (0, 18, 18),
+}
+
+
+def analyze_icns(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/ICNS
+  # https://en.wikipedia.org/wiki/Apple_Icon_Image_format
+  # gdk-pixbuf/io-icns.c in  gdk-pixbuf-2.40.0.tar.xz
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for icns.')
+  if not header.startswith('icns'):
+    raise ValueError('icns signature not found.')
+  size, = struct.unpack('>L', header[4 : 8])
+  if size < 32:
+    raise ValueError('Bad icns size: %d' % size)
+  info['format'], info['icon_count'] = 'icns', 0
+  remaining = size - 8
+  best = ()
+  while remaining > 0:  # Find the largest icon. The earlier the better.
+    if remaining < 16:
+      raise ValueError('Too few bytes remaining in icns.')
+    data = fread(16)
+    if len(data) != 16:
+      raise ValueError('EOF in icns icon header.')
+    xtype, size, magic = struct.unpack('>4sL8s', data)
+    if not 16 <= size <= remaining:
+      raise ValueError('Bad icns icon size: %d')
+    xtype = xtype.lower().strip()
+    if ((xtype.startswith('icp') and xtype[3].isdigit()) or
+        (xtype.startswith('ic') and xtype[3 : 4].isdigit() and xtype >= 'ic07')):
+      width = height = codec = analyze_func = None
+      # TODO(pts): Add more file formats.
+      if magic.startswith('\0\0\0\x0cjP  '):  # Observed.
+        codec, analyze_func = 'jpeg2000', analyze_jpeg2000
+      elif magic.startswith('\xff\x4f\xff\x51\0'):
+        codec, analyze_func = 'jpeg2000', analyze_jpeg2000
+      elif magic.startswith('\211PNG\r\n\032\n'):  # Can happen.
+        codec, analyze_func = 'png', analyze_png  # Will be replaced with codec='flate'.
+      elif magic.startswith('GIF87a') or magic.startswith('GIF89a'):
+        codec, analyze_func = 'gif', analyze_gif
+      elif magic.startswith('\xff\xd8\xff'):
+        codec, analyze_func = 'jpeg', analyze_jpeg
+      else:
+        raise ValueError('Unknown icns icon magic: %r' % magic)
+      if codec:
+        magic += fread(min(1024, size - 8 - len(magic)))
+        fread2, fskip2 = get_string_fread_fskip(magic)
+        info2 = {'format': codec, 'codec': codec}
+        analyze_func(fread2, info2, fskip2)
+        codec = info2['codec']
+        if 'width' in info2 and 'height' in info2:
+          width, height = info2['width'], info2['height']
+    elif xtype in ICNS_FIXED_SIZE_FORMATS:
+      uc_size, width, height = ICNS_FIXED_SIZE_FORMATS[xtype]
+      if size - 8 == uc_size:
+        codec = 'uncompressed'
+      else:
+        codec = 'rle'
+    elif not xtype.rstrip('#').isalnum():  # Corrupt file?
+      raise ValueError('Bad icns icon xtype: %r' % xtype)
+    else:
+      codec = None
+    if codec:
+      #print (xtype, size - 8, codec, width, height)
+      best = max(best, (width * height, remaining, width, height, codec, xtype))
+      info['icon_count'] += 1
+    if not fskip(size - 8 - len(magic)):
+      raise ValueError('EOF in icns icon data.')
+    remaining -= size
+  if best:
+    _, _, info['width'], info['height'], info['codec'], info['subformat'] = best
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8718,6 +8835,7 @@ FORMAT_ITEMS = (
     ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac
     ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
     ('fit', (0, 'IT0', 3, ('1', '2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
+    ('icns', (0, 'icns', 8, lambda header: (len(header) >= 8 and (header[4 : 7] != '\0\0\0' or ord(header[7]) >= 32), 2))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9440,6 +9558,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_macpaint(fread, info, fskip)
   elif format == 'fit':
     analyze_fit(fread, info, fskip)
+  elif format == 'icns':
+    analyze_icns(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):

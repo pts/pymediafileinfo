@@ -21,22 +21,8 @@ import unittest
 import mediafileinfo_detect
 
 
-def get_string_fread_fskip(data):
-  i_ary = [0]
-
-  def fread(n):
-    result = data[i_ary[0] : i_ary[0] + n]
-    i_ary[0] += len(result)
-    return result
-
-  def fskip(n):
-    return len(fread(n)) == n
-
-  return fread, fskip
-
-
 def analyze_string(analyze_func, data):
-  fread, fskip = get_string_fread_fskip(data)
+  fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
   info = {}
   analyze_func(fread, info, fskip)
   if info.get('format') not in mediafileinfo_detect.FORMAT_DB.formats:
@@ -1270,6 +1256,22 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fit')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fit, data1),
                      {'format': 'fit', 'height': 513, 'width': 515})
+
+  def test_analyze_icns(self):
+    data1 = 'icns\0\0\0@icm#\0\0\x008????????????????????????????????????????????????'
+    data2 = 'icns\0\0\0Aicm#\0\0\x009?????????????????????????????????????????????????'
+    data3 = 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0d'
+    data4 = 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0c'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'icns')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'icns')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data1),
+                     {'format': 'icns', 'subformat': 'icm#', 'codec': 'uncompressed', 'height': 12, 'width': 16, 'icon_count': 1})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data2),
+                     {'format': 'icns', 'subformat': 'icm#', 'codec': 'rle', 'height': 12, 'width': 16, 'icon_count': 1})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data3),
+                     {'format': 'icns', 'subformat': 'ic07', 'codec': 'flate', 'height': 13, 'width': 15, 'icon_count': 2})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data4),  # PNG in ic07 has smaller dimensions, using icm#.
+                     {'format': 'icns', 'subformat': 'icm#', 'codec': 'rle', 'height': 12, 'width': 16, 'icon_count': 2})
 
   def test_analyze_jpeg(self):
     data1 = '\xff\xd8\xff\xdb\x00\xc5\x00\x04\x03\x04\x05\x04\x03\x05\x05\x04\x05\x06\x06\x05\x06\x08\x0e\t\x08\x07\x07\x08\x11\x0c\r\n\x0e\x15\x12\x16\x15\x14\x12\x14\x13\x17\x1a!\x1c\x17\x18\x1f\x19\x13\x14\x1d\'\x1d\x1f"#%%%\x16\x1b)+($+!$%#\x01\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\x02\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\xff\xc0\x00\x11\x08\x00x\x00\xa0\x03\x01!\x00\x02\x11\x01\x03\x11\x02'
