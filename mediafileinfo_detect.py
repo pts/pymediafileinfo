@@ -5525,9 +5525,32 @@ def analyze_pcx(fread, info, fskip):
     raise ValueError('pcx xmax smaller than xmin.')
   if ymax < ymin:
     raise ValueError('pcx ymax smaller than ymin.')
-  info['format'] = 'pcx'
-  info['codec'] = 'rle'
+  info['format'], info['codec'] = 'pcx', 'rle'
   info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
+
+
+def analyze_dcx(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/DCX
+  # Sample: https://github.com/ImageMagick/ImageMagick6/blob/master/PerlMagick/t/input.dcx
+  header = fread(8)
+  if len(header) < 4:
+    raise ValueError('Too short for dcx.')
+  if not header.startswith('\xb1\x68\xde\x3a'):
+    raise ValueError('dcx signature not found.')
+  if len(header) >= 8:
+    pcx_ofs, = struct.unpack('<L', header[4 : 8])
+  else:
+    pcx_ofs = 12
+  if pcx_ofs < 12:
+    raise ValueError('dcx pcx_ofs too small: %d' % pcx_ofs)
+  info['format'], info['codec'] = 'dcx', 'rle'
+  if len(header) >= 8:
+    if not fskip(pcx_ofs - len(header)):
+      raise ValueError('EOF in dcx before first pcx.')
+    try:
+      analyze_pcx(fread, info, fskip)
+    finally:
+      info['format'] = 'dcx'
 
 
 def count_define_key(data, i=0):
@@ -8670,6 +8693,7 @@ FORMAT_ITEMS = (
     ('rdi', (0, 'RIFF', 8, 'RDIBBM')),
     ('rdi', (0, 'RIFF', 8, 'RDIBdata')),
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
+    ('dcx', (0, '\xb1\x68\xde\x3a', 8, lambda header: (len(header) < 8 or header[5 : 8] != '\0\0\0' or ord(header[4]) >= 12, 2))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
@@ -9246,6 +9270,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_deep(fread, info, fskip)
   elif format == 'pcx':
     analyze_pcx(fread, info, fskip)
+  elif format == 'dcx':
+    analyze_dcx(fread, info, fskip)
   elif format == 'xbm':
     analyze_xbm(fread, info, fskip)
   elif format == 'xpm':
