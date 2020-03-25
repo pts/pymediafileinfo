@@ -220,8 +220,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'deep', 'height': 516, 'width': 513, 'codec': 'dynamic-huffman'})
 
   def test_analyze_pcx(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),
-                     {'codec': 'rle', 'format': 'pcx', 'height': 261, 'width': 259})
+    data1 = '\n\5\1\x08\0\0\0\0\2\1\4\1'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'pcx')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, data1),
+                     {'format': 'pcx', 'codec': 'rle', 'height': 261, 'width': 259})
 
   def test_analyze_xcf(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xcf, 'gimp xcf v001\0\0\0\1\x0d\0\0\1\7'),
