@@ -6485,6 +6485,11 @@ def analyze_pict(fread, info, fskip, header=''):
       data = fread(2)
       if len(data) < 2:
         raise ValueError('EOF in pict shortcomment.')
+    elif op == 0x1f:  # OpColor.
+      assert not data
+      data = fread(6)
+      if len(data) < 6:
+        raise ValueError('EOF in pict opcolor.')
     elif op == 0xa1:  # LongComment.
       assert not data
       data = fread(4)
