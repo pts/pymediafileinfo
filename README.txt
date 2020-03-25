@@ -224,8 +224,8 @@ Q11. How many image formats does mediafileinfo.py support?
 A11. Dozens, and it can get width and height from most of them.
 
      As of 2020-03-25, all web image formats (JPEG, JPEG 2000, JPEG XR, WebP,
-     WebP lossless, GIF, PNG, APNG, MNG, TIFF, SVG, PDF, XBM, BMP, ICO, HEIF) are
-     supported. Except for PDF, getting width and height is supported for
+     WebP lossless, GIF, PNG, APNG, MNG, TIFF, SVG, PDF, XBM, BMP, ICO, HEIF)
+     are supported. Except for PDF, getting width and height is supported for
      these web image formats.
 
      Web image formats include:
