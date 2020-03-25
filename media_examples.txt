@@ -989,5 +989,13 @@ elements. Some elements are truncated.
   009a: opcode=DirectBitsRect; Is the presence of a new op after opcode=OpEndPic a bug in ImageMagick export?
   ...: The same image is repeated again. Is this a bug in ImageMagick export?
   00ff: opcode=OpEndPic
+* format=jpegxr subformat=coded
+  574d50484f544f00: signature='WMPHOTO\0'
+  11: flags0
+  45: flags1
+  c0: flags2 short_header_flag=1 ...
+  71: flags3 output_clr_fmt=7 output_bitdepth=1
+  009f: width=(0x9f+1)=160
+  0077: height=(0x77+1)=120
 
 __END__

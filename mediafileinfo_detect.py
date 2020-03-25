@@ -6901,6 +6901,8 @@ def count_is_jpegxr(header):
 
 
 def analyze_jpegxr(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/JPEG_XR
+  # Annex A of https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-T.832-201906-I!!PDF-E&type=items
   # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-T.832-201906-I!!PDF-E&type=items
   header = fread(8)
   if len(header) < 8:
@@ -6923,6 +6925,10 @@ def analyze_jpegxr(fread, info, fskip):
       width, height = struct.unpack('>4xLL')
     width += 1
     height += 1
+    # TODO(pts): How to detect lossless JPEG-SR? by the quantization scaling
+    # factor == 1? For lossless coding, the quantization scaling factor is
+    # selected to be equal to 1. For lossy coding, the quantization scaling
+    # factor is selected to be greater than 1.
   elif header.startswith('II\xbc\x01') and not ord(header[4]) & 1:
     info['format'] = info['codec'] = 'jpegxr'
     info['subformat'] = 'tagged'
