@@ -238,7 +238,8 @@ A11. Dozens, and it can get width and height from most of them.
      mediafileinfo.py also supports all image formats supported by these
      libraries and tools:
 
-     * gdk-pixbuf-2.40.0, GNOME Image Viewer == Eye of GNOME (16 formats)
+     * gdk-pixbuf-2.40.0, GNOME Image Viewer == Eye of GNOME, GQview
+       (16 formats)
      * qtimage and qtimageformats-5.14.1, KDE Gwenview (15 formats)
      * imlib-1.9.15 (8 formats)
      * imlib2-1.6.1, qiv (13 formats)
