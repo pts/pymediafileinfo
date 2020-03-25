@@ -239,6 +239,7 @@ A11. Dozens, and it can get width and height from most of them.
      libraries and tools:
 
      * gdk-pixbuf-2.40.0, GNOME Image Viewer == Eye of GNOME (16 formats)
+     * qtimage and qtimageformats-5.14.1, KDE Gwenview (15 formats)
      * imlib-1.9.15 (8 formats)
      * imlib2-1.6.1, qiv (13 formats)
      * libgd-2.2.5 (12 formats)
