@@ -6340,12 +6340,62 @@ def analyze_by_format(fread, info, fskip, format, data_size):
     analyze_func = analyze_tga
   elif format == 'qtif':
     analyze_func = analyze_qtif  # TODO(pts): Isn't it analyze_tiff instead?
+  elif format == 'jpegxl':
+    analyze_func = analyze_jpegxl
+  elif format == 'jpegxl-brunsli':
+    analyze_func = analyze_brunsli
+  elif format == 'jpegxr':
+    analyze_func = analyze_jpegxl
+  elif format == 'ico':
+    analyze_func = analyze_ico
+  elif format == 'xbm':
+    analyze_func = analyze_xbm
   else:
     info['format'] = format
     return
   if data_size is not None:
     fread, fskip = limit_fread_and_fskip(fread, fskip, data_size)
   analyze_func(fread, info, fskip)
+
+
+def quick_detect_image_format(header):
+  """Detect a few image formats with an easy magic, and which are usually
+  embedded."""
+  header = header[:8]  # Limit functionality to easy magic.
+  # TODO(pts): Add more image file formats.
+  if header.startswith('\0\0\0\x0cjP  ') or header.startswith('\xff\x4f\xff\x51\0'):
+    return 'jpeg2000'
+  elif header.startswith('\211PNG\r\n\032\n'):
+    return 'png'
+  elif header.startswith('GIF87a') or header.startswith('GIF89a'):
+    return 'gif'
+  elif header.startswith('\xff\xd8\xff'):
+    return 'jpeg'
+  elif header.startswith('BM'):
+    return 'bmp'
+  elif header.startswith('MM\x00\x2a') or header.startswith('II\x2a\x00'):
+    return 'tiff'
+  elif header.startswith('\xff\xff\xff\xff\xff\xff\xff\xff'):
+    return 'photocd'
+  elif header.startswith('FORM'):  # Analyze 12 bytes, if available.
+    return 'lbm'
+  elif header.startswith('\xff\x0a'):
+    return 'jpegxl'
+  elif header.startswith('\x0a\x04B\xd2\xd5N'):
+    return 'jpegxl-brunsli'
+  elif header.startswith('WMPHOTO\0') or header.startswith('II\xbc\x01'):
+    return 'jpegxr'
+  elif header.startswith('\0\0\1\0'):
+    return 'ico'
+  elif header.startswith('#define'):
+    return 'xbm'
+  #elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' L'):  # Needs 12 bytes.
+  #  return get_track_info_from_analyze_func(header, analyze_webp)
+  #elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # Needs 12 bytes.
+  #  return get_track_info_from_analyze_func(header, analyze_mp4)  # HEIF or AVIF.
+  else:
+    return None
+
 
 
 def count_is_pict_at_512(header):
@@ -8437,27 +8487,19 @@ def analyze_icns(fread, info, fskip):
     if ((xtype.startswith('icp') and xtype[3].isdigit()) or
         (xtype.startswith('ic') and xtype[3 : 4].isdigit() and xtype >= 'ic07')):
       width = height = codec = analyze_func = None
-      # TODO(pts): Add more file formats.
-      if magic.startswith('\0\0\0\x0cjP  '):  # Observed.
-        codec, analyze_func = 'jpeg2000', analyze_jpeg2000
-      elif magic.startswith('\xff\x4f\xff\x51\0'):
-        codec, analyze_func = 'jpeg2000', analyze_jpeg2000
-      elif magic.startswith('\211PNG\r\n\032\n'):  # Can happen.
-        codec, analyze_func = 'png', analyze_png  # Will be replaced with codec='flate'.
-      elif magic.startswith('GIF87a') or magic.startswith('GIF89a'):
-        codec, analyze_func = 'gif', analyze_gif
-      elif magic.startswith('\xff\xd8\xff'):
-        codec, analyze_func = 'jpeg', analyze_jpeg
-      else:
-        raise ValueError('Unknown icns icon magic: %r' % magic)
+      # Observed: 'jpeg2000' jp2.
+      # Documented: 'png', it Will be replaced with codec='flate'.
+      codec = quick_detect_image_format(magic)
       if codec:
         magic += fread(min(1024, size - 8 - len(magic)))
         fread2, fskip2 = get_string_fread_fskip(magic)
         info2 = {'format': codec, 'codec': codec}
-        analyze_func(fread2, info2, fskip2)
+        analyze_by_format(fread2, info2, fskip2, codec, None)
         codec = info2['codec']
         if 'width' in info2 and 'height' in info2:
           width, height = info2['width'], info2['height']
+      else:
+        raise ValueError('Unknown icns icon magic: %r' % magic)
     elif xtype in ICNS_FIXED_SIZE_FORMATS:
       uc_size, width, height = ICNS_FIXED_SIZE_FORMATS[xtype]
       if size - 8 == uc_size:
