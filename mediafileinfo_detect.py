@@ -8762,6 +8762,16 @@ FORMAT_ITEMS = (
     ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
     ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
     ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
+    # http://fileformats.archiveteam.org/wiki/CGM
+    # https://books.google.ch/books?id=O0KeBQAAQBAJ
+    # TODO(pts): Page 161, Chapter 10. The Character Encoding ``This chapter develops the techical details of CGM Part 2, the Character Encoding.''
+    # Software: http://www.agocg.ac.uk/train/cgm/ralcgm.htm
+    # Sample with character encoding: https://github.com/CliffsDover/graphicsmagick/blob/master/ralcgm/examples/ca.cgm
+    # Sample with character encoding: https://github.com/CliffsDover/graphicsmagick/blob/master/ralcgm/examples/cells.cgm
+    ('cgm', (0, ('B', 'b'), 1, ('E', 'e'), 2, ('G', 'g'), 3, ('M', 'm'), 4, ('F', 'f'), 5, (' ', '\"', "'", '\n', '\r'))),  # Clear-text encoding of 'BEGMF '.
+    ('cgm', (0, '\0\x3f\0')),  # Binary encoding with parameter length >= 31. Doesn't detect shorter lengths.
+    ('cgm', (0, '0 ~>~')),  # Character encoding.
+    ('cgm', (0, '0 \x1b\x5c\1b')),  # Character encoding with some binary.
     ('svg', (0, '<svg', 4, XML_WHITESPACE_TAGEND)),
     ('svg', (0, '<svg:svg', 8, XML_WHITESPACE_TAGEND)),
     ('smil', (0, '<smil', 5, XML_WHITESPACE_TAGEND)),
