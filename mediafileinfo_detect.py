@@ -8674,7 +8674,7 @@ FORMAT_ITEMS = (
     ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
     ('facesaver', (0, tuple(prefix[:6] for prefix in FACESAVER_PREFIXES), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
     ('mcidas-area', (0, ('\0\0\0\0\0\0\0\4', '\0\0\0\0\4\0\0\0'), 32, lambda header: adjust_confidence(800, count_is_mcidas_area(header)))),
-    # Not all macpaintfiles match this, some of them start with '\0' * 512,
+    # Not all macpaint files match this, some of them start with '\0' * 512,
     # and they don't have any other header either, so no image data.
     ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac
     ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
