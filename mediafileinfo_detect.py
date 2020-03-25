@@ -8626,6 +8626,7 @@ FORMAT_ITEMS = (
     ('gem', (0, GEM_XIMG_HEADERS, 16, 'XIMG\0\0')),
     # By PCPaint >=2.0 and Pictor.
     ('pcpaint-pic', (0, '\x34\x12', 6, '\0\0\0\0', 11, tuple('\xff123'), 13, tuple('\0\1\2\3\4'))),
+    # TODO(pts): Also support .cur (Windows cursor) files.
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
