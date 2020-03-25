@@ -8324,6 +8324,20 @@ def analyze_macpaint(fread, info, fskip):
   info['width'], info['height'] = 576, 720
 
 
+def analyze_fit(fread, info, fskip):
+  # Mentioned just here: https://github.com/file/file/blob/master/magic/Magdir/images
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for fit.')
+  if header[:4] not in ('IT01', 'IT02'):
+    raise ValueError('fit signature not found.')
+  magic, width, height, depth = struct.unpack('>4sLLL', header[:16])
+  if not 1 <= depth <= 32:  # Just a heuristic check.
+    raise ValueError('Bad fit depth: %d' % depth)
+  info['format'] = 'fit'
+  info['width'], info['height'] = width, height
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8678,6 +8692,7 @@ FORMAT_ITEMS = (
     # and they don't have any other header either, so no image data.
     ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac
     ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
+    ('fit', (0, 'IT0', 3, ('1', '2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9398,6 +9413,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mcidas_area(fread, info, fskip)
   elif format == 'macpaint':
     analyze_macpaint(fread, info, fskip)
+  elif format == 'fit':
+    analyze_fit(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
