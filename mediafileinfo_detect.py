@@ -9116,6 +9116,8 @@ FORMAT_ITEMS = (
     # https://github.com/digipres/digipres.github.io/blob/master/_sources/registries/trid/triddefs_xml/bitmap-bmf-1x.trid.xml
     ('shkarin-bmf', (0, '\x81\x8a', 2, ('\x31', '\x32'), 10, '\0\0\0\0', 18, '\0\0')),
     ('g3-digifax', (1, 'PC Research, Inc')),
+    # https://plan9.io/sources/plan9/sys/src/cmd/postscript/g3p9bit/g3p9bit.c
+    ('g3-dumbpc', (0, 'II*')),
 
     # * It's not feasible to detect
     #   http://justsolve.archiveteam.org/wiki/DEGAS_image , the signature is
