@@ -698,6 +698,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_lbm = 'FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5'
     data_pict2 = '\0\0\0\0\0\0\2\1\2\3\0\x11\2\xff\0\1\0\x0a\0\0\0\0\2\1\2\3' + data_uqt_jpeg + data_jpeg
     data_pict2ext = '\0\0\0\0\0\0\2\1\2\3\0\x11\2\xff\x0c\0\xff\xfe??????????????????????\0\1\0\x0a\0\0\0\0\2\1\2\3\0\xff'
+    data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00PICT????\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
     self.assertEqual(mediafileinfo_detect.detect_format(data_pict1)[0], 'pict')
     self.assertEqual(mediafileinfo_detect.detect_format(data_pict1[:16])[0], 'pict')
     self.assertEqual(mediafileinfo_detect.detect_format(data_zeros1 + data_pict1[:15])[0], '?-zeros32')
@@ -706,7 +707,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format(data_zeros2 + data_pict2[:16])[0], '?-zeros64')
     self.assertEqual(mediafileinfo_detect.detect_format(data_pict2ext)[0], 'pict')
     self.assertEqual(mediafileinfo_detect.detect_format(data_pict2ext[:16])[0], 'pict')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_macbinary1)[0], 'macbinary')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1),
+                     {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macbinary, data_macbinary1 + data_pict1),
                      {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pict, data_pict1[:16]),
                      {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
@@ -1250,11 +1254,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00PNTGMPNT\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
     data2 = '\0\0\0\2\0\0\0\0\0\0\0\0'
     data3 = '\0\0\0\3\xff\xff\xff\xff\xff\xff\xff\xff'
-    self.assertEqual(mediafileinfo_detect.detect_format(data_macbinary1)[0], 'macpaint')
+    self.assertEqual(mediafileinfo_detect.detect_format(data_macbinary1)[0], 'macbinary')
     self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'macpaint')
     self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'macpaint')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, data_macbinary1),
-                     {'format': 'macpaint', 'codec': 'rle', 'height': 720, 'width': 576})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macbinary, data_macbinary1),
+                     {'format': 'macpaint', 'subformat': 'macbinary', 'codec': 'rle', 'height': 720, 'width': 576})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, data2),
                      {'format': 'macpaint', 'codec': 'rle', 'height': 720, 'width': 576})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, data3),

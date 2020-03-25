@@ -6276,6 +6276,7 @@ MAC_TYPE_MAP = {
     'pcxf':  ('pcx', 'rle'),
     'pcxx':  ('pcx', 'rle'),
     'pict': ('pict', 'code'),
+    'pntg': ('macpaint', 'rle'),
     'targ': ('tga', None),
     'tga': ('tga', None),
     'tga1': ('tga', None),
@@ -6353,6 +6354,10 @@ def analyze_by_format(fread, info, fskip, format, data_size):
     analyze_func = analyze_ico
   elif format == 'xbm':
     analyze_func = analyze_xbm
+  elif format == 'pict':
+    analyze_func = analyze_pict
+  elif format == 'macpaint':
+    analyze_func = analyze_macpaint
   else:
     info['format'] = format
     return
@@ -8399,27 +8404,18 @@ def analyze_mcidas_area(fread, info, fskip):
     info['height'], info['width'] = struct.unpack(fmt + 'LL', header[32 : 40])
 
 
-def is_macbinary(header, expected_type):
-  # TODO(pts): Check checksum for MacBinary II and MacBinary III,
-  #            https://github.com/mietek/theunarchiver/wiki/MacBinarySpecs
-  return (len(header) >= 128 and header[0] == '\0' and
-          1 <= ord(header[1]) <= 63 and
-          header[74] == header[82] == '\0' and
-          header[65 : 69] == expected_type)
-
-
 def analyze_macpaint(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/MacPaint
   # http://www.idea2ic.com/File_Formats/macpaint.pdf
   # https://www.fileformat.info/format/macpaint/egff.htm
-  header = fread(128)
-  if len(header) < 12:
-    raise ValueError('Too short for macpaint.')
-  if not (is_macbinary(header, 'PNTG') or
-          (header[:4] in ('\0\0\0\2', '\0\0\0\3') and
-           header[4 : 12] in
-           ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))):
-    raise ValueError('macpaint signature not found.')
+  if not (info.get('subformat') == 'macbinary' and info.get('format') == 'macpaint'):
+    header = fread(12)
+    if len(header) < 12:
+      raise ValueError('Too short for macpaint.')
+    if not ((header[:4] in ('\0\0\0\2', '\0\0\0\3') and
+             header[4 : 12] in
+             ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))):
+      raise ValueError('macpaint signature not found.')
   info['format'], info['codec'] = 'macpaint', 'rle'
   info['width'], info['height'] = 576, 720
 
@@ -8638,6 +8634,32 @@ def analyze_binhex(fread, info, fskip):
       info['format'], info['subformat'], info['codec'] = 'binhex', 'hcx', 'uncompressed'  # .hcx, BinHex 2.0
     else:
       info['format'], info['subformat'], info['codec'] = 'binhex', 'hex', 'uncompressed'  # .hex, BinHex 1.0
+
+
+MACBINARY_TYPES = ('PICT', 'PNTG')
+
+
+def is_macbinary(header):
+  return (len(header) >= 128 and header[0] == '\0' and
+          1 <= ord(header[1]) <= 63 and
+          header[74] == header[82] == '\0' and
+          header[65 : 69] in MACBINARY_TYPES)
+
+
+def analyze_macbinary(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/MacBinary
+  # https://github.com/mietek/theunarchiver/wiki/MacBinarySpecs
+  # TODO(pts): Check checksum for MacBinary II and MacBinary III,
+  header = fread(128)
+  if len(header) < 128:
+    raise ValueError('Too short for macbinary.')
+  if not is_macbinary(header):
+    raise ValueError('macbinary signature not found or unknown type.')
+  codec_tag = header[65 : 69].strip().strip('.').lower()
+  assert codec_tag in MAC_TYPE_MAP
+  info['format'] = format = MAC_TYPE_MAP[codec_tag][0]
+  info['subformat'] = 'macbinary'
+  analyze_by_format(fread, info, fskip, format, None)
 
 
 def count_is_xml(header):
@@ -8912,8 +8934,7 @@ FORMAT_ITEMS = (
     ('mcidas-area', (0, ('\0\0\0\0\0\0\0\4', '\0\0\0\0\4\0\0\0'), 32, lambda header: adjust_confidence(800, count_is_mcidas_area(header)))),
     # Not all macpaint files match this, some of them start with '\0' * 512,
     # and they don't have any other header either, so no image data.
-    ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac
-    ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
+    ('macpaint', (0, '\0\0\0', 3, ('\2', '\3'), 4, ('\0\0\0\0\0\0\0\0', '\xff\xff\xff\xff\xff\xff\xff\xff'))),  # .mac. Also from 'macbinary'.
     ('fit', (0, 'IT0', 3, ('1', '2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
     ('icns', (0, 'icns', 8, lambda header: (len(header) >= 8 and (header[4 : 7] != '\0\0\0' or ord(header[7]) >= 32), 2))),
     ('dds', (0, 'DDS \x7c\0\0\0', 76, ' \0\0\0')),
@@ -8999,7 +9020,7 @@ FORMAT_ITEMS = (
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
-    ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
+    ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from 'macbinary'. Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
     ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
     # http://fileformats.archiveteam.org/wiki/CGM
     # https://books.google.ch/books?id=O0KeBQAAQBAJ
@@ -9149,6 +9170,7 @@ FORMAT_ITEMS = (
     ('binhex', (0, '(This file must be converted with BinHex')),
     ('binhex', (0, '(This file ')),
     ('binhex', (0, '(Convert with')),
+    ('macbinary', (0, '\0', 128, lambda header: (800, is_macbinary(header)))),
 
     # Non-compressed, non-media.
 
@@ -9717,6 +9739,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ftc(fread, info, fskip)
   elif format == 'binhex':
     analyze_binhex(fread, info, fskip)
+  elif format == 'macbinary':
+    analyze_macbinary(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
