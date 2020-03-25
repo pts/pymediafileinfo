@@ -1084,6 +1084,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aifc, data2),
                      {'format': 'aifc', 'tracks': [{'type': 'audio', 'codec': 'mulaw', 'channel_count': 2, 'sample_rate': 8000, 'sample_size': 16}]})
 
+  def test_analyze_au(self):
+    data1 = '.snd\0\0\0\x1c\0\1\x6b\xf5\0\0\0\1\0\0\x1f\x40\0\0\0\1'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'au')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_au, data1),
+                     {'format': 'au', 'tracks': [{'type': 'audio', 'codec': 'mulaw', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 8}]})
+
   def test_analyze_ftc(self):
     data1 = 'FTC\0\1\1\2\1\x80\2\x90\1\x18\0\1\0'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ftc')

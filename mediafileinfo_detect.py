@@ -2613,6 +2613,45 @@ def analyze_aifc(fread, info, fskip):
     xtype, size = struct.unpack('>4sL', data)
 
 
+AU_CODECS = {
+    1: ('mulaw', 8),
+    2: ('pcm', 8),
+    3: ('pcm', 16),
+    4: ('pcm', 24),
+    5: ('pcm', 32),
+    6: ('pcm', 32),  # Float.
+    7: ('pcm', 64),  # Float.
+    23: ('adpcm', 4),  # G.721.
+    24: ('adpcm', 1),  # G.722. Bit count not specified.
+    25: ('adpcm', 3),  # G.723.
+    26: ('adpcm', 5),  # G.723.
+    27: ('alaw', 8),
+}
+
+
+def analyze_au(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/AU
+  # https://pubs.opengroup.org/external/auformat.html
+  # Sample: http://file.fyicenter.com/14_Audio_.AU_File_Extension_for_Audio_Files.html
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for au.')
+  if not header.startswith('.snd\0\0\0'):
+    raise ValueError('au signature not found.')
+  (header_size, data_size, encoding, sample_rate, channel_count,
+  ) = struct.unpack('>5L', header[4 : 24])
+  if not 24 <= header_size <= 255:
+    raise ValueError('Bad au header_size: %d' % header_size)
+  if encoding not in AU_CODECS:
+    raise ValueError('Unknown au encoding: %d' % encoding)
+  codec, sample_size = AU_CODECS[encoding]
+  if not 1 <= channel_count <= 16:
+    raise ValueError('Bad au channel_count: %d' % header_size)
+  info['format'] = 'au'
+  info['tracks'] = [{'type': 'audio', 'codec': codec, 'channel_count': channel_count, 'sample_size': sample_size}]
+  set_sample_rate(info['tracks'][-1], 'au', sample_rate)
+
+
 # --- H.264.
 
 
@@ -9118,6 +9157,7 @@ FORMAT_ITEMS = (
     # https://github.com/schismtracker/schismtracker/wiki/ITTECH.TXT
     # .mod and .s3m don't have a magic number (they start with an arbitrary song name >= 16 bytes).
     ('impulsetracker', (0, 'IMPM')),  # .it
+    ('au', (0, '.snd\0\0\0', 12, '\0\0\0', 15, tuple(chr(c) for c in AU_CODECS), 20, '\0\0\0', 23, tuple(chr(c) for c in xrange(1, 16)))),
 
     # Document media and vector graphics.
 
@@ -9712,6 +9752,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_aiff(fread, info, fskip)
   elif format == 'aifc':
     analyze_aifc(fread, info, fskip)
+  elif format == 'au':
+    analyze_au(fread, info, fskip)
   elif format == 'lepton':
     info['codec'] = 'lepton'
   elif format == 'fuji-raf':
