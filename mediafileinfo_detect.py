@@ -2510,6 +2510,52 @@ def analyze_ralf(fread, info, fskip):
   info['tracks'] = [get_ralf_track_info(header)]
 
 
+# --- Other audio.
+
+
+def round_apple_float80(e, m, is_large_ok=True):
+  """Returns the nearest integer."""
+  # Also https://en.wikipedia.org/wiki/Extended_precision#x86_extended_precision_format
+  f = e & 0x7fff
+  if f in (0, 0x7fff):
+    raise ValueError('Unsupported float80 special e.')
+  m &= 0xffffffffffffffff
+  if not m >> 63:
+    raise ValueError('Unsupported float80 unnormal m.')
+  s = (0x3fff + 63) - f
+  if s > 0:
+    m = (m + (1 << (s - 1))) >> s
+  elif is_large_ok:
+    m <<= -s
+  else:
+    raise ValueError('float80 value too large.')
+  if e & 0x8000:
+    m = -m
+  return int(m)
+
+
+def analyze_aiff(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/AIFF
+  # http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/Docs/AIFF-1.3.pdf
+  header = fread(38)
+  if len(header) < 20:
+    raise ValueError('Too short for aiff.')
+  if not (header.startswith('FORM') and
+          header[8 : 20] == 'AIFFCOMM\0\0\0\x12'):
+    raise ValueError('aiff signature not found.')
+  info['format'] = 'aiff'
+  info['tracks'] = [{'type': 'audio', 'codec': 'pcm'}]
+  if len(header) >= 38:
+    (channel_count, frame_count, sample_size, sample_rate2, sample_rate8,
+    ) = struct.unpack('>HLHHQ', header[20 : 38])
+    set_channel_count(info['tracks'][-1], 'aiff', channel_count)
+    set_sample_rate(info['tracks'][-1], 'aiff',
+                    round_apple_float80(sample_rate2, sample_rate8, False))
+    if not 1 <= sample_size <= 32:
+      raise ValueError('Bad aiff sample_size: %d' % sample_size)
+    info['tracks'][-1]['sample_size'] = sample_size
+
+
 # --- H.264.
 
 
@@ -9010,6 +9056,7 @@ FORMAT_ITEMS = (
     ('midi', (0, 'MThd\0\0\0\6\0', 9, ('\1', '\2'), 10, ('\0', '\1', '\2', '\3'))),
     # http://web.archive.org/web/20110610135604/http://www.midi.org/about-midi/rp29spec(rmid).pdf
     ('midi-rmid', (0, 'RIFF', 8, 'RMIDdata', 20, 'MThd\0\0\0\6\0', 29, ('\0', '\1', '\2'))),  # .rmi
+    ('aiff', (0, 'FORM', 8, 'AIFFCOMM\0\0\0\x12')),
 
     # Document media and vector graphics.
 
@@ -9600,6 +9647,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_realaudio(fread, info, fskip)
   elif format == 'ralf':
     analyze_ralf(fread, info, fskip)
+  elif format == 'aiff':
+    analyze_aiff(fread, info, fskip)
   elif format == 'lepton':
     info['codec'] = 'lepton'
   elif format == 'fuji-raf':

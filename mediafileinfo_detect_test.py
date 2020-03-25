@@ -1058,6 +1058,19 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff[:-4] + 'RMP3', data_bext, data_bext, 'bext\xff\0\0\0' + '?' * 256, data_mp3))),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
 
+  def test_analyze_aiff(self):
+    data1 = 'FORM\0\1\2\3AIFFCOMM\0\0\0\x12\0\2????\0\x0a\x40\x0e\xac\x44\0\0\0\0\0\0'
+    data2 = 'FORM\0\1\2\3AIFFCOMM\0\0\0\x12\0\1????\0\x08\x40\x0c\xad\xdd\x17\x44\0\0\0\0'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'aiff')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:20])[0], 'aiff')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'aiff')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aiff, data1),
+                     {'format': 'aiff', 'tracks': [{'type': 'audio', 'codec': 'pcm', 'channel_count': 2, 'sample_rate': 44100, 'sample_size': 10}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aiff, data1[:20]),
+                     {'format': 'aiff', 'tracks': [{'type': 'audio', 'codec': 'pcm'}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aiff, data2),
+                     {'format': 'aiff', 'tracks': [{'type': 'audio', 'codec': 'pcm', 'channel_count': 1, 'sample_rate': 11127, 'sample_size': 8}]})
+
   def test_analyze_ftc(self):
     data1 = 'FTC\0\1\1\2\1\x80\2\x90\1\x18\0\1\0'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ftc')
