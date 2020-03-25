@@ -377,8 +377,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'brands': ['avif', 'miaf', 'mif1'], 'codec': 'av1', 'format': 'isobmff-image', 'has_early_mdat': True, 'height': 720, 'minor_version': 0, 'subformat': 'avif', 'width': 1280})
 
   def test_analyze_png(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_png, '\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\5\1\0\0\3\2'),
+    data1 = '\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\5\1\0\0\3\2'
+    data2 = data1 + '\x08\3\0\0\0????' '\0\0\0\x08acTL\0\0\0\x28\0\0\0\0????'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'png')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'png')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_png, data1),
                      {'format': 'png', 'codec': 'flate', 'width': 1281, 'height': 770})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_png, data2),
+                     {'format': 'apng', 'codec': 'flate', 'width': 1281, 'height': 770})
 
   def test_analyze_jng(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jng, '\x8bJNG\r\n\x1a\n\0\0\0\rJHDR\0\0\5\1\0\0\3\2'),

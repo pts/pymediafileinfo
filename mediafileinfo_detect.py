@@ -5432,15 +5432,28 @@ def analyze_mng(fread, info, fskip):
 
 def analyze_png(fread, info, fskip):
   # https://tools.ietf.org/html/rfc2083
+  # https://wiki.mozilla.org/APNG_Specification
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for png.')
   if not header.startswith('\211PNG\r\n\032\n\0\0\0'):
     raise ValueError('png signature not found.')
-  info['format'] = 'png'
-  info['codec'] = 'flate'
+  info['format'], info['codec'] = 'png', 'flate'
   if header[12 : 16] == 'IHDR':
     info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
+    chunk_size, = struct.unpack('>L', header[8 : 12])
+    # Look for acTL chunk to detect format=apng.
+    if chunk_size >= len(header) - 16 and fskip(chunk_size - (len(header) - 16) + 4):
+      while 1:
+        data = fread(8)
+        if len(data) < 8:
+          break
+        chunk_size, chunk_type = struct.unpack('>L4s', data)
+        if chunk_type == 'acTL':
+          info['format'] = 'apng'
+          break
+        if chunk_type in ('IDAT', 'IEND') or not fskip(chunk_size + 4):
+          break
 
 
 def analyze_jng(fread, info, fskip):
