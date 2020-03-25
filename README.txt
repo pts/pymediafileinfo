@@ -8,8 +8,10 @@ read the input in a streaming way (without seeking), and it stops reading
 after the media parameters have been found.
 
 mediafileinfo.py can detect >130 file formats, among those it can display
-dimensions and codec from media formats webm, flv, avi, asf, wmv, wma etc.,
-and it can display dimensions of image formats JPEG, PNG, GIF, BMP, PNM.
+dimensions and codec of media formats mp4, mkv, mpeg-ts, mpeg-ps, wmv, avi,
+webm, flv, asf, wma, etc., it can display dimensions of image formats JPEG,
+PNG, GIF, BMP, PNM, TIFF etc., and it can display codec and audio parameters
+of audio formats mp3, flac, wav etc.
 
 Status: production ready for images, beta software for video. Please report
 bugs on https://github.com/pts/pymediafileinfo/issues , your feedback is
@@ -44,7 +46,7 @@ FAQ
 ~~~
 Q0. Which file formats does mediafileinfo.py support?
 
-A0. Get a full list of file formats that can be detecting (by their
+A0. Get a full list of file formats that can be detected (by their
     signature) by running `mediafileinfo.py --list-formats'. This will
     include >130 file formats.
 
@@ -52,6 +54,8 @@ A0. Get a full list of file formats that can be detecting (by their
     be found in all file formats, e.g. format=zip doesn't have width, and
     format=pdf would be too complicated to process (i.e. /MediaBox can be
     in a compressed object).
+
+    See also Q11 for more details of image formats.
 
 Q1. Can mediafileinfo.py get image authoring metadata (e.g. camera model
     and other EXIF tags), audio metadata (e.g. artist and album and other ID3
@@ -215,6 +219,70 @@ Q10. mediafileinfo.py doesn't detect or analyze (media parameters) my
 A10. Please report a bug on https://github.com/pts/pymediafileinfo/issues ,
      and attach the offending file.
 
+Q11. How many image formats does mediafileinfo.py support?
+
+A11. Dozens, and it can get width and height from most of them.
+
+     As of 2020-03-25, all web image formats (JPEG, JPEG 2000, JPEG XR, WebP,
+     WebP lossless, GIF, PNG, APNG, MNG, TIFF, SVG, PDF, XBM, BMP, ICO, HEF) are
+     supported. Except for PDF, getting width and height is supported for
+     these web image formats.
+
+     Web image formats include:
+
+     * https://en.wikipedia.org/wiki/Comparison_of_web_browsers#Image_format_support (15 formats)
+     * https://en.wikipedia.org/wiki/Comparison_of_browser_engines_(graphics_support) (10 formats)
+     * https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types (9 formats)
+     * https://developer.akamai.com/legacy/learn/Images/common-image-formats.html (6 formats)
+
+     mediafileinfo.py also supports all image formats supported by these
+     libraries and tools:
+
+     * imlib-1.9.15 (8 formats)
+     * imlib2-1.6.1, qiv (13 formats)
+     * libgd-2.2.5 (12 formats)
+     * cups-filters-1.27.2, imagetoraster, cupsfilters/image.c (11 formats)
+     * xv-3.10a (19 formats)
+     * xloadimage-4.1 (19 formats)
+     * leptonica-1.79.0 (11 formats)
+     * sam2p-0.49.4 (13 formats)
+
+     mediafileinfo.py supports some (but far from all) image formats
+     supported by these libraries and tools:
+
+     * Pillow-7.0.0, PIL, Python Imaging Library (45 formats)
+     * netpbm-10.73.30 (69 formats)
+     * Image Alchemy 1.11
+       (http://fileformats.archiveteam.org/wiki/Image_Alchemy) (95 formats)
+     * ImageMagick-6.9.10, convert, display, identify (218 formats)
+
+     mediafileinfo.py also supports old Mac (Apple) image formats PICT,
+     MacPaint, QTIF and PNOT.
+
+Q12. If multiple magic numbers match, which one does mediafileinfo.py report?
+
+A12. mediafileinfo.py sorts matching file formats by (approximate)
+     number of bits matched, and picks the top one. For example, if a format
+     starts with '\0\0\0', and the mp4 format has header[4 : 8] == 'ftyp',
+     and the file starts with '\0\0\0\x18ftyp', then mediafileinfo.py will
+     detect the file as mp4, because that has matched 4 bytes ('ftyp'), and
+     the other format only matched 3 bytes (at the beginning). This strategy
+     leads to the most likely match even if detection of new file formats
+     with short matches get added in the future.
+
+     For the matching, mediafileinfo.py doesn't only look at magic numbers,
+     but it also does consistency checks on the first few header fields
+     (especially in the first 16 bytes of the file). For example, the XWD
+     file format doesn't have any magic number, but it starts with
+     header_size (32-bit integer) and file_version (32-bit integer), both of
+     which have only a few valid values, and mediafileinfo.py matches XWD
+     only if these header values are valid.
+
+* (end)
+
+__END__
+
+
 TODO
 ~~~~
 
@@ -222,17 +290,12 @@ TODO
 * TODO(pts): Diagnose all errors, e.g. lots of Unexpected PreviousTagSize: ...
 * TODO(pts): Diagnose all width= and height= missing.
 * TODO(pts): Estimate better size limits.
-* TODO(pts): Better format=html detection, longer strings etc.
 * TODO(pts): Add type=video, type=audio, type=image etc.
 * TODO(pts): Add memory limits against large reads everywhere.
 * TODO(pts): Add dimension detection (from img_bbox.pl: sub calc and
-             my @formats) for more image formats: XBM1, XBM,
-             MinoltaRAW, Cineon, BioRad, IFF, FBM, CMUWM, RLE, PCD,
-             McIDAS, VIEW, SGI, FITS, VICAR, FIT, FIG, archivers,
-             G3, Faces, + all from @formats.
-             Still, img_bbox.pl has better PostScript, DVI (\special)
+             my @formats) for more image formats: BioRad,
+             FIT, G3, + all from @formats.
+             Still, img_bbox.pl has better PostScript and PDF
              analyzing.
-* TODO(pts): Publish img_bbox.pl on GitHub (copy metadata from
-             http://freshmeat.sourceforge.net/projects/img_bbox)
 
 __END__
