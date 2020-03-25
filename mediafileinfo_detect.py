@@ -9112,6 +9112,9 @@ FORMAT_ITEMS = (
     ('midi-rmid', (0, 'RIFF', 8, 'RMIDdata', 20, 'MThd\0\0\0\6\0', 29, ('\0', '\1', '\2'))),  # .rmi
     ('aiff', (0, 'FORM', 8, 'AIFFCOMM\0\0\0\x12')),
     ('aifc', (0, 'FORM', 8, 'AIFC', 12, ('FVER', 'COMM'), 16, '\0\0\0')),
+    # https://github.com/schismtracker/schismtracker/wiki/ITTECH.TXT
+    # .mod and .s3m don't have a magic number (they start with an arbitrary song name >= 16 bytes).
+    ('impulsetracker', (0, 'IMPM')),  # .it
 
     # Document media and vector graphics.
 
