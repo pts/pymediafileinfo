@@ -2287,6 +2287,9 @@ def analyze_flac(fread, info, fskip, header=''):
 
 
 def analyze_ape(fread, info, fskip, header=''):
+  # Monkey's Audio.
+  # http://fileformats.archiveteam.org/wiki/Monkey%27s_Audio
+  # Can be reverse engineered from the source code: https://monkeysaudio.com/developers.html
   if len(header) < 10:
     header += fread(10 - len(header))
   if len(header) < 5:
