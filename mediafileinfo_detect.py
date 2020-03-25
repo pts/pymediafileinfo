@@ -6414,6 +6414,7 @@ def analyze_pict(fread, info, fskip, header=''):
   # PICT: Apple QuickDraw vector graphics metadata (becore macOS with PDF).
   # https://developer.apple.com/library/archive/documentation/mac/pdf/Imaging_With_QuickDraw/Appendix_A.pdf
   # https://developer.apple.com/library/archive/documentation/mac/pdf/ImagingWithQuickDraw.pdf
+  # http://mirrors.apple2.org.za/apple.cabi.net/Graphics/PICT.and_QT.INFO/PICT.file.format.TI.txt
   # https://www-jlc.kek.jp/subg/ir/study/latex/netpbm-10.18.14/converter/ppm/picttoppm.c
   # https://github.com/scummvm/scummvm/blob/master/image/pict.cpp
   # https://github.com/jsummers/deark/blob/master/modules/pict.c
