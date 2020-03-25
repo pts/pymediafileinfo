@@ -5778,6 +5778,8 @@ def analyze_tga(fread, info, fskip):
     raise ValueError('Bad tga image_type: %d' % image_type)
   if bpp not in (1, 2, 4, 8, 15, 16, 24, 32):  # Bits per pixel.
     raise ValueError('Bad tga bpp: %d' % bpp)
+  if cm_entry_size not in (0, 16, 24, 32):
+    raise ValueError('Bad tga colormap_entry_size: %d' % cm_entry_size)
   info['format'] = 'tga'
   info['codec'] = codec
   info['width'], info['height'] = width, height
@@ -8895,7 +8897,7 @@ FORMAT_ITEMS = (
     ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     ('dcx', (0, '\xb1\x68\xde\x3a', 8, lambda header: (len(header) < 8 or header[5 : 8] != '\0\0\0' or ord(header[4]) >= 12, 2))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
-    ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 16, ('\1', '\2', '\4', '\x08', '\x0f', '\x10', '\x18', '\x20'))),
+    ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 7, ('\0', '\x10', '\x18', '\x20'), 16, ('\1', '\2', '\4', '\x08', '\x0f', '\x10', '\x18', '\x20'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
     ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\6\0\0\0', 8, tuple(chr(c) for c in xrange(17)), 9, '\0\0\0', 12, ('\1', '\2', '\3', '\4', '\5'), 13, '\0\0\0', 16, ('\0', '\1'), 17, '\0\0\0')),
