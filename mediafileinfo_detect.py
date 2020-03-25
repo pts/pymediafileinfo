@@ -5377,6 +5377,7 @@ def populate_dib(info, data, format):
   if b < 40 and len(data) >= 12:
     info['width'], info['height'] = struct.unpack(
         '<HH', data[18 : 22])
+    info['codec'] = 'uncompressed'
   elif b >= 40 and len(data) >= 26:
     info['width'], info['height'] = struct.unpack(
         '<LL', data[18 : 26])

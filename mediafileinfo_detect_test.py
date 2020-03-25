@@ -889,11 +889,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data1 = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
     data2 = 'BM????\0\0\0\0????\x0c\0\0\0\x80\2\xe0\1'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'bmp')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1[:22])[0], 'bmp')
     self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'bmp')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data1),
                      {'format': 'bmp', 'codec': 'rle', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data1[:22]),
+                     {'format': 'bmp'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data2),
-                     {'format': 'bmp', 'height': 480, 'width': 640})
+                     {'format': 'bmp', 'codec': 'uncompressed', 'height': 480, 'width': 640})
 
   def test_analyze_rdi(self):
     data_bmp = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
