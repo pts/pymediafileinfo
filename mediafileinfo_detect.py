@@ -772,7 +772,7 @@ def analyze_mp4(fread, info, fskip, header=''):
     elif major_brand == 'f4v ':
       info['format'] = 'f4v'
     elif major_brand in ('jp2 ', 'jpm ', 'jpx '):
-      info['format'] = 'jp2'  # JPEG-2000.
+      info['format'] = 'jp2'  # JPEG 2000.
     elif major_brand == 'mif1':
       # Contains items in /meta.
       info['format'] = 'isobmff-image'
@@ -864,7 +864,7 @@ def analyze_mp4(fread, info, fskip, header=''):
           raise ValueError('EOF in mp4 box, xtype=%r' % xtype)
         if xytype == '/ftyp':
           process_ftyp(data)
-        elif xytype == 'jp2h/ihdr':  # JPEG-2000.
+        elif xytype == 'jp2h/ihdr':  # JPEG 2000.
           if len(data) < 12:
             raise ValueError('EOF in jp2 ihdr.')
           # https://sno.phy.queensu.ca/~phil/exiftool/TagNames/Jpeg2000.html#ImageHeader
@@ -8544,6 +8544,7 @@ FORMAT_ITEMS = (
     # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
     ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
+    ('apng',),  # From 'png'.
     ('jng', (0, '\213JNG\r\n\032\n\0\0\0')),
     # JPEG reencoded by Dropbox lepton. Getting width and height is complicated.
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
@@ -8566,6 +8567,8 @@ FORMAT_ITEMS = (
     # PDF-ready output of `jbig2 -p'.
     ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
+    # Both the tagged (TIFF-based) and the coded (codestream, elementary
+    # stream, bitstream) format are detected.
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
     ('fuif', (0, ('FUIF', 'FUAF'), 4, ('\x31', '\x32', '\x33', '\x34', '\x35'), 5, tuple(chr(c) for c in xrange(0x26 + 1, 0x26 + 16)))),
@@ -8657,9 +8660,9 @@ FORMAT_ITEMS = (
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
     ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
     ('qtif', (0, '\0\0\0', 4, 'idsc')),
-    # JPEG-2000 container format.
+    # JPEG 2000 container format.
     ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
-    # JPEG-2000 codestream (elementary stream, bitstream).
+    # JPEG 2000 codestream (elementary stream, bitstream).
     ('jpc', (0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
