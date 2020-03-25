@@ -1307,7 +1307,31 @@ def get_ogg_es_track_info(header):
         get_string_fread(header))
     return track_info
   elif header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0'):
-    return get_track_info_from_analyze_func(buffer(header, 12), analyze_mp4)
+    return get_track_info_from_analyze_func(header, analyze_jp2)
+  elif header.startswith('\xff\x4f\xff\x51\0'):
+    return get_track_info_from_analyze_func(header, analyze_jpc)
+  elif header.startswith('\xff\x0a'):
+    return get_track_info_from_analyze_func(header, analyze_jpegxl)
+  elif header.startswith('\x0a\x04B\xd2\xd5N'):
+    return get_track_info_from_analyze_func(header, analyze_brunsli)
+  elif header.startswith('WMPHOTO\0') or header.startswith('II\xbc\x01'):
+    return get_track_info_from_analyze_func(header, analyze_jpegxr)
+  elif header.startswith('\211PNG\r\n\032\n\0\0\0'):
+    return get_track_info_from_analyze_func(header, analyze_png)
+  elif header.startswith('GIF87a') or header.startswith('GIF89a'):
+    return get_track_info_from_analyze_func(header, analyze_gif)
+  elif header.startswith('BM'):
+    return get_track_info_from_analyze_func(header, analyze_bmp)
+  elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' L'):
+    return get_track_info_from_analyze_func(header, analyze_webp)
+  elif header.startswith('MM\x00\x2a') or header.startswith('II\x2a\x00'):
+    return get_track_info_from_analyze_func(header, analyze_tiff)
+  elif header.startswith('\0\0\1\0'):  # Apparently this doesn't conflict with codecs below.
+    return get_track_info_from_analyze_func(header, analyze_ico)
+  elif header.startswith('#define'):
+    return get_track_info_from_analyze_func(header, analyze_xbm)
+  elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # This doesn't conflict with the codecs below.
+    return get_track_info_from_analyze_func(header, analyze_mp4)  # HEIF or AVIF.
   elif (header.startswith('\0\0\0\1\x09') or
         header.startswith('\0\0\0\1\x27') or
         header.startswith('\0\0\0\1\x47') or
