@@ -7959,26 +7959,27 @@ def analyze_farbfeld(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
-def parse_wbmp_header(header):
+def parse_count_wbmp_header(header):
   # For simplicity and lack of examples online, we don't support key=value
   # extension header, and we assume that all reserved bits are 0.
   if len(header) < 2:
     raise ValueError('Too short for wbmp.')
   if not (header[0] == '\0' and header[1] in '\0\x80'):
     raise ValueError('wbmp signature not found.')
-  b, i = ord(header[1]), 2
+  b, i, f = ord(header[1]), 2, 187  # f is confidence.
   while b & 0x80:  # Skip extension header.
     if i >= len(header):
       raise ValueError('EOF in wbmp extension header.')
     b = ord(header[i])
     i += 1
+    f += 87
     if b not in (0, 0x80):
       raise ValueError('Bad wbmp extension header type.')
     while 1:
       if i >= len(header):
         raise ValueError('EOF in wbmp extension data.')
-      i += 1
-      if ord(header[i -1]) < 0x80:
+      i += 1  # Not increasing f, we don't have additional info.
+      if ord(header[i - 1]) < 0x80:
         break
   width = c = 0
   while 1:
@@ -7989,6 +7990,7 @@ def parse_wbmp_header(header):
       raise ValueError('wbmp width too long.')
     b = ord(header[i])
     i += 1
+    f += 1  # Info stating that c isn't too much.
     width = width << 7 | (b & 0x7f)
     if b < 0x80:
       break
@@ -8001,15 +8003,16 @@ def parse_wbmp_header(header):
       raise ValueError('wbmp height too long.')
     b = ord(header[i])
     i += 1
+    f += 1  # Info stating that c isn't too much.
     height = height << 7 | (b & 0x7f)
     if b < 0x80:
       break
-  return i, width, height
+  return f, width, height
 
 
 def count_is_wbmp(header):
   try:
-    return parse_wbmp_header(header)[0] * 100
+    return parse_count_wbmp_header(header)[0]
   except ValueError:
     return 0
 
@@ -8018,7 +8021,7 @@ def analyze_wbmp(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/WBMP
   # https://fossies.org/linux/netpbm/converter/pbm/wbmptopbm.c
   # http://www.wapforum.org/what/technical/SPEC-WAESpec-19990524.pdf
-  _, width, height = parse_wbmp_header(fread(32))
+  _, width, height = parse_count_wbmp_header(fread(32))
   info['format'], info['codec'] = 'wbmp', 'uncompressed'
   info['width'], info['height'] = width, height
 

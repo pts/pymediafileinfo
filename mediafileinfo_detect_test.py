@@ -236,8 +236,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_tga(self):
     data1 = '000002000000000000000000030105010800'.decode('hex')
     data2 = '000003000000000000000000030105010f00'.decode('hex')
-    #self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'tga')
-    #self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'tga')
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'tga')
+    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'tga')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, data1),
                      {'format': 'tga', 'width': 259, 'height': 261, 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, data2),
