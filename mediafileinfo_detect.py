@@ -8792,6 +8792,9 @@ FORMAT_ITEMS = (
     ('ivf', (0, 'DKIF\0\0 \0')),
     ('amv', (0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')),
     ('4xm', (0, 'RIFF', 8, '4XMVLIST', 20, 'HEADLIST', 32, 'HNFO')),
+    # http://fileformats.archiveteam.org/wiki/RIFX
+    # Big endian RIFF. Not in mainstream use, not analyzing further.
+    ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
 
     # Video (single elementary stream, no audio).
 
