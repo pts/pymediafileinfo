@@ -1282,6 +1282,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data4),  # PNG in ic07 has smaller dimensions, using icm#.
                      {'format': 'icns', 'subformat': 'icm#', 'codec': 'rle', 'height': 12, 'width': 16, 'icon_count': 2})
 
+  def test_analyze_dds(self):
+    data1 = 'DDS |\0\0\0????\1\2\0\0\3\2\0\0???????????????????????????????????????????????????????? \0\0\0\4\0\0\0DXT5'
+    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'dds')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dds, data1),
+                     {'format': 'dds', 'codec': 'dxt5', 'height': 513, 'width': 515})
+
   def test_analyze_jpeg(self):
     data1 = '\xff\xd8\xff\xdb\x00\xc5\x00\x04\x03\x04\x05\x04\x03\x05\x05\x04\x05\x06\x06\x05\x06\x08\x0e\t\x08\x07\x07\x08\x11\x0c\r\n\x0e\x15\x12\x16\x15\x14\x12\x14\x13\x17\x1a!\x1c\x17\x18\x1f\x19\x13\x14\x1d\'\x1d\x1f"#%%%\x16\x1b)+($+!$%#\x01\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\x02\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\xff\xc0\x00\x11\x08\x00x\x00\xa0\x03\x01!\x00\x02\x11\x01\x03\x11\x02'
     self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpeg')

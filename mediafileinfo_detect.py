@@ -8527,6 +8527,32 @@ def analyze_icns(fread, info, fskip):
     _, _, info['width'], info['height'], info['codec'], info['subformat'] = best
 
 
+def analyze_dds(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/DirectDraw_Surface
+  # https://en.wikipedia.org/wiki/S3_Texture_Compression#DXT4_and_DXT5
+  # Samples in the data/DDS folder of: git clone --depth 1 https://github.com/timfel/tombexcavator
+  header = fread(128)
+  if len(header) < 88:
+    raise ValueError('Too short for dds.')
+  if not header.startswith('DDS '):
+    raise ValueError('dds signature not found.')
+  (size, flags, height, width, pols, depth, map_map_count,
+   pf_size, pf_flags, codec,
+  ) = struct.unpack('<7L44xLL4s', header[4 : 88])
+  if size != 124:
+    raise ValueError('Bad dds size: %d' % size)
+  if pf_size != 32:
+    raise ValueError('Bad dds pixelformat size: %d' % pf_size)
+  info['format'], info['codec'] = 'dds', 'uncompressed'
+  info['width'], info['height'] = width, height
+  if pf_flags & 4 and not codec.endswith('\0\0\0'):
+    codec = codec.lower().strip()
+    if not codec.isalnum():
+      raise ValueError('Bad dds codec: %r' % codec)
+    # Typical values: 'dxt1', 'dxt2', 'dxt3', 'dxt4', 'dxt5', 'dx10', 'rgbg', 'grgb', 'yuy2', 'uyvy'.
+    info['codec'] = codec
+
+
 def analyze_olecf(fread, info, fskip):
   # http://fileformats.archiveteam.org/wiki/Microsoft_Compound_File
   # http://forensicswiki.org/wiki/OLE_Compound_File
@@ -8884,6 +8910,7 @@ FORMAT_ITEMS = (
     ('macpaint', (0, '\0', 128, lambda header: (800, is_macbinary(header, 'PNTG')))),
     ('fit', (0, 'IT0', 3, ('1', '2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
     ('icns', (0, 'icns', 8, lambda header: (len(header) >= 8 and (header[4 : 7] != '\0\0\0' or ord(header[7]) >= 32), 2))),
+    ('dds', (0, 'DDS \x7c\0\0\0', 76, ' \0\0\0')),
     ('jpegxl', (0, ('\xff\x0a'))),
     ('jpegxl-brunsli', (0, '\x0a\x04B\xd2\xd5N')),
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
@@ -9608,6 +9635,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_fit(fread, info, fskip)
   elif format == 'icns':
     analyze_icns(fread, info, fskip)
+  elif format == 'dds':
+    analyze_dds(fread, info, fskip)
   elif format in ('flate', 'gz', 'zip'):
     info['codec'] = 'flate'
   elif format in ('xz', 'lzma'):
