@@ -626,6 +626,7 @@ MP4_VIDEO_CODECS = {
 
 # See all on: http://mp4ra.org/codecs.html
 # All keys are converted to lowercase, and whitespace-trimmed.
+# Also includes AIFC (AIFF_C) codecs.
 MP4_AUDIO_CODECS = {
     'raw':  'pcm',
     'sowt': 'pcm',
@@ -634,9 +635,17 @@ MP4_AUDIO_CODECS = {
     'in32': 'pcm',
     'fl32': 'pcm',
     'fl64': 'pcm',
+    'none': 'pcm',
+    'pcm' : 'pcm',
+    'sowt': 'pcm',
     'alaw': 'alaw',   # Logarithmic PCM wih A-Law
     'ulaw': 'mulaw',  # Logarithmic PCM wih mu-Law.
+    'ace2': 'ace2',
+    'ace8': 'ace8',
+    'mac3': 'mac3',
+    'mac6': 'mac6',
     '.mp3': 'mp3',
+    'mp3':  'mp3',
     'mp4a': 'mp4a',  # Similar to aac, but contains more.
     'mp4s': 'mp4a',
     'samr': 'samr',
@@ -2554,6 +2563,51 @@ def analyze_aiff(fread, info, fskip):
     if not 1 <= sample_size <= 32:
       raise ValueError('Bad aiff sample_size: %d' % sample_size)
     info['tracks'][-1]['sample_size'] = sample_size
+
+
+def analyze_aifc(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/AIFC
+  # http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/Docs/AIFF-C.9.26.91.pdf
+  # Samples: http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/Samples.html
+  header = fread(20)
+  if len(header) < 19:
+    raise ValueError('Too short for aifc.')
+  if not (header.startswith('FORM') and header[8 : 12] == 'AIFC' and
+          header[12 : 16] in ('FVER', 'COMM') and header[16 : 19] == '\0\0\0'):
+    raise ValueError('aifc signature not found.')
+  info['format'] = 'aifc'
+  info['tracks'] = [{'type': 'audio'}]
+  if len(header) < 20:
+    return
+  xtype, size = struct.unpack('>4sL', header[12 : 20])
+  while 1:
+    if xtype == 'COMM':  # Data is in the 'SSND' chunk.
+      if not 23 <= size <= 255:
+        raise ValueError('Bad aifc COMM chunk size: %d' % size)
+      data = fread(22)
+      if len(data) < 22:
+        raise ValueError('EOF in aifc COMM chunk.')
+      (channel_count, frame_count, sample_size, sample_rate2, sample_rate8,
+       codec) = struct.unpack('>HLHHQ4s', data)
+      codec = codec.strip().lower()
+      info['tracks'][-1]['codec'] = MP4_AUDIO_CODECS.get(codec, codec)
+      set_channel_count(info['tracks'][-1], 'aifc', channel_count)
+      set_sample_rate(info['tracks'][-1], 'aifc',
+                      round_apple_float80(sample_rate2, sample_rate8, False))
+      if not 1 <= sample_size <= 32:
+        raise ValueError('Bad aifc sample_size: %d' % sample_size)
+      info['tracks'][-1]['sample_size'] = sample_size
+      break
+    elif not (xtype.strip().isalnum() and xtype == xtype.upper()):
+      raise ValueError('Bad aifc chunk type: %r' % xtype)
+    elif not fskip(size):
+      raise ValueError('EOF in aifc %s chunk.' % xtype)
+    data = fread(8)
+    if not data:
+      break
+    if len(data) < 8:
+      raise ValueError('EOF in aifc chunk header.')
+    xtype, size = struct.unpack('>4sL', data)
 
 
 # --- H.264.
@@ -9057,6 +9111,7 @@ FORMAT_ITEMS = (
     # http://web.archive.org/web/20110610135604/http://www.midi.org/about-midi/rp29spec(rmid).pdf
     ('midi-rmid', (0, 'RIFF', 8, 'RMIDdata', 20, 'MThd\0\0\0\6\0', 29, ('\0', '\1', '\2'))),  # .rmi
     ('aiff', (0, 'FORM', 8, 'AIFFCOMM\0\0\0\x12')),
+    ('aifc', (0, 'FORM', 8, 'AIFC', 12, ('FVER', 'COMM'), 16, '\0\0\0')),
 
     # Document media and vector graphics.
 
@@ -9649,6 +9704,8 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ralf(fread, info, fskip)
   elif format == 'aiff':
     analyze_aiff(fread, info, fskip)
+  elif format == 'aifc':
+    analyze_aifc(fread, info, fskip)
   elif format == 'lepton':
     info['codec'] = 'lepton'
   elif format == 'fuji-raf':
