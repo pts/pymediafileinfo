@@ -8804,6 +8804,24 @@ def analyze_macbinary(fread, info, fskip):
   analyze_by_format(fread, info, fskip, format, None)
 
 
+def count_is_rtf(header):
+  # http://fileformats.archiveteam.org/wiki/RTF
+  # RTF specification 1.9.1. https://interoperability.blob.core.windows.net/files/Archive_References/[MSFT-RTF].pdf
+  if not header.startswith('{\\rtf1'):
+    return 0
+  i = 6
+  if header[i : i + 1] == ' ':
+    i += 1
+  # Try to make the match longer (stronger) by matching common control words.
+  for suffix in ('{\\info', '\\fbidis', '\\ansi', '\\mac', '\\pc', '\\pca', '\\ansicpg'):
+    j = i + len(suffix)
+    if header[i : j] == suffix and not header[j : j + 1].isalpha():
+      if header[j : j + 1] == ' ':
+        j += 1
+      return j * 100
+  return i * 100
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -9203,6 +9221,7 @@ FORMAT_ITEMS = (
     ('cdr', (0, 'RIFF', 8, ('CDR', 'cdr'), 11, tuple('456789ABCD'), 12, 'vrsn', 17, '\0\0\0')),
     # http://fileformats.archiveteam.org/wiki/SHW_(Corel)
     ('corelshow', (0, 'RIFF', 8, 'shv4LIST')),
+    ('rtf', (0, '{\\rtf1', 32, lambda header: adjust_confidence(600, count_is_rtf(header)))),
 
     # Compressed archive.
 

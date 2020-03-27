@@ -1402,6 +1402,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data4),
                      {'format': 'binhex', 'subformat': 'hqx', 'codec': 'rle'})
 
+  def test_detect_rtf(self):
+    self.assertEqual(mediafileinfo_detect.detect_format(r'{\rtf1')[0], 'rtf')
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1'), 600)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info\title '), 1200)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info \title '), 1300)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1\ansi'), 1100)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1 \ansi'), 1200)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1 \ansi '), 1300)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1 \ansicpg437'), 1500)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1 \foo'), 700)
+    self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1\foo'), 600)
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
