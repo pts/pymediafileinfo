@@ -9225,6 +9225,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Microsoft_Write
     # https://web.archive.org/web/20130831064118/http://msxnet.org/word2rtf/formats/write.txt
     ('wri', (0, ('\x31\xbe\0\0', '\x32\xbe\0\0'), 4, '\0\xab\0\0\0\0\0\0\0')),
+    # https://perldoc.perl.org/perlpod.html
+    ('perl-pod', (0, '=pod', 4, (' ', '\n'))),
+    ('perl-pod', (0, ('=head1 ', '=begin '))),
 
     # Compressed archive.
 
