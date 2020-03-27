@@ -9244,6 +9244,10 @@ FORMAT_ITEMS = (
     ('perl-pod', (0, ('=head1 ', '=begin '))),
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('troff', (0, ('.TH', '.SH', '.\\\"', '.de', '.EF'), 3, ' ', 408, lambda header: adjust_confidence(400, count_is_troff(header)))),
+    # TODO(pts): Also match whitespace and (short) comments in the beginning. Most .tex documents have it.
+    ('latex', (0, '\\documentclass', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
+    # Older than 'latex', now obsolete.
+    ('latex-209', (0, '\\documentstyle', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
 
     # Compressed archive.
 
