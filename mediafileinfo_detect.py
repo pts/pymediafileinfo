@@ -9222,6 +9222,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/SHW_(Corel)
     ('corelshow', (0, 'RIFF', 8, 'shv4LIST')),
     ('rtf', (0, '{\\rtf1', 32, lambda header: adjust_confidence(600, count_is_rtf(header)))),
+    # http://fileformats.archiveteam.org/wiki/Microsoft_Write
+    # https://web.archive.org/web/20130831064118/http://msxnet.org/word2rtf/formats/write.txt
+    ('wri', (0, ('\x31\xbe\0\0', '\x32\xbe\0\0'), 4, '\0\xab\0\0\0\0\0\0\0')),
 
     # Compressed archive.
 
