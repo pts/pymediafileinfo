@@ -1414,6 +1414,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1 \foo'), 700)
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1\foo'), 600)
 
+  def test_detect_troff(self):
+    self.assertEqual(mediafileinfo_detect.detect_format('.\\" DO NOT MODIFY THIS FILE!  \n.TH x')[0], 'troff')
+    self.assertEqual(mediafileinfo_detect.detect_format('.TH LS "1"')[0], 'troff')
+    self.assertEqual(mediafileinfo_detect.detect_format('.SH NAME')[0], 'troff')
+    self.assertEqual(mediafileinfo_detect.detect_format('.de xy')[0], 'troff')
+    self.assertEqual(mediafileinfo_detect.detect_format('.EF \'hi\'')[0], 'troff')
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

@@ -8822,6 +8822,20 @@ def count_is_rtf(header):
   return i * 100
 
 
+def count_is_troff(header):
+  i = 0
+  if header.startswith('.\\" '):
+    i = header.find('\n') + 1
+    if i <= 0:
+      return 400
+  cmd = header[i : i + 4]
+  if cmd in ('.TH ', '.SH ', '.de ') and header[i + 4 : i + 5].isalpha():
+    return (i + 4) * 100 + 24
+  if cmd == '.EF ' and header[i + 4 : i + 5] == "'":
+    return (i + 5) * 100
+  return 0
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -9228,6 +9242,8 @@ FORMAT_ITEMS = (
     # https://perldoc.perl.org/perlpod.html
     ('perl-pod', (0, '=pod', 4, (' ', '\n'))),
     ('perl-pod', (0, ('=head1 ', '=begin '))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('troff', (0, ('.TH', '.SH', '.\\\"', '.de', '.EF'), 3, ' ', 408, lambda header: adjust_confidence(400, count_is_troff(header)))),
 
     # Compressed archive.
 
