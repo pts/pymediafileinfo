@@ -5269,30 +5269,27 @@ def analyze_xml(fread, info, fskip):
       data = fread(1)
     header = data + fread(5)
 
-  if len(header) < 6:
+  if len(header) < 5:
     if had_comment:
       info['format'] = 'xml-comment'
       return
     raise ValueError('Too short for xml tag.')
   header_lo = header.lower()
-  if header.startswith('<?xml') and (header[5] in whitespace or header[5] == '?'):
+  if header.startswith('<?xml') and len(header) > 5 and (header[5] in whitespace or header[5] == '?'):
     info['format'], data = 'xml', ''
   elif header.startswith('<svg:'):
     if len(header) < 9:
       header += fread(9 - len(header))
       if len(header) < 9:
         raise ValueError('Too short for svg.')
-    if header.startswith('<svg:svg') and header[8] in whitespace_tagend:
-      info['format'], data = 'svg', ''
-      data = '?><svg' + header[8:]
+    if header.startswith('<svg:svg') and len(header) > 8 and header[8] in whitespace_tagend:
+      info['format'], data = 'svg', '?><svg' + header[8:]
     else:
       raise ValueError('svg signature not found.')
-  elif header.startswith('<svg') and header[4] in whitespace_tagend:
-    info['format'], data = 'svg', ''
-    data = '?>' + header
-  elif header.startswith('<smil') and header[5] in whitespace_tagend:
-    info['format'], data = 'smil', ''
-    data = '?>' + header
+  elif header.startswith('<svg') and len(header) > 4 and header[4] in whitespace_tagend:
+    info['format'], data = 'svg', '?>' + header
+  elif header.startswith('<smil') and len(header) > 5 and header[5] in whitespace_tagend:
+    info['format'], data = 'smil', '?>' + header
   else:
     def is_ws_xhtml_tag(header, i):
       if i:
@@ -6246,10 +6243,12 @@ def analyze_wmf(fread, info, fskip):
       height = (height * 72 + (inch >> 1)) // inch   # Convert to pt.
       info['width'], info['height'] = width, height
   elif data[0] in '\1\2' and data[1 : 5] == '\0\x09\0\0' and data[5] in '\1\3':  # META_HEADER.
-    info['format'] = 'wmf'
     data = fread(12)
-    if len(data) == 12 and data[10 : 12] != '\0\0':
+    if len(data) < 12:
+      raise ValueError('EOF in wmf META_HEADER.')
+    if data[10 : 12] != '\0\0':
       raise ValueError('Bad wmf NumberOfMembers.')
+    info['format'] = 'wmf'
   else:
     raise ValueError('wmf signature not found.')
 
@@ -6574,7 +6573,7 @@ def analyze_pict(fread, info, fskip, header=''):
   # PixMap: http://mirror.informatimago.com/next/developer.apple.com/documentation/mac/QuickDraw/QuickDraw-202.html
   if len(header) > 23:
     raise ValueError('Initial header too long.')
-  if len(header) < 17:
+  if len(header) < 17:  # 17 for the `len(header) <= 16' check below.
     header += fread(17 - len(header))
     if len(header) < 16:
       raise ValueError('Too short for pict.')
@@ -6584,7 +6583,7 @@ def analyze_pict(fread, info, fskip, header=''):
     if len(header) == 32 and not header[16 : 32].rstrip('\0'):
       if fskip(512 - 32):
         header = fread(17)
-        if len(header) < 16:
+        if len(header) < 15:
           raise ValueError('Too short for pict after 512 bytes.')
   if header[10 : 15] == '\x11\1\1\0\x0a':
     version, op, data = 1, 1, header[12:]
@@ -8801,7 +8800,11 @@ def analyze_macbinary(fread, info, fskip):
   assert codec_tag in MAC_TYPE_MAP
   info['format'] = format = MAC_TYPE_MAP[codec_tag][0]
   info['subformat'] = 'macbinary'
-  analyze_by_format(fread, info, fskip, format, None)
+  try:
+    analyze_by_format(fread, info, fskip, format, None)
+  except ValueError, e:
+    if not str(e).startswith('Too short for '):  # TODO(pts): Only ignore if file size is exactly 128 bytes.
+      raise
 
 
 def count_is_rtf(header):
@@ -8929,7 +8932,7 @@ FORMAT_ITEMS = (
     # Can also be .webm as a subformat.
     ('mkv', (0, '\x1a\x45\xdf\xa3')),
     # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
-    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx ', 'mif1'), 12, lambda header: (is_mp4(header), 26))),
+    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx '), 12, lambda header: (is_mp4(header), 26))),
     ('mp4', (0, '\0\0\0', 4, 'ftyp', 8, lambda header: (is_mp4(header), 26))),
     ('f4v',),  # From 'mp4'.
     ('webm',),  # From 'mp4'.
@@ -8984,7 +8987,7 @@ FORMAT_ITEMS = (
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
-    ('realvideo-size', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
+    ('realvideo', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
     ('mng', (0, '\212MNG\r\n\032\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
@@ -9022,7 +9025,7 @@ FORMAT_ITEMS = (
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
-    ('jbig2-pdf', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
+    ('jbig2', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
     ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
     # Both the tagged (TIFF-based) and the coded (codestream, elementary
     # stream, bitstream) format are detected.
@@ -9030,6 +9033,7 @@ FORMAT_ITEMS = (
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
     ('fuif', (0, ('FUIF', 'FUAF'), 4, ('\x31', '\x32', '\x33', '\x34', '\x35'), 5, tuple(chr(c) for c in xrange(0x26 + 1, 0x26 + 16)))),
     ('bpg', (0, 'BPG\xfb', 6, lambda header: (is_bpg(header), 30))),
+    ('isobmff-image', (0, '\0\0\0', 4, 'ftypmif1', 12, lambda header: (is_mp4(header), 26))),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -9722,7 +9726,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_daala(fread, info, fskip)
   elif format == 'yuv4mpeg2':
     analyze_yuv4mpeg2(fread, info, fskip)
-  elif format in ('realvideo', 'realvideo-size'):
+  elif format in 'realvideo':
     analyze_realvideo(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
@@ -9762,7 +9766,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_ps(fread, info, fskip)
   elif format == 'miff':
     analyze_miff(fread, info, fskip)
-  elif format in ('jbig2', 'jbig2-pdf'):
+  elif format == 'jbig2':
     analyze_jbig2(fread, info, fskip)
   elif format == 'djvu':
     analyze_djvu(fread, info, fskip)
@@ -9876,7 +9880,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     info['codec'] = 'lzma'
   elif format == 'olecf':
     analyze_olecf(fread, info, fskip)
-  elif format in ('mp4', 'mp4-wellknown-brand', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
+  elif format in ('mp4', 'mp4-wellknown-brand', 'isobmff-image', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
     analyze_mp4(fread, info, fskip)
   elif format == 'swf':
     analyze_swf(fread, info, fskip)
