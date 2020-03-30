@@ -9770,6 +9770,157 @@ def copy_info_from_tracks(info):
     info.setdefault('vcodec', '?')
 
 
+ANALYZE_FUNCS_BY_FORMAT = {
+    'flv': analyze_flv,
+    'mkv': analyze_mkv,
+    'asf': analyze_asf,
+    'avi': analyze_avi,
+    'rmmp': analyze_rmmp,
+    'ani': analyze_ani,
+    'mpeg-ps': analyze_mpeg_ps,
+    'mpeg-cdxa': analyze_mpeg_cdxa,
+    'mpeg-ts': analyze_mpeg_ts,
+    'mpeg-video': analyze_mpeg_video,
+    'mpeg-adts': analyze_mpeg_adts,
+    'mp3-id3v2': analyze_id3v2,
+    'h264': analyze_h264,
+    'h265': analyze_h265,
+    'vp8': analyze_vp8,
+    'vp9': analyze_vp9,
+    'av1': analyze_av1,
+    'dirac': analyze_dirac,
+    'theora': analyze_theora,
+    'daala': analyze_daala,
+    'yuv4mpeg2': analyze_yuv4mpeg2,
+    'realvideo': analyze_realvideo,
+    'wav': analyze_wav,
+    'gif': analyze_gif,
+    'jpeg': analyze_jpeg,
+    'png': analyze_png,
+    'jng': analyze_jng,
+    'lbm': analyze_lbm,
+    'deep': analyze_deep,
+    'pcx': analyze_pcx,
+    'dcx': analyze_dcx,
+    'xbm': analyze_xbm,
+    'xpm': analyze_xpm,
+    'xcf': analyze_xcf,
+    'psd': analyze_psd,
+    'tga': analyze_tga,
+    'tiff': analyze_tiff,
+    'pnm': analyze_pnm,
+    'xv-thumbnail': analyze_pnm,
+    'pam': analyze_pam,
+    'ps': analyze_ps,
+    'miff': analyze_miff,
+    'jbig2': analyze_jbig2,
+    'djvu': analyze_djvu,
+    'art': analyze_art,
+    'ico': analyze_ico,
+    'webp': analyze_webp,
+    'jpegxr': analyze_jpegxr,
+    'flif': analyze_flif,
+    'fuif': analyze_fuif,
+    'bpg': analyze_bpg,
+    'flac': analyze_flac,
+    'ape': analyze_ape,
+    'vorbis': analyze_vorbis,
+    'oggpcm': analyze_oggpcm,
+    'opus': analyze_opus,
+    'speex': analyze_speex,
+    'realaudio': analyze_realaudio,
+    'ralf': analyze_ralf,
+    'aiff': analyze_aiff,
+    'aifc': analyze_aifc,
+    'au': analyze_au,
+    'lepton': analyze_lepton,
+    'fuji-raf': analyze_fuji_raf,
+    'minolta-raw': analyze_minolta_raw,
+    'dpx': analyze_dpx,
+    'cineon': analyze_cineon,
+    'vicar': analyze_vicar,
+    'pds': analyze_pds,
+    'ybm': analyze_ybm,
+    'fbm': analyze_fbm,
+    'cmuwm': analyze_cmuwm,
+    'utah-rle': analyze_utah_rle,
+    'ftc': analyze_ftc,
+    'fif': analyze_fif,
+    'spix': analyze_spix,
+    'sgi-rgb': analyze_sgi_rgb,
+    'xv-pm': analyze_xv_pm,
+    'imlib-argb': analyze_imlib_argb,
+    'imlib-eim': analyze_imlib_eim,
+    'farbfeld': analyze_farbfeld,
+    'wbmp': analyze_wbmp,
+    'gd': analyze_gd,
+    'gd2': analyze_gd2,
+    'cups-raster': analyze_cups_raster,
+    'alias-pix': analyze_alias_pix,
+    'photocd': analyze_photocd,
+    'fits': analyze_fits,
+    'xloadimage-niff': analyze_xloadimage_niff,
+    'sun-taac': analyze_sun_taac,
+    'facesaver': analyze_facesaver,
+    'mcidas-area': analyze_mcidas_area,
+    'macpaint': analyze_macpaint,
+    'fit': analyze_fit,
+    'icns': analyze_icns,
+    'dds': analyze_dds,
+    'flate': analyze_flate,
+    'gz': analyze_gz,
+    'xz': analyze_xz,
+    'lzma': analyze_lzma,
+    'olecf': analyze_olecf,
+    'mp4': analyze_mp4,
+    'mp4-wellknown-brand': analyze_mp4,
+    'isobmff-image': analyze_mp4,
+    'mov': analyze_mp4,
+    'mov-mdat': analyze_mp4,
+    'mov-small': analyze_mp4,
+    'mov-moov': analyze_mp4,
+    'swf': analyze_swf,
+    'ogg': analyze_ogg,
+    'realmedia': analyze_realmedia,
+    'pnot': analyze_pnot,
+    'ac3': analyze_ac3,
+    'dts': analyze_dts,
+    'jp2': analyze_jp2,
+    'jpc': analyze_jpc,
+    'bmp': analyze_bmp,
+    'rdi': analyze_rdi,
+    'flic': analyze_flic,
+    'mng': analyze_mng,
+    'exe': analyze_exe,
+    'xml': analyze_xml,
+    'xml-comment': analyze_xml,
+    'html': analyze_xml,
+    'svg': analyze_xml,
+    'smil': analyze_xml,
+    'jpegxl-brunsli': analyze_brunsli,
+    'jpegxl': analyze_jpegxl,
+    'pik': analyze_pik,
+    'qtif': analyze_qtif,
+    'psp': analyze_psp,
+    'ras': analyze_ras,
+    'gem': analyze_gem,
+    'pcpaint-pic': analyze_pcpaint_pic,
+    'ivf': analyze_ivf,
+    'amv': analyze_amv,
+    '4xm': analyze_4xm,
+    'wmf': analyze_wmf,
+    'dvi': analyze_dvi,
+    'emf': analyze_emf,
+    '?-zeros32': analyze_zeros32_64,
+    '?-zeros64': analyze_zeros32_64,
+    'xwd': analyze_xwd,
+    'sun-icon': analyze_sun_icon,
+    'ftc': analyze_ftc,
+    'binhex': analyze_binhex,
+    'macbinary': analyze_macbinary,
+}
+
+
 def _analyze_detected_format(f, info, header, file_size_for_seek):
   prebuf = [0, header]
   header = ''
@@ -9823,301 +9974,9 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
         f.seek(size, 1)
         return f.tell() <= file_size_for_seek
 
-  format = info['format']
-  if format == 'flv':
-    analyze_flv(fread, info, fskip)
-  elif format == 'mkv':
-    analyze_mkv(fread, info, fskip)
-  elif format == 'asf':
-    analyze_asf(fread, info, fskip)
-  elif format == 'avi':
-    analyze_avi(fread, info, fskip)
-  elif format == 'rmmp':
-    analyze_rmmp(fread, info, fskip)
-  elif format == 'ani':
-    analyze_ani(fread, info, fskip)
-  elif format == 'mpeg-ps':
-    analyze_mpeg_ps(fread, info, fskip)
-  elif format == 'mpeg-cdxa':
-    analyze_mpeg_cdxa(fread, info, fskip)
-  elif format == 'mpeg-ts':
-    analyze_mpeg_ts(fread, info, fskip)
-  elif format == 'mpeg-video':
-    analyze_mpeg_video(fread, info, fskip)
-  elif format == 'mpeg-adts':
-    analyze_mpeg_adts(fread, info, fskip)
-  elif format == 'mp3-id3v2':
-    analyze_id3v2(fread, info, fskip)
-  elif format == 'h264':
-    analyze_h264(fread, info, fskip)
-  elif format == 'h265':
-    analyze_h265(fread, info, fskip)
-  elif format == 'vp8':
-    analyze_vp8(fread, info, fskip)
-  elif format == 'vp9':
-    analyze_vp9(fread, info, fskip)
-  elif format == 'av1':
-    analyze_av1(fread, info, fskip)
-  elif format == 'dirac':
-    analyze_dirac(fread, info, fskip)
-  elif format == 'theora':
-    analyze_theora(fread, info, fskip)
-  elif format == 'daala':
-    analyze_daala(fread, info, fskip)
-  elif format == 'yuv4mpeg2':
-    analyze_yuv4mpeg2(fread, info, fskip)
-  elif format == 'realvideo':
-    analyze_realvideo(fread, info, fskip)
-  elif format == 'wav':
-    analyze_wav(fread, info, fskip)
-  elif format == 'gif':
-    analyze_gif(fread, info, fskip)
-  elif format == 'jpeg':
-    analyze_jpeg(fread, info, fskip)
-  elif format == 'png':
-    analyze_png(fread, info, fskip)
-  elif format == 'jng':
-    analyze_jng(fread, info, fskip)
-  elif format == 'lbm':
-    analyze_lbm(fread, info, fskip)
-  elif format == 'deep':
-    analyze_deep(fread, info, fskip)
-  elif format == 'pcx':
-    analyze_pcx(fread, info, fskip)
-  elif format == 'dcx':
-    analyze_dcx(fread, info, fskip)
-  elif format == 'xbm':
-    analyze_xbm(fread, info, fskip)
-  elif format == 'xpm':
-    analyze_xpm(fread, info, fskip)
-  elif format == 'xcf':
-    analyze_xcf(fread, info, fskip)
-  elif format == 'psd':
-    analyze_psd(fread, info, fskip)
-  elif format == 'tga':
-    analyze_tga(fread, info, fskip)
-  elif format == 'tiff':
-    analyze_tiff(fread, info, fskip)
-  elif format == 'pnm':
-    analyze_pnm(fread, info, fskip)
-  elif format ==  'xv-thumbnail':
-    analyze_pnm(fread, info, fskip)
-  elif format == 'pam':
-    analyze_pam(fread, info, fskip)
-  elif format == 'ps':
-    analyze_ps(fread, info, fskip)
-  elif format == 'miff':
-    analyze_miff(fread, info, fskip)
-  elif format == 'jbig2':
-    analyze_jbig2(fread, info, fskip)
-  elif format == 'djvu':
-    analyze_djvu(fread, info, fskip)
-  elif format == 'art':
-    analyze_art(fread, info, fskip)
-  elif format == 'ico':
-    analyze_ico(fread, info, fskip)
-  elif format == 'webp':
-    analyze_webp(fread, info, fskip)
-  elif format == 'jpegxr':
-    analyze_jpegxr(fread, info, fskip)
-  elif format == 'flif':
-    analyze_flif(fread, info, fskip)
-  elif format == 'fuif':
-    analyze_fuif(fread, info, fskip)
-  elif format == 'bpg':
-    analyze_bpg(fread, info, fskip)
-  elif format == 'flac':
-    analyze_flac(fread, info, fskip)
-  elif format == 'ape':
-    analyze_ape(fread, info, fskip)
-  elif format == 'vorbis':
-    analyze_vorbis(fread, info, fskip)
-  elif format == 'oggpcm':
-    analyze_oggpcm(fread, info, fskip)
-  elif format == 'opus':
-    analyze_opus(fread, info, fskip)
-  elif format == 'speex':
-    analyze_speex(fread, info, fskip)
-  elif format == 'realaudio':
-    analyze_realaudio(fread, info, fskip)
-  elif format == 'ralf':
-    analyze_ralf(fread, info, fskip)
-  elif format == 'aiff':
-    analyze_aiff(fread, info, fskip)
-  elif format == 'aifc':
-    analyze_aifc(fread, info, fskip)
-  elif format == 'au':
-    analyze_au(fread, info, fskip)
-  elif format == 'lepton':
-    analyze_lepton(fread, info, fskip)
-  elif format == 'fuji-raf':
-    analyze_fuji_raf(fread, info, fskip)
-  elif format == 'minolta-raw':
-    analyze_minolta_raw(fread, info, fskip)
-  elif format == 'dpx':
-    analyze_dpx(fread, info, fskip)
-  elif format == 'cineon':
-    analyze_cineon(fread, info, fskip)
-  elif format == 'vicar':
-    analyze_vicar(fread, info, fskip)
-  elif format == 'pds':
-    analyze_pds(fread, info, fskip)
-  elif format == 'ybm':
-    analyze_ybm(fread, info, fskip)
-  elif format == 'fbm':
-    analyze_fbm(fread, info, fskip)
-  elif format == 'cmuwm':
-    analyze_cmuwm(fread, info, fskip)
-  elif format == 'utah-rle':
-    analyze_utah_rle(fread, info, fskip)
-  elif format == 'ftc':
-    analyze_ftc(fread, info, fskip)
-  elif format == 'fif':
-    analyze_fif(fread, info, fskip)
-  elif format == 'spix':
-    analyze_spix(fread, info, fskip)
-  elif format == 'sgi-rgb':
-    analyze_sgi_rgb(fread, info, fskip)
-  elif format == 'xv-pm':
-    analyze_xv_pm(fread, info, fskip)
-  elif format == 'imlib-argb':
-    analyze_imlib_argb(fread, info, fskip)
-  elif format == 'imlib-eim':
-    analyze_imlib_eim(fread, info, fskip)
-  elif format == 'farbfeld':
-    analyze_farbfeld(fread, info, fskip)
-  elif format == 'wbmp':
-    analyze_wbmp(fread, info, fskip)
-  elif format == 'gd':
-    analyze_gd(fread, info, fskip)
-  elif format == 'gd2':
-    analyze_gd2(fread, info, fskip)
-  elif format == 'cups-raster':
-    analyze_cups_raster(fread, info, fskip)
-  elif format == 'alias-pix':
-    analyze_alias_pix(fread, info, fskip)
-  elif format == 'photocd':
-    analyze_photocd(fread, info, fskip)
-  elif format == 'fits':
-    analyze_fits(fread, info, fskip)
-  elif format == 'xloadimage-niff':
-    analyze_xloadimage_niff(fread, info, fskip)
-  elif format == 'sun-taac':
-    analyze_sun_taac(fread, info, fskip)
-  elif format == 'facesaver':
-    analyze_facesaver(fread, info, fskip)
-  elif format == 'mcidas-area':
-    analyze_mcidas_area(fread, info, fskip)
-  elif format == 'macpaint':
-    analyze_macpaint(fread, info, fskip)
-  elif format == 'fit':
-    analyze_fit(fread, info, fskip)
-  elif format == 'icns':
-    analyze_icns(fread, info, fskip)
-  elif format == 'dds':
-    analyze_dds(fread, info, fskip)
-  elif format == 'flate':
-    analyze_flate(fread, info, fskip)
-  elif format == 'gz':
-    analyze_gz(fread, info, fskip)
-  elif format == 'xz':
-    analyze_xz(fread, info, fskip)
-  elif format == 'lzma':
-    analyze_lzma(fread, info, fskip)
-  elif format == 'olecf':
-    analyze_olecf(fread, info, fskip)
-  elif format == 'mp4':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'mp4-wellknown-brand':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'isobmff-image':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'mov':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'mov-mdat':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'mov-small':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'mov-moov':
-    analyze_mp4(fread, info, fskip)
-  elif format == 'swf':
-    analyze_swf(fread, info, fskip)
-  elif format == 'ogg':
-    analyze_ogg(fread, info, fskip)
-  elif format == 'realmedia':
-    analyze_realmedia(fread, info, fskip)
-  elif format == 'pnot':
-    analyze_pnot(fread, info, fskip)
-  elif format == 'ac3':
-    analyze_ac3(fread, info, fskip)
-  elif format == 'dts':
-    analyze_dts(fread, info, fskip)
-  elif format == 'jp2':
-    analyze_jp2(fread, info, fskip)
-  elif format == 'jpc':
-    analyze_jpc(fread, info, fskip)
-  elif format == 'bmp':
-    analyze_bmp(fread, info, fskip)
-  elif format == 'rdi':
-    analyze_rdi(fread, info, fskip)
-  elif format == 'flic':
-    analyze_flic(fread, info, fskip)
-  elif format == 'mng':
-    analyze_mng(fread, info, fskip)
-  elif format == 'exe':
-    analyze_exe(fread, info, fskip)
-  elif format == 'xml':
-    analyze_xml(fread, info, fskip)
-  elif format == 'xml-comment':
-    analyze_xml(fread, info, fskip)
-  elif format == 'html':
-    analyze_xml(fread, info, fskip)
-  elif format == 'svg':
-    analyze_xml(fread, info, fskip)
-  elif format == 'smil':
-    analyze_xml(fread, info, fskip)
-  elif format == 'jpegxl-brunsli':
-    analyze_brunsli(fread, info, fskip)
-  elif format == 'jpegxl':
-    analyze_jpegxl(fread, info, fskip)
-  elif format == 'pik':
-    analyze_pik(fread, info, fskip)
-  elif format == 'qtif':
-    analyze_qtif(fread, info, fskip)
-  elif format == 'psp':
-    analyze_psp(fread, info, fskip)
-  elif format == 'ras':
-    analyze_ras(fread, info, fskip)
-  elif format == 'gem':
-    analyze_gem(fread, info, fskip)
-  elif format == 'pcpaint-pic':
-    analyze_pcpaint_pic(fread, info, fskip)
-  elif format == 'ivf':
-    analyze_ivf(fread, info, fskip)
-  elif format == 'amv':
-    analyze_amv(fread, info, fskip)
-  elif format == '4xm':
-    analyze_4xm(fread, info, fskip)
-  elif format == 'wmf':
-    analyze_wmf(fread, info, fskip)
-  elif format == 'dvi':
-    analyze_dvi(fread, info, fskip)
-  elif format == 'emf':
-    analyze_emf(fread, info, fskip)
-  elif format == '?-zeros32':
-    analyze_zeros32_64(fread, info, fskip)
-  elif format == '?-zeros64':
-    analyze_zeros32_64(fread, info, fskip)
-  elif format == 'xwd':
-    analyze_xwd(fread, info, fskip)
-  elif format == 'sun-icon':
-    analyze_sun_icon(fread, info, fskip)
-  elif format == 'ftc':
-    analyze_ftc(fread, info, fskip)
-  elif format == 'binhex':
-    analyze_binhex(fread, info, fskip)
-  elif format == 'macbinary':
-    analyze_macbinary(fread, info, fskip)
+  analyze_func = ANALYZE_FUNCS_BY_FORMAT.get(info['format'])
+  if analyze_func is not None:
+    analyze_func(fread, info, fskip)
 
 
 def analyze(f, info=None, file_size_for_seek=None):
