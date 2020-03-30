@@ -5675,6 +5675,17 @@ def analyze_jng(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
 
 
+def analyze_lepton(fread, info, fskip):
+  # JPEG reencoded by Dropbox lepton. Getting width and height is complicated.
+  # https://github.com/dropbox/lepton
+  header = fread(4)
+  if len(header) < 4:
+    raise ValueError('Too short lepton.')
+  if not (header.startswith('\xcf\x84') and header[2] in '\1\2' and header[3] in 'XYZ'):
+    raise ValueError('lepton signature not found.')
+  info['format'] = info['codec'] = 'lepton'
+
+
 def analyze_lbm(fread, info, fskip):
   # https://en.wikipedia.org/wiki/ILBM
   # https://github.com/unwind/gimpilbm/blob/master/ilbm.c
@@ -7638,6 +7649,7 @@ def analyze_djvu(fread, info, fskip):
 
 
 def analyze_art(fread, info, fskip):
+  # By AOL browser.
   # https://en.wikipedia.org/wiki/ART_image_file_format
   # https://multimedia.cx/eggs/aol-art-format/
   # http://samples.mplayerhq.hu/image-samples/ART/
@@ -7655,6 +7667,29 @@ def analyze_art(fread, info, fskip):
     info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
   else:
     pass  # Example: P50374Bc.art has header[8 : 13] == '\x8c\x16\0\0\x7d'.
+
+
+def analyze_fuji_raf(fread, info, fskip):
+  # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
+  # https://libopenraw.freedesktop.org/formats/raf/
+  # http://fileformats.archiveteam.org/wiki/Fujifilm_RAF
+  # `memcmp (head,"FUJIFILM",8)' in https://www.dechifro.org/dcraw/dcraw.c
+  # Look at the `Output size:' of the `dcraw -i -v FILENAME.RAF' output.
+  # derived from dcraw.c: `memcmp (head,"FUJIFILM",8)' in dcraw.cc (part of ufraw-batch)
+  #
+  # Getting width= and height= is surprisingly complicated (as implemented
+  # in dcraw.c), the used pixel_aspect value depends on the camera model,
+  # and the entire calculation of fuji_width is hacky, brittle and prone
+  # to errors, to the point that that it would be unmaintainable here.
+  # Getting the dimensions of the JPEG thumbnail is easy though, but it's
+  # not useful.
+  header = fread(28)
+  if len(header) < 28:
+    raise ValueError('Too short for fuji-raf.')
+  if not (header.startswith('FUJIFILMCCD-RAW 020') and header[19] in '01' and
+          header[20 : 28] == 'FF383501'):
+    raise ValueError('art signature not found.')
+  info['format'], info['codec'] = 'fuji-raf', 'raw'
 
 
 def analyze_ico(fread, info, fskip):
@@ -8831,6 +8866,50 @@ def analyze_binhex(fread, info, fskip):
       info['format'], info['subformat'], info['codec'] = 'binhex', 'hex', 'uncompressed'  # .hex, BinHex 1.0
 
 
+def analyze_flate(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Zlib
+  # https://tools.ietf.org/html/rfc1950
+  header = fread(2)
+  if len(header) < 2:
+    raise ValueError('Too short for flate.')
+  if not (header[0] in '\x08\x18\x28\x38\x48\x58\x68\x78' and
+          header[1] in '\x01\x5e\x9c\xda'):
+    raise ValueError('flate signature not found.')
+  info['format'] = info['codec'] = 'flate'
+
+
+def analyze_gz(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/Gzip
+  # https://wiki.alpinelinux.org/wiki/Alpine_package_format
+  # Also .tar.gz and Alpine apk.
+  header = fread(3)
+  if len(header) < 3:
+    raise ValueError('Too short for gz.')
+  if not header.startswith('\x1f\x8b\x08'):
+    raise ValueError('gz signature not found.')
+  info['format'], info['codec'] = 'gz', 'flate'
+
+
+def analyze_xz(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/XZ
+  header = fread(6)
+  if len(header) < 6:
+    raise ValueError('Too short for xz.')
+  if not header.startswith('\xfd7zXZ\0'):
+    raise ValueError('xz signature not found.')
+  info['format'], info['codec'] = 'xz', 'lzma'
+
+
+def analyze_lzma(fread, info, fskip):
+  # http://fileformats.archiveteam.org/wiki/LZMA_Alone
+  header = fread(13)
+  if len(header) < 13:
+    raise ValueError('Too short for lzma.')
+  if not (header.startswith('\x5d\0\0') and header[12] in '\0\xff'):
+    raise ValueError('lzma signature not found.')
+  info['format'] = info['codec'] = 'lzma'
+
+
 MACBINARY_TYPES = ('PICT', 'PNTG')
 
 
@@ -9060,7 +9139,6 @@ FORMAT_ITEMS = (
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
     ('apng',),  # From 'png'.
     ('jng', (0, '\213JNG\r\n\032\n\0\0\0')),
-    # JPEG reencoded by Dropbox lepton. Getting width and height is complicated.
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
@@ -9106,21 +9184,7 @@ FORMAT_ITEMS = (
     ('pcpaint-pic', (0, '\x34\x12', 6, '\0\0\0\0', 11, tuple('\xff123'), 13, tuple('\0\1\2\3\4'))),
     # TODO(pts): Also support .cur (Windows cursor) files.
     ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
-    # By AOL browser.
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
-    # https://libopenraw.freedesktop.org/wiki/Fuji_RAF/
-    # https://libopenraw.freedesktop.org/formats/raf/
-    # http://fileformats.archiveteam.org/wiki/Fujifilm_RAF
-    # `memcmp (head,"FUJIFILM",8)' in https://www.dechifro.org/dcraw/dcraw.c
-    # Look at the `Output size:' of the `dcraw -i -v FILENAME.RAF' output.
-    # derived from dcraw.c: `memcmp (head,"FUJIFILM",8)' in dcraw.cc (part of ufraw-batch)
-    #
-    # Getting width= and height= is surprisingly complicated (as implemented
-    # in dcraw.c), the used pixel_aspect value depends on the camera model,
-    # and the entire calculation of fuji_width is hacky, brittle and prone
-    # to errors, to the point that that it would be unmaintainable here.
-    # Getting the dimensions of the JPEG thumbnail is easy though, but it's
-    # not useful.
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
     ('dpx', (0, 'SDPX\0\0', 8, 'V', 9, ('1', '2'), 10, '.', 11, tuple('0123456789'))),
@@ -9357,10 +9421,7 @@ FORMAT_ITEMS = (
 
     # Compressed single file.
 
-    # http://fileformats.archiveteam.org/wiki/Gzip
-    # https://wiki.alpinelinux.org/wiki/Alpine_package_format
-    # Also .tar.gz and Alpine apk.
-    ('gz', (0, '\037\213\010')),
+    ('gz', (0, '\x1f\x8b\x08')),  # .gz
     # http://fileformats.archiveteam.org/wiki/MSZIP
     ('mszip', (0, 'CK')),
     # http://fileformats.archiveteam.org/wiki/Bzip
@@ -9378,12 +9439,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
     ('xz', (0, '\xfd7zXZ\0')),
-    # http://fileformats.archiveteam.org/wiki/LZMA_Alone
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
-    # http://fileformats.archiveteam.org/wiki/Zlib
-    # https://tools.ietf.org/html/rfc1950
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
-    ('flate-small-window', (0, ('\x08', '\x18', '\x28', '\x38', '\x48', '\x58', '\x68'), 1, ('\x01', '\x5e', '\x9c', '\xda'))),
+    ('flate', (0, ('\x08', '\x18', '\x28', '\x38', '\x48', '\x58', '\x68'), 1, ('\x01', '\x5e', '\x9c', '\xda'))),  # Flate width small window.
     # http://fileformats.archiveteam.org/wiki/Compress_(Unix)
     ('compress', (0, '\x1f\x9d')),  # .Z
     # http://fileformats.archiveteam.org/wiki/Compact_(Unix)
@@ -9787,7 +9845,6 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
   elif format == 'mpeg-video':
     analyze_mpeg_video(fread, info, fskip)
   elif format == 'mpeg-adts':
-    # Can change info['format'] = 'mp3'.
     analyze_mpeg_adts(fread, info, fskip)
   elif format == 'mp3-id3v2':
     analyze_id3v2(fread, info, fskip)
@@ -9809,7 +9866,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_daala(fread, info, fskip)
   elif format == 'yuv4mpeg2':
     analyze_yuv4mpeg2(fread, info, fskip)
-  elif format in 'realvideo':
+  elif format == 'realvideo':
     analyze_realvideo(fread, info, fskip)
   elif format == 'wav':
     analyze_wav(fread, info, fskip)
@@ -9841,7 +9898,9 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_tga(fread, info, fskip)
   elif format == 'tiff':
     analyze_tiff(fread, info, fskip)
-  elif format in ('pnm', 'xv-thumbnail'):
+  elif format == 'pnm':
+    analyze_pnm(fread, info, fskip)
+  elif format ==  'xv-thumbnail':
     analyze_pnm(fread, info, fskip)
   elif format == 'pam':
     analyze_pam(fread, info, fskip)
@@ -9890,9 +9949,9 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
   elif format == 'au':
     analyze_au(fread, info, fskip)
   elif format == 'lepton':
-    info['codec'] = 'lepton'
+    analyze_lepton(fread, info, fskip)
   elif format == 'fuji-raf':
-    info['codec'] = 'raw'
+    analyze_fuji_raf(fread, info, fskip)
   elif format == 'minolta-raw':
     analyze_minolta_raw(fread, info, fskip)
   elif format == 'dpx':
@@ -9957,13 +10016,29 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_icns(fread, info, fskip)
   elif format == 'dds':
     analyze_dds(fread, info, fskip)
-  elif format in ('flate', 'gz', 'zip'):
-    info['codec'] = 'flate'
-  elif format in ('xz', 'lzma'):
-    info['codec'] = 'lzma'
+  elif format == 'flate':
+    analyze_flate(fread, info, fskip)
+  elif format == 'gz':
+    analyze_gz(fread, info, fskip)
+  elif format == 'xz':
+    analyze_xz(fread, info, fskip)
+  elif format == 'lzma':
+    analyze_lzma(fread, info, fskip)
   elif format == 'olecf':
     analyze_olecf(fread, info, fskip)
-  elif format in ('mp4', 'mp4-wellknown-brand', 'isobmff-image', 'mov', 'mov-mdat', 'mov-small', 'mov-moov'):
+  elif format == 'mp4':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'mp4-wellknown-brand':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'isobmff-image':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'mov':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'mov-mdat':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'mov-small':
+    analyze_mp4(fread, info, fskip)
+  elif format == 'mov-moov':
     analyze_mp4(fread, info, fskip)
   elif format == 'swf':
     analyze_swf(fread, info, fskip)
@@ -9991,8 +10066,16 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_mng(fread, info, fskip)
   elif format == 'exe':
     analyze_exe(fread, info, fskip)
-  elif format in ('xml', 'xml-comment', 'html', 'svg', 'smil'):
-    analyze_xml(fread, info, fskip)  # Also generates format=svg, =smil, =html, =xml.
+  elif format == 'xml':
+    analyze_xml(fread, info, fskip)
+  elif format == 'xml-comment':
+    analyze_xml(fread, info, fskip)
+  elif format == 'html':
+    analyze_xml(fread, info, fskip)
+  elif format == 'svg':
+    analyze_xml(fread, info, fskip)
+  elif format == 'smil':
+    analyze_xml(fread, info, fskip)
   elif format == 'jpegxl-brunsli':
     analyze_brunsli(fread, info, fskip)
   elif format == 'jpegxl':
@@ -10021,8 +10104,10 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
     analyze_dvi(fread, info, fskip)
   elif format == 'emf':
     analyze_emf(fread, info, fskip)
-  elif format in ('?-zeros32', '?-zeros64'):
-    analyze_zeros32_64(fread, info, fskip)  # Maybe 'pict'.
+  elif format == '?-zeros32':
+    analyze_zeros32_64(fread, info, fskip)
+  elif format == '?-zeros64':
+    analyze_zeros32_64(fread, info, fskip)
   elif format == 'xwd':
     analyze_xwd(fread, info, fskip)
   elif format == 'sun-icon':

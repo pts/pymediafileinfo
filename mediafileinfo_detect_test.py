@@ -412,6 +412,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jng, '\x8bJNG\r\n\x1a\n\0\0\0\rJHDR\0\0\5\1\0\0\3\2'),
                      {'format': 'jng', 'codec': 'jpeg', 'width': 1281, 'height': 770})
 
+  def test_analyze_lepton(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lepton, '\xcf\x84\1Y'),
+                     {'format': 'lepton', 'codec': 'lepton'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lepton, '\xcf\x84\2Z'),
+                     {'format': 'lepton', 'codec': 'lepton'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lepton, '\xcf\x84\1X'),
+                     {'format': 'lepton', 'codec': 'lepton'})
+
+  def test_analyze_fuji_raf(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuji_raf, 'FUJIFILMCCD-RAW 0200FF383501'),
+                     {'format': 'fuji-raf', 'codec': 'raw'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuji_raf, 'FUJIFILMCCD-RAW 0201FF383501'),
+                     {'format': 'fuji-raf', 'codec': 'raw'})
+
   def test_analyze_mng(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mng, '\x8aMNG\r\n\x1a\n\0\0\0\rMHDR\0\0\5\1\0\0\3\2'),
                      {'format': 'mng', 'tracks': [{'codec': 'jpeg+png', 'width': 1281, 'height': 770}]})
@@ -1336,6 +1350,34 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'binhex', 'subformat': 'hcx', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, '(This file must be converted; you knew that already.)\n\n:'),
                      {'format': 'binhex', 'subformat': 'hqx', 'codec': 'rle'})
+
+  def test_analyze_flate(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flate, '\x08\x9c'),
+                     {'format': 'flate', 'detected_format': 'short2', 'codec': 'flate'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flate, '\x18\xda'),
+                     {'format': 'flate', 'detected_format': 'short2', 'codec': 'flate'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flate, '\x28\x01'),
+                     {'format': 'flate', 'detected_format': 'short2', 'codec': 'flate'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flate, '\x38\x5e'),
+                     {'format': 'flate', 'detected_format': 'short2', 'codec': 'flate'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_flate, '\x78\x9c??'),
+                     {'format': 'flate', 'codec': 'flate'})
+
+  def test_analyze_gz(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gz, '\x1f\x8b\x08'),
+                     {'format': 'gz', 'detected_format': 'short3', 'codec': 'flate'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gz, '\x1f\x8b\x08?'),
+                     {'format': 'gz', 'codec': 'flate'})
+
+  def test_analyze_xz(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xz, '\xfd7zXZ\0'),
+                     {'format': 'xz', 'codec': 'lzma'})
+
+  def test_analyze_lzma(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lzma, '\x5d\0\0?????????\0'),
+                     {'format': 'lzma', 'codec': 'lzma'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lzma, '\x5d\0\0?????????\xff'),
+                     {'format': 'lzma', 'codec': 'lzma'})
 
   def test_detect_rtf(self):
     self.assertEqual(mediafileinfo_detect.detect_format(r'{\rtf1')[0], 'rtf')
