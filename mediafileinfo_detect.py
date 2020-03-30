@@ -9165,7 +9165,7 @@ FORMAT_ITEMS = (
     ('fits', (0, 'SIMPLE  = ', 80, lambda header: (len(header) >= 11 and header[10 : 80].split('/', 1)[0].strip(' ') == 'T', 180))),
     ('xloadimage-niff', (0, 'NIFF\0\0\0\1')),
     ('sun-taac', (0, 'ncaa', 4, tuple('\r\nabcdefghijklmnopqrstuvwxyz'), 5, tuple('\r\nabcdefghijklmnopqrstuvwxyz'))),
-    ('facesaver', (0, tuple(prefix[:6] for prefix in FACESAVER_PREFIXES), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
+    ('facesaver', (0, tuple(sorted(set(prefix[:6] for prefix in FACESAVER_PREFIXES))), 6, lambda header: adjust_confidence(600, count_is_facesaver(header)))),
     ('mcidas-area', (0, ('\0\0\0\0\0\0\0\4', '\0\0\0\0\4\0\0\0'), 32, lambda header: adjust_confidence(800, count_is_mcidas_area(header)))),
     # Not all macpaint files match this, some of them start with '\0' * 512,
     # and they don't have any other header either, so no image data.
@@ -9537,10 +9537,12 @@ class FormatDb(object):
         if isinstance(pattern, str):
           fps = size + len(pattern)
         elif isinstance(pattern, tuple):
-          assert pattern, 'Empty pattern tuple.'
-          assert len(set(len(s) for s in pattern)) == 1, (
-              'Non-uniform pattern choice sizes for %s: %r' %
-              (format, pattern))
+          if not pattern:
+            raise ValueError('Empty pattern tuple.')
+          if len(set(len(s) for s in pattern)) != 1:
+            raise ValueError('Non-uniform pattern choice sizes for format %s: %r' % (format, pattern))
+          if len(set(pattern)) != len(pattern):
+            raise ValueError('Duplicate string in pattern tuple for format %s: %r' % (format, pattern))
           fps = size + len(pattern[0])
         else:
           fps = size
