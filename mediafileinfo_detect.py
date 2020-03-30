@@ -9504,10 +9504,18 @@ FORMAT_ITEMS = (
 HEADER_SIZE_LIMIT = 512
 
 
-def get_spec_prefixes(spec, count_limit=50):
-  """Returns a tuple containing all possible prefix strings (of the same
-  size) of any string spec matches. The result has at most count_limit
-  elements; to achieve this, the prefixes may get truncated."""
+def get_spec_prefixes(spec, count_limit=50, max_prefix_size=0):
+  """Calculates prefixes.
+
+  Args:
+    spec: A FormatDb format spec (tuple of even size).
+    count_limit: Maximum size of the result, i.e. maximum number of prefixes.
+    max_prefix_size: If positive, truncate each returned prefix to this size.
+  Returns:
+    tuple containing all possible prefix strings (of the same
+    size) of any string spec matches. The result has at most count_limit
+    elements; to achieve this, the prefixes may get truncated.
+  """
   prefixes = ('',)
   if count_limit >= 2 and spec and spec[0] == 0:
     ofs = i = 0
@@ -9526,6 +9534,10 @@ def get_spec_prefixes(spec, count_limit=50):
         break
       prefixes = tuple(p1 + p2 for p1 in prefixes for p2 in prefixes2)
       ofs += len(prefixes2[0])
+      if ofs >= max_prefix_size > 0:
+        if ofs > max_prefix_size:
+          prefixes = tuple(p1[:max_prefix_size] for p1 in prefixes)
+        break
   elif count_limit < 1:
     raise ValueError('Bad count_limit: %d' % count_limit)
   return prefixes
@@ -9534,12 +9546,12 @@ def get_spec_prefixes(spec, count_limit=50):
 class FormatDb(object):
   __slots__ = ('formats_by_prefix', 'header_preread_size', 'formats')
 
-  def __init__(self, format_items):
+  def __init__(self, format_items, max_prefix_size=4):
     # It's OK to have duplicate, e.g. 'cue'.
     #if len(dict(format_items)) != len(format_items):
     #  raise ValueError('Duplicate key in format_items.')
     hps = 0
-    fbp = [{} for i in xrange(5)]
+    fbp = [{} for i in xrange(max_prefix_size + 1)]
     for format_spec in format_items:
       if len(format_spec) == 1:
         continue  # Indicates that analyze_* can generate this format.
@@ -9562,14 +9574,12 @@ class FormatDb(object):
         else:
           fps = size
         hps = max(hps, fps)
-      for prefix in get_spec_prefixes(spec):
-        i = min(4, len(prefix))
-        prefix2 = prefix[:i]
-        fbp2 = fbp[i]
-        if prefix2 in fbp2:
-          fbp2[prefix2].append(format_spec)
+      for prefix in get_spec_prefixes(spec, max_prefix_size=max_prefix_size):
+        fbp2 = fbp[len(prefix)]
+        if prefix in fbp2:
+          fbp2[prefix].append(format_spec)
         else:
-          fbp2[prefix2] = [format_spec]
+          fbp2[prefix] = [format_spec]
     self.header_preread_size = hps  # Typically 64, we have 408.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
@@ -9606,7 +9616,7 @@ def detect_format(f):
     raise TypeError
   best_match = ()
   fbp = format_db.formats_by_prefix
-  for j in xrange(min(len(header), 4), -1, -1):
+  for j in xrange(min(len(header), len(fbp) - 1), -1, -1):
     for format, spec in fbp[j].get(header[:j], ()):
       assert isinstance(spec, tuple), 'spec must be tuple.'
       confidence = 0
