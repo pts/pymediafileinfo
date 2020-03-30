@@ -21,11 +21,20 @@ import unittest
 import mediafileinfo_detect
 
 
-def analyze_string(analyze_func, data):
+def analyze_string(analyze_func, data, expect_error=False):
   fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
   info = {}
-  analyze_func(fread, info, fskip)
-  if info.get('format') not in mediafileinfo_detect.FORMAT_DB.formats:
+  if expect_error:
+    try:
+      analyze_func(fread, info, fskip)
+      raise AssertionError('ValueError expected but not raised.')
+    except ValueError, e:
+      info['error'] = str(e)
+  else:
+    analyze_func(fread, info, fskip)
+    if info.get('format') is None:
+      raise AssertionError('Format not populated in info.')
+  if info.get('format') is not None and info.get('format') not in mediafileinfo_detect.FORMAT_DB.formats:
     raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
   detected_format = mediafileinfo_detect.detect_format(data)[0]
   if detected_format != info.get('format'):
@@ -193,7 +202,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'codec': 'uncompressed-ascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
 
   def test_analyze_lbm(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('FORM\0\0\0\x4eILBMBMHD\0\0\0\x14')[0], 'lbm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14'),
+                     {'codec': 'rle', 'format': 'lbm', 'subformat': 'ilbm'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4eILBMBMHD\0\0\0\x14\1\3\1\5'),
                      {'codec': 'rle', 'format': 'lbm', 'subformat': 'ilbm', 'height': 261, 'width': 259})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_lbm, 'FORM\0\0\0\x4ePBM BMHD\0\0\0\x14\1\3\1\5'),
@@ -202,23 +212,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'codec': 'uncompressed', 'format': 'lbm', 'subformat': 'acbm', 'height': 261, 'width': 259})
 
   def test_analyze_deep(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08')[0], 'deep')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_deep, 'FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08'),
                      {'format': 'deep'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_deep, 'FORM\0\0\0\x4eDEEPDGBL\0\0\0\x08\2\1\2\4\0\3'),
                      {'format': 'deep', 'height': 516, 'width': 513, 'codec': 'dynamic-huffman'})
 
   def test_analyze_pcx(self):
-    data1 = '\n\5\1\x08\0\0\0\0\2\1\4\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'pcx')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcx, '\n\5\1\x08\0\0\0\0\2\1\4\1'),
                      {'format': 'pcx', 'codec': 'rle', 'height': 261, 'width': 259})
 
   def test_analyze_dcx(self):
     data_pcx = '\n\5\1\x08\0\0\0\0\2\1\4\1'
     data1 = '\xb1\x68\xde\x3a\x10\0\0\0????\0\0\0\0' + data_pcx
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'dcx')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:4])[0], 'dcx')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dcx, data1),
                      {'format': 'dcx', 'codec': 'rle', 'height': 261, 'width': 259})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dcx, data1[:4]),
@@ -237,13 +242,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'tiff', 'width': 0x5634, 'height': 0x2345, 'codec': 'zip'})
 
   def test_analyze_tga(self):
-    data1 = '000002000000000000000000030105010800'.decode('hex')
-    data2 = '000003000000000000000000030105010f00'.decode('hex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'tga')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'tga')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, '000002000000000000000000030105010800'.decode('hex')),
                      {'format': 'tga', 'width': 259, 'height': 261, 'codec': 'uncompressed'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_tga, '000003000000000000000000030105010f00'.decode('hex')),
                      {'format': 'tga', 'width': 259, 'height': 261, 'codec': 'uncompressed'})
 
   def test_analyze_ps(self):
@@ -251,10 +252,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_line1 = '%!PS-Adobe-3.0\tEPSF-3.0\r\n'
     data_more = '%%Creator: (ImageMagick)\n%%Title:\t(image.eps2)\r\n%%CreationDate: (2019-10-22T21:27:41+02:00)\n%%BoundingBox:\t-1 -0.8\t \t34 56.2\r\n%%HiResBoundingBox: 0\t0\t3 5\r%%LanguageLevel:\t2\r%%Pages: 1\r%%EndComments\nuserdict begin end'
     data_mps = '%!PS\n%%BoundingBox: 10 20 31 40\n'
-    self.assertEqual(mediafileinfo_detect.detect_format(data_line1)[0], 'ps')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_preview)[0], 'ps')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_mps)[0], 'ps')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_mps.replace('\n', '\r\n'))[0], 'ps')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_preview),
+                     {'format': 'ps', 'subformat': 'preview', 'has_preview': True})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_line1),
                      {'format': 'ps', 'subformat': 'eps', 'has_preview': False})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ps, data_line1 + data_more),
@@ -267,15 +266,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'ps', 'subformat': 'mps', 'has_preview': False, 'height': 20, 'width': 21})
 
   def test_analyze_jpeg2000(self):
-    self.assertEqual(mediafileinfo_detect.detect_format(self.JP2_HEADER)[0], 'jp2')
     expected = {'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'format': 'jp2', 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352}
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mp4, self.JP2_HEADER), expected)
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jp2, self.JP2_HEADER), expected)
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg2000, self.JP2_HEADER), expected)
     data1 = '\xff\x4f\xff\x51\0\x29'
     data2 = '\xff\x4f\xff\x51\0\x2f\0\0\0\0\2\3\0\0\2\1\0\0\0\0\0\0\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpc')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'jpc')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpc, data1),
                      {'format': 'jpc', 'codec': 'jpeg2000'})
     expected = {'format': 'jpc', 'codec': 'jpeg2000', 'height': 513, 'width': 515}
@@ -327,28 +323,19 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'codec': 'webp-lossless', 'format': 'webp', 'height': 395, 'width': 386})
 
   def test_analyze_vp8(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('d2be019d012a26027001'.decode('hex'))[0], 'vp8')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp8, 'd2be019d012a26027001'.decode('hex')),
                      {'format': 'vp8', 'tracks': [{'codec': 'vp8', 'height': 368, 'type': 'video', 'width': 550}]})
 
   def test_analyze_vp9(self):
-    data1 = '824983420031f0314600'.decode('hex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'vp9')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp9, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vp9, '824983420031f0314600'.decode('hex')),
                      {'format': 'vp9', 'tracks': [{'codec': 'vp9', 'height': 789, 'type': 'video', 'width': 800}]})
 
   def test_analyze_av1(self):
-    data1 = '\x12\0\x0a\4'
-    data2 = '\x12\0\x0a\4\x18\0\x10'
-    data3 = '\x12\0\x0a\x0b\0\0\0\x24\xce\x3f\x8f\xbf'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'av1')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'av1')
-    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'av1')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, '\x12\0\x0a\4'),
                      {'format': 'av1', 'tracks': [{'codec': 'av1', 'type': 'video'}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, '\x12\0\x0a\4\x18\0\x10'),
                      {'format': 'av1', 'tracks': [{'codec': 'av1', 'height': 2, 'type': 'video', 'width': 1}]})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, data3),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_av1, '\x12\0\x0a\x0b\0\0\0\x24\xce\x3f\x8f\xbf'),
                      {'format': 'av1', 'tracks': [{'codec': 'av1', 'height': 800, 'type': 'video', 'width': 800}]})
 
   def test_analyze_jpegxr(self):
@@ -474,13 +461,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data6 = '<!----><!-- hello\n-\r--\n->-\t>-->\t\f<!-- -->\v<?xml\t\f version="1.0"?>'
     data7 = '\r<!---->\n<!--data-->'
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data1), {'format': 'xml'})
-    self.assertNotIn(mediafileinfo_detect.detect_format(' ' + data1)[0], ('xml', 'xml-comment'))
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, ' ' + data1), {'format': 'xml', 'detected_format': '?'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data2), {'format': 'xml'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data3), {'format': 'xml'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data4), {'format': 'xml'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data5), {'format': 'xml'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data6), {'format': 'xml', 'detected_format': 'xml-comment'})
-    self.assertEqual(mediafileinfo_detect.detect_format(' ' + data6)[0], 'xml-comment')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, ' ' + data6), {'format': 'xml', 'detected_format': 'xml-comment'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data7), {'format': 'xml-comment'})
 
@@ -496,8 +482,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data2 = '<!--x-->\t\f<body>'
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data2), {'format': 'html', 'detected_format': 'xml-comment'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '\r\n' + data2), {'format': 'html', 'detected_format': 'xml-comment'})
-    self.assertEqual(mediafileinfo_detect.detect_format('\t\f<!doctype\rhtml=')[0], '?')
-    self.assertEqual(mediafileinfo_detect.detect_format('\t\f<html=')[0], '?')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '\t\f<!doctype\rhtml=', expect_error=True), {'detected_format': '?', 'error': 'xml signature not found.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '\t\f<html=', expect_error=True), {'detected_format': '?', 'error': 'xml signature not found.'})
 
   def test_analyze_xhtml(self):
     data1 = '<html lang="en"\txmlns="http://www.w3.org/1999/xhtml">'
@@ -575,17 +561,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'smil', 'detected_format': 'xml'})
 
   def test_analyze_brunsli(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\x0a\x04B\xd2\xd5N')[0], 'jpegxl-brunsli')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_brunsli, '\x0a\x04B\xd2\xd5N'),
+                     {'format': 'jpegxl-brunsli', 'subformat': 'brunsli', 'codec': 'brunsli'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_brunsli, '0a0442d2d54e120a08810410800418022011'.decode('hex')),
                      {'format': 'jpegxl-brunsli', 'subformat': 'brunsli', 'codec': 'brunsli', 'height': 512, 'width': 513})
 
   def test_analyze_fuif(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('FUIF3.')[0], 'fuif')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuif, 'FUIF3.'),
+                     {'format': 'fuif', 'subformat': 'fuif', 'codec': 'fuif'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fuif, '46554946332e84017e'.decode('hex')),
                      {'format': 'fuif', 'subformat': 'fuif', 'codec': 'fuif', 'component_count': 3, 'bpc': 8, 'height': 127, 'width': 514})
 
   def test_analyze_jpegxl(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\xff\x0a--')[0], 'jpegxl')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, '\xff\x0a--'),
+                     {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 184, 'width': 276})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0af81f'.decode('hex')),
                      {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 512, 'width': 512})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpegxl, 'ff0a7f00'.decode('hex')),
@@ -594,72 +583,91 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'jpegxl', 'subformat': 'jpegxl', 'codec': 'jpegxl', 'height': 56, 'width': 1234})
 
   def test_analyze_pik(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('P\xccK\x0a')[0], 'pik')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'P\xccK\x0a'),
+                     {'format': 'pik', 'subformat': 'pik1', 'codec': 'pik'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, '50cc4b0a51319400'.decode('hex')),
                      {'format': 'pik', 'subformat': 'pik1', 'codec': 'pik', 'height': 404, 'width': 550})
-    self.assertEqual(mediafileinfo_detect.detect_format('\xd7LM\x0a')[0], 'pik')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, '\xd7LM\x0a'),
+                     {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'd74c4d0a45931b00'.decode('hex')),
                      {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik', 'height': 56, 'width': 1234})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pik, 'd74c4d0afce73f0e'.decode('hex')),
                      {'format': 'pik', 'subformat': 'pik2', 'codec': 'pik', 'height': 512, 'width': 512})
 
   def test_analyze_qtif(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x00idat')[0], 'qtif')
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x00iicc')[0], 'qtif')
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\xffidsc')[0], 'qtif')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\1\0\x00idat'),
+                     {'format': 'qtif'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\1\0\x00iicc'),
+                     {'format': 'qtif'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\0\xffidsc'),
+                     {'format': 'qtif'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\0\x0bidat\xff\xd8\xff\0\0\x00nidsc\0\0\x00fjpeg\0\0\0\0\0\0\0\0\0\x01\0\x01appl\0\0\0\0\0\0\x02\0\x01\0\x01m\x00H\0\0\x00H\0\0\0\x00Hq\0\x01\x0cPhoto - JPEG\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x18\xff\xff\0\0\0\x0cgama\0\x01\xcc\xcc\0\0\0\0'),
                      {'format': 'qtif', 'codec': 'jpeg', 'height': 365, 'width': 256})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_qtif, '\0\0\x00nidsc\0\0\x00fjpeg\0\0\0\0\0\0\0\0\0\x01\0\x01appl\0\0\0\0\0\0\x02\0\x01\0\x01m'),
                      {'format': 'qtif', 'codec': 'jpeg', 'height': 365, 'width': 256})
 
   def test_analyze_psp(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('Paint Shop Pro Image File\n\x1a\0\0\0\0\0')[0], 'psp')
     data = 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0\x05\0\0\x00~BK\0\0\x00.\0\0\x00.\0\0\0\xf4\1\0\0\xb9\1\0\0'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data[:32]),
+                     {'format': 'psp'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data),
                      {'format': 'psp', 'height': 441, 'width': 500})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_psp, data + '\0\0\0\0\0\x00R@\1\2\0'),
                      {'format': 'psp', 'height': 441, 'width': 500, 'codec': 'lz77'})
 
   def test_analyze_ras(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\x59\xa6\x6a\x95')[0], 'ras')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95\0\0\1\xe6\0\0\0\x78'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95'),
+                     {'format': 'ras'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95\0\0\1\xe6\0\0\0\x78????????\0\0\0\2'),
+                     {'format': 'ras', 'codec': 'rle', 'height': 120, 'width': 486})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ras, '\x59\xa6\x6a\x95\0\0\1\xe6\0\0\0\x78????????\0\0\0\3'),
                      {'format': 'ras', 'height': 120, 'width': 486})
 
   def test_analyze_pam(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('P7\n#\nWIDTH 1\n')[0], 'pam')
-    self.assertEqual(mediafileinfo_detect.detect_format('P7\n\nHEIGHT\t2\n')[0], 'pam')
-    self.assertEqual(mediafileinfo_detect.detect_format('P7\nQ RS\nDEPTH\f3\n')[0], 'pam')
-    self.assertEqual(mediafileinfo_detect.detect_format('P7\nQ RS\nMAXVAL\v4\n')[0], 'pam')
-    self.assertEqual(mediafileinfo_detect.detect_format('P7\nENDHDR\n')[0], 'pam')
-    self.assertNotEqual(mediafileinfo_detect.detect_format('P7\nQ RS\n')[0], 'pam')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\n#\nWIDTH 1\n', expect_error=True),
+                     {'format': 'pam', 'codec': 'uncompressed', 'error': 'EOF in pam header before ENDHDR.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\n\nHEIGHT\t2\n', expect_error=True),
+                     {'format': 'pam', 'codec': 'uncompressed', 'error': 'EOF in pam header before ENDHDR.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\nQ RS\nDEPTH\f3\n', expect_error=True),
+                     {'format': 'pam', 'codec': 'uncompressed', 'error': 'EOF in pam header before ENDHDR.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\nQ RS\nMAXVAL\v4\n', expect_error=True),
+                     {'format': 'pam', 'codec': 'uncompressed', 'error': 'EOF in pam header before ENDHDR.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\nENDHDR\n', expect_error=True),
+                     {'format': 'pam', 'codec': 'uncompressed', 'error': 'Missing pam header keys: DEPTH, HEIGHT, MAXVAL, WIDTH'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam,'P7\nQ RS\n', expect_error=True),
+                     {'format': 'pam', 'detected_format': '?', 'codec': 'uncompressed', 'error': 'EOF in pam header before ENDHDR.'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pam, 'P7\nWIDTH 227\nDEPTH 3\n# WIDTH 42\nHEIGHT\t\f149\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n'),
                      {'format': 'pam', 'codec': 'uncompressed', 'height': 149, 'width': 227})
 
   def test_analyze_xv_thumbnail(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('P7 332\n')[0], 'xv-thumbnail')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, 'P7 332\n#XVVERSION:Version 2.28  Rev: 9/26/92\n#IMGINFO:512x440 Color JPEG\n#END_OF_COMMENTS\n48 40 255\n'),
+    data1 = 'P7 332\n#XVVERSION:Version 2.28  Rev: 9/26/92\n#IMGINFO:512x440 Color JPEG\n#END_OF_COMMENTS\n48 40 255\n'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, data1[:data1.find('\n') + 1]),
+                     {'format': 'xv-thumbnail', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pnm, data1),
                      {'format': 'xv-thumbnail', 'codec': 'uncompressed', 'height': 40, 'width': 48})
 
   def test_analyze_gem(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\1\0\x08\0\2\0\2')[0], 'gem')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\1\0\x08\0\2\0\2'),
+                     {'format': 'gem', 'subformat': 'nosig', 'codec': 'rle'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\1\0\x08\0\2\0\2\0\x55\0\x55\1\0\0\x40'),
                      {'format': 'gem', 'subformat': 'nosig', 'codec': 'rle', 'height': 64, 'width': 256})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gem, '\0\2\0\x3b\0\4\0\1\0\x55\0\x55\1\0\0\x40XIMG\0\0'),
                      {'format': 'gem', 'subformat': 'ximg', 'codec': 'rle', 'height': 64, 'width': 256})
 
   def test_analyze_pcpaint_pic(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\0\0')[0], 'pcpaint-pic')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcpaint_pic, '\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\x41\0\0\0\0\2\0'),
+    data1 = '\x34\x12\x40\x01\xc8\0\0\0\0\0\x02\xff\x41\0\0\0\0\0\0'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcpaint_pic, data1[:14]),
                      {'format': 'pcpaint-pic', 'codec': 'rle', 'height': 200, 'width': 320})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pcpaint_pic, data1),
+                     {'format': 'pcpaint-pic', 'codec': 'uncompressed', 'height': 200, 'width': 320})
 
   def test_analyze_ivf(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('DKIF\0\0 \0')[0], 'ivf')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ivf, 'DKIF\0\0 \0'),
+                     {'format': 'ivf', 'tracks': []})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ivf, 'DKIF\0\0 \0VP80 \3 \4'),
                      {'format': 'ivf', 'tracks': [{'codec': 'vp8', 'height': 1056, 'type': 'video', 'width': 800}]})
 
   def test_analyze_wmf(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\xd7\xcd\xc6\x9a\0\0')[0], 'wmf')
-    self.assertEqual(mediafileinfo_detect.detect_format('\1\0\x09\0\0\3\x17\x85\0\0\4\0\xf0\x1a\0\0\0\0')[0], 'wmf')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\xd7\xcd\xc6\x9a\0\0'),
                      {'format': 'wmf'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wmf, '\1\0\x09\0\0\3??????????\0\0'),
@@ -672,8 +680,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_emf(self):
     data1 = '0100000084000000d80100003f02000088110000ac1800000000000000000000085200000474000020454d460000010054ff83005101000004000000'.decode('hex')
     data2 = '010000006c000000ffffffffffffffff640000006b0000000000000000000000f00700007708000020454d46000001005c0a00004c0000000200000000000000000000000000000040060000b004000040010000f000000000000000000000000000000000e2040080a90300460000002c00000020000000454d462b014001001c000000100000000210c0db01000000660000006c000000'.decode('hex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'emf')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'emf')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data1),
                      {'format': 'emf', 'subformat': 'emf', 'height': 842, 'width': 595})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_emf, data2),
@@ -723,23 +729,21 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'pict', 'detected_format': 'macbinary', 'subformat': 'macbinary'})
 
   def test_analyze_minolta_raw(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\0MRM\0\1\2\3\0PRD\0\0\0\x18')[0], 'minolta-raw')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x18'),
                      {'format': 'minolta-raw', 'codec': 'raw'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_minolta_raw, '\0MRM\0\1\2\3\0PRD\0\0\0\x1827820001\7\x88\x0a\x08\7\x80\x0a\0'),
                      {'format': 'minolta-raw', 'codec': 'raw', 'height': 1920, 'width': 2560})
 
   def test_analyze_dpx(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('SDPX\0\0 \0V2.0')[0], 'dpx')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dpx, 'SDPX\0\0 \0V2.0'),
                      {'format': 'dpx'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dpx, 'SDPX\0\0 \0V2.0\0' + 755 * '?' + '\0\0\0\2\0\0\2\3\0\0\2\1' + '?' * 26 + '\0\1'),
                      {'format': 'dpx', 'codec': 'rle', 'height': 513, 'width': 515})
 
   def test_analyze_cineon(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\x80\x2a\x5f\xd7\0\0??')[0], 'cineon')
-    self.assertEqual(mediafileinfo_detect.detect_format('\xd7\x5f\x2a\x80??\0\0')[0], 'cineon')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\x80\x2a\x5f\xd7\0\0??'),
+                     {'format': 'cineon', 'codec': 'uncompressed'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\xd7\x5f\x2a\x80??\0\0'),
                      {'format': 'cineon', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cineon, '\x80\x2a\x5f\xd7\0\0??' + '?' * 192 + '\0\0\2\3\0\0\2\1'),
                      {'format': 'cineon', 'codec': 'uncompressed', 'height': 513, 'width': 515})
@@ -747,16 +751,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'cineon', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_vicar(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('LBLSIZE=10')[0], 'vicar')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10'),
-                     {'format': 'vicar'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10 NS=1 NL=2 FOO=bar'),
-                     {'format': 'vicar'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, "LBLSIZE=94   FORMAT='HALF'  TYPE='IMAGE' U1='NS=12' FOO NS=34 U2='NS=56' NL = 789\0NL=5 FOO=bar"),
-                     {'format': 'vicar', 'height': 789, 'width': 34})
-
-  def test_analyze_vicar(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('LBLSIZE=10')[0], 'vicar')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10'),
                      {'format': 'vicar'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_vicar, 'LBLSIZE=10 NS=1 NL=2 FOO=bar'),
@@ -765,34 +759,42 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'vicar', 'height': 789, 'width': 34})
 
   def test_analyze_pds(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('NJPL1I00PDS')[0], 'pds')
-    self.assertEqual(mediafileinfo_detect.detect_format('PDS_VERSION_ID\f')[0], 'pds')
-    self.assertEqual(mediafileinfo_detect.detect_format('CCSD3ZF')[0], 'pds')
-    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0NJPL1I00PDS')[0], 'pds')
-    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0PDS_VERSION_ID\f')[0], 'pds')
-    self.assertEqual(mediafileinfo_detect.detect_format('\xff\0CCSD3ZF')[0], 'pds')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, 'NJPL1I00PDS'),
+                     {'format': 'pds'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, 'PDS_VERSION_ID\f'),
+                     {'format': 'pds'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, 'CCSD3ZF'),
+                     {'format': 'pds'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\xff\0NJPL1I00PDS', expect_error=True),
+                     {'detected_format': 'pds', 'error': 'Too short for pds size.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\x0b\0NJPL1I00PDS\0'),
+                     {'format': 'pds'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\xff\0PDS_VERSION_ID\f', expect_error=True),
+                     {'detected_format': 'pds', 'error': 'Too short for pds size.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\x0f\0PDS_VERSION_ID\f\0'),
+                     {'format': 'pds'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\xff\0CCSD3ZF', expect_error=True),
+                     {'detected_format': 'pds', 'error': 'Too short for pds size.'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\7\0CCSD3ZF\0'),
+                     {'format': 'pds'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, 'CCSD3ZF0000100000001\nLINES = 42\r\n  IMAGE\0LINE_SAMPLES = 43'),
                      {'format': 'pds', 'height': 42, 'width': 43})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pds, '\x20\0NJPL1I00PDS  = XV_COMPATIBILITY \0\x0e\0IMAGE_LINES=42\x0f\0LINE_SAMPLES=43\4\0 END\x0e\0IMAGE_LINES=44'),
                      {'format': 'pds', 'height': 42, 'width': 43})
 
   def test_analyze_ybm(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('!!??')[0], 'ybm')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!!??'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!''!??'),
                      {'format': 'ybm', 'codec': 'uncompressed'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!!\2\3\2\2'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ybm, '!''!\2\3\2\2'),
                      {'format': 'ybm', 'codec': 'uncompressed', 'height': 514, 'width': 515})
 
   def test_analyze_fbm(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('%bitmap\0')[0], 'fbm')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\x00'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\0'),
                      {'format': 'fbm', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fbm, '%bitmap\x00123\x00456\x007890\0???'),
                      {'format': 'fbm', 'codec': 'uncompressed', 'height': 7890, 'width': 123})
 
   def test_analyze_cmuwm(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\xf1\0\x40\xbb')[0], 'cmuwm')
-    self.assertEqual(mediafileinfo_detect.detect_format('\xbb\x40\0\xf1')[0], 'cmuwm')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xf1\0\x40\xbb'),
                      {'format': 'cmuwm', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cmuwm, '\xbb\x40\0\xf1'),
@@ -811,67 +813,66 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.detect_format('@ECho oFF\r\n')[0], 'windows-cmd')
 
   def test_analyze_xwd(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08')[0], 'xwd')
-    self.assertEqual(mediafileinfo_detect.detect_format('\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\0')[0], 'xwd')
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0')[0], 'xwd')
-    self.assertEqual(mediafileinfo_detect.detect_format('\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0')[0], 'xwd')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\1\xd3\0\0\0\x3c\0\0\0\0'),
+    data1 = '\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\1\xd3\0\0\0\x3c\0\0\0\0'
+    data2 = '\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\0\xd3\1\0\0\x3c\0\0\0\0\0\0\0'
+    data3 = '\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\1\xd3\0\0\0\x3c'
+    data4 = '\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\xd3\1\0\0\x3c\0\0\0'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data1[:16]),
+                     {'format': 'xwd', 'subformat': 'x11'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data1),
                      {'format': 'xwd', 'subformat': 'x11', 'height': 60, 'width': 467})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\0\xd3\1\0\0\x3c\0\0\0\0\0\0\0'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data2[:16]),
+                     {'format': 'xwd', 'subformat': 'x11'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data2),
                      {'format': 'xwd', 'subformat': 'x11', 'height': 60, 'width': 467})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\0\0\0\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\1\xd3\0\0\0\x3c'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data3[:20]),
+                     {'format': 'xwd', 'subformat': 'x10'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data3),
                      {'format': 'xwd', 'subformat': 'x10', 'height': 60, 'width': 467})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, '\x65\0\0\0\6\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\xd3\1\0\0\x3c\0\0\0'),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data4[:20]),
+                     {'format': 'xwd', 'subformat': 'x10'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xwd, data4),
                      {'format': 'xwd', 'subformat': 'x10', 'height': 60, 'width': 467})
 
   def test_analyze_dvi(self):
     data1 = '\xf7\2\1\x83\x92\xc0\x1c\x3b\0\0\0\0\3\xe8\x1b TeX output 2020.03.10:0921\x8b\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\xff\xff\xff\xff\xef\x21papersize=421.10078pt,597.50787pt'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:10])[0], 'dvi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'dvi')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dvi, data1[:10]),
                      {'format': 'dvi'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dvi, data1),
                      {'format': 'dvi', 'height': 595, 'width': 420})
 
   def test_analyze_sun_icon(self):
-    data1 = '/* Format_version=1, Width=123, Height=45, Depth=1, Valid_bits_per_item=16\n */\n'
-    data2 = '/*\r\nFormat_version=1,Width=123,Height=45,'
-    data3 = '/* Format_version=1,'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'sun-icon')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'sun-icon')
-    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'sun-icon')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, '/* Format_version=1, Width=123, Height=45, Depth=1, Valid_bits_per_item=16\n */\n'),
                      {'format': 'sun-icon', 'height': 45, 'width': 123})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, '/*\r\nFormat_version=1,Width=123,Height=45,'),
                      {'format': 'sun-icon', 'height': 45, 'width': 123})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, data3),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_icon, '/* Format_version=1,'),
                      {'format': 'sun-icon'})
 
   def test_analyze_xbm(self):
-    data1 = '#define gs_l_m.xbm_width 4'
-    data2 = '#define test_width 16\n#define test_height 7\nstatic unsigned char test_bits[] = {\n  0x13, 0x00, 0x15, 0x00, 0x93, 0xcd, 0x55, 0xa5,'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xbm')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'xbm')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, '#define gs_l_m.xbm_width 4'),
                      {'format': 'xbm', 'codec': 'uncompressed-ascii'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, '#define test_width 16\n#define test_height 7\nstatic unsigned char test_bits[] = {\n  0x13, 0x00, 0x15, 0x00, 0x93, 0xcd, 0x55, 0xa5,'),
                      {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 7, 'width': 16})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xbm, '#define test_width 16\n#define test_height 72'),
                      {'format': 'xbm', 'codec': 'uncompressed-ascii', 'height': 72, 'width': 16})
 
   def test_analyze_xpm(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('#define gs_l_m._format 1\r')[0], 'xpm')
-    self.assertEqual(mediafileinfo_detect.detect_format('! XPM2\r')[0], 'xpm')
-    self.assertEqual(mediafileinfo_detect.detect_format('/* XPM */\r')[0], 'xpm')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '#define gs_l_m._format 1\r'),
+                     {'format': 'xpm', 'subformat': 'xpm1', 'codec': 'uncompressed-ascii'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '#define gs_l_m._format 1\n'),
                      {'format': 'xpm', 'subformat': 'xpm1', 'codec': 'uncompressed-ascii'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '#define gs_l_m._format 1\n#define gs_l_m._width 16\r\n\n\n#define gs_l_m._height 72'),
                      {'format': 'xpm', 'subformat': 'xpm1', 'codec': 'uncompressed-ascii', 'height': 72, 'width': 16})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '! XPM2\r'),
+                     {'format': 'xpm', 'subformat': 'xpm2', 'codec': 'uncompressed-ascii'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '! XPM2\n'),
                      {'format': 'xpm', 'subformat': 'xpm2', 'codec': 'uncompressed-ascii'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '! XPM2\r\n16\t7 '),
                      {'format': 'xpm', 'subformat': 'xpm2', 'codec': 'uncompressed-ascii', 'height': 7, 'width': 16})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\n\r\t'),
+                     {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\r'),
                      {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xpm, '/* XPM */\nstatic char *foo_xpm[] = {\n/* columns rows colors chars-per-pixel */\n"12 \t3456 '),
                      {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii', 'height': 3456, 'width': 12})
@@ -879,9 +880,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_bmp(self):
     data1 = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
     data2 = 'BM????\0\0\0\0????\x0c\0\0\0\x80\2\xe0\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'bmp')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:22])[0], 'bmp')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'bmp')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data1),
                      {'format': 'bmp', 'codec': 'rle', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_bmp, data1[:22]),
@@ -894,11 +892,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data1 = 'RIFF????RDIB' + data_bmp
     data2 = 'RIFF????RDIBdata' + data_bmp
     data3 = 'RIFF????RDIBdata????' + data_bmp
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rdi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:14])[0], 'rdi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'rdi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2[:16])[0], 'rdi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'rdi')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data1),
                      {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rdi, data1[:14]),
@@ -911,9 +904,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
 
   def test_analyze_utah_rle(self):
-    data1 = '\x52\xcc\x1c\0\x2c\0\x3e\0\x32\0\x05\x03\x08\0\x08'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'utah-rle')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_utah_rle, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_utah_rle, '\x52\xcc\x1c\0\x2c\0\x3e\0\x32\0\x05\x03\x08\0\x08'),
                      {'format': 'utah-rle', 'codec': 'rle', 'height': 50, 'width': 62})
 
   def test_detect_fig(self):
@@ -945,9 +936,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     track_info_audio = {'channel_count': 2, 'sample_size': 16, 'codec': 'ac3', 'sample_rate': 48000, 'header_ofs': 3, 'type': 'audio'}
     track_info_video0 = {'width': 720, 'codec': 'mpeg-2', 'type': 'video', 'header_ofs': 0, 'height': 480}
     track_info_video = {'width': 720, 'codec': 'mpeg-2', 'type': 'video', 'header_ofs': 25, 'height': 480}
-    self.assertEqual(mediafileinfo_detect.detect_format('\0\0\1\xba')[0], 'mpeg-ps')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'mpeg-ps')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'mpeg-ps')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, '\0\0\1\xba'),
                      {'format': 'mpeg-ps'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_ps, data1),
@@ -979,8 +967,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_packhdr = '\0\0\1\xba\x21\0\1\x1c\x21\x80\x1b\x91'
     data_video = '\0\0\1\xe0\x00\x5c\x60\x2e\x31\0\1\xfd\x2d\x11\0\1\xb6\xcb\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\xb3\x16\0\xf0\xc4\x02\xcf\x60\xa4\0\0\1\xb8'
     data_audio = '\0\0\1\xc0\0\x0b\x40\x20\x21\0\1\xce\x41\xff\xfd\xb0\x84'
-    self.assertEqual(mediafileinfo_detect.detect_format(data_hdr[:20])[0], 'mpeg-cdxa')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_hdr)[0], 'mpeg-cdxa')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr[:20]),
+                     {'format': 'mpeg-cdxa'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr[:-8]),
                      {'format': 'mpeg-cdxa'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mpeg_cdxa, data_hdr),
@@ -1003,7 +991,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_cftc_dib = 'dib \x2e\0\0\0\0\4\0\0\x5a\0\0\0'
     data_ver = data_cftc_ver[:12] + '??????'
     data_dib = data_cftc_dib[:12] + '\0\0\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0????????????'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rmmp')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, data1),
                      {'format': 'rmmp', 'tracks': []}),
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
@@ -1015,7 +1002,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_cftc_dib = 'dib \x2e\0\0\0\0\4\0\0\x5a\0\0\0'
     data_ver = data_cftc_ver[:12] + '??????'
     data_dib = data_cftc_dib[:12] + '\0\0\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0????????????'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'rmmp')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, data1),
                      {'format': 'rmmp', 'tracks': []}),
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_rmmp, ''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
@@ -1033,13 +1019,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_pcm = 'fmt \x12\0\0\0\1\0\1\0\x11\x2b\0\0\x22\x56\0\0\2\0\x10\0'
     data_mp3 = 'fmt \x1e\0\0\0\x55\0\1\0\x40\x1f\0\0\xd0\x07\0\0 \1\0\0\0'
     data_bext = 'bext\5\0\0\0??????'  # Round 5 to 6, to word boundary.
-    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_pcm)[0], 'wav')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_mp3)[0], 'wav')
-    self.assertEqual(mediafileinfo_detect.detect_format(data_riff + data_bext)[0], 'wav')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, data_riff + data_pcm),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'pcm', 'type': 'audio', 'sample_rate': 11025, 'sample_size': 16}]}),
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, data_riff + data_mp3),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, data_riff + data_bext),
+                     {'format': 'wav', 'tracks': []})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff, data_bext, data_bext, data_mp3))),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wav, ''.join((data_riff[:-4] + 'RMP3', data_bext, data_bext, 'bext\xff\0\0\0' + '?' * 256, data_mp3))),
@@ -1048,9 +1033,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_aiff(self):
     data1 = 'FORM\0\1\2\3AIFFCOMM\0\0\0\x12\0\2????\0\x0a\x40\x0e\xac\x44\0\0\0\0\0\0'
     data2 = 'FORM\0\1\2\3AIFFCOMM\0\0\0\x12\0\1????\0\x08\x40\x0c\xad\xdd\x17\x44\0\0\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'aiff')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:20])[0], 'aiff')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'aiff')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aiff, data1),
                      {'format': 'aiff', 'tracks': [{'type': 'audio', 'codec': 'pcm', 'channel_count': 2, 'sample_rate': 44100, 'sample_size': 10}]})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aiff, data1[:20]),
@@ -1061,9 +1043,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_aifc(self):
     data1 = 'FORM\0\1\2\3AIFCFVER\0\0\0\4????COMM\0\0\0\x20\0\2????\0\x0a\x40\x0e\xac\x44\0\0\0\0\0\0none'
     data2 = 'FORM\0\1\2\3AIFCCOMM\0\0\0\x20\0\2????\0\x10\x40\x0b\xfa\0\0\0\0\0\0\0ulaw\x08\xb5law 2:1\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'aifc')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:19])[0], 'aifc')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'aifc')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aifc, data1),
                      {'format': 'aifc', 'tracks': [{'type': 'audio', 'codec': 'pcm', 'channel_count': 2, 'sample_rate': 44100, 'sample_size': 10}]})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_aifc, data1[:19]),
@@ -1073,21 +1052,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_au(self):
     data1 = '.snd\0\0\0\x1c\0\1\x6b\xf5\0\0\0\1\0\0\x1f\x40\0\0\0\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'au')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_au, data1),
                      {'format': 'au', 'tracks': [{'type': 'audio', 'codec': 'mulaw', 'channel_count': 1, 'sample_rate': 8000, 'sample_size': 8}]})
 
   def test_analyze_ftc(self):
     data1 = 'FTC\0\1\1\2\1\x80\2\x90\1\x18\0\1\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ftc')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'ftc')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ftc, data1[:8]),
+                     {'format': 'ftc', 'codec': 'fractal'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ftc, data1),
                      {'format': 'ftc', 'codec': 'fractal'})
 
   def test_analyze_fif(self):
     data1 = 'FIF\1\x75\0\3\2\0\0\1\2\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fif')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:4])[0], 'fif')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fif, data1[:4]),
                      {'format': 'fif', 'codec': 'fractal'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fif, data1),
@@ -1096,33 +1072,23 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_spix(self):
     data1 = 'spix\3\2\0\0\1\2\0\0(\0\0\0????\0\1\0\0'
     data2 = 'spix\0\0\2\3\0\0\2\1\0\0\0(????\0\0\1\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'spix')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'spix')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_spix, data1),
                      {'format': 'spix', 'codec': 'uncompressed', 'height': 513, 'width': 515})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_spix, data2),
                      {'format': 'spix', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_sgi_rgb(self):
-    data1 = '\x01\xda\1\2\0\3\2\3\2\1\0\5'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'sgi-rgb')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sgi_rgb, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sgi_rgb, '\x01\xda\1\2\0\3\2\3\2\1\0\5'),
                      {'format': 'sgi-rgb', 'codec': 'rle', 'height': 513, 'width': 515})
 
   def test_analyze_xv_pm(self):
-    data1 = 'VIEW\0\0\0\4\0\0\2\1\0\0\2\3\0\0\0\1\0\0\x80\1'
-    data2 = 'WEIV\4\0\0\0\1\2\0\0\3\2\0\0\1\0\0\0\1\x80\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xv-pm')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'xv-pm')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, 'VIEW\0\0\0\4\0\0\2\1\0\0\2\3\0\0\0\1\0\0\x80\1'),
                      {'format': 'xv-pm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xv_pm, 'WEIV\4\0\0\0\1\2\0\0\3\2\0\0\1\0\0\0\1\x80\0\0'),
                      {'format': 'xv-pm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_imlib_argb(self):
     data1 = 'ARGB 123 45 1\n'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'imlib-argb')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1.replace('\n', '\r\n'))[0], 'imlib-argb')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_argb, data1),
                      {'format': 'imlib-argb', 'codec': 'uncompressed', 'height': 45, 'width': 123})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_argb, data1.replace('\n', '\r\n')),
@@ -1132,9 +1098,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data1 = 'EIM 1\nIMAGE 9'
     data_filename = 'Hello, World!\t\r\fThis is a filename!\r\vThe answer is 42 43'
     data2 = 'EIM 1\nIMAGE 16605 ' + data_filename + ' 123 45 7 6 5 4 3 2 1\n'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'imlib-eim')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'imlib-eim')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2.replace('\n', '\r\n'))[0], 'imlib-eim')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_eim, data1),
                      {'format': 'imlib-eim', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_imlib_eim, data2),
@@ -1144,8 +1107,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_farbfeld(self):
     data1 = 'farbfeld\0\0\2\3\0\0\2\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'farbfeld')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'farbfeld')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_farbfeld, data1[:8]),
                      {'format': 'farbfeld', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_farbfeld, data1),
@@ -1155,35 +1116,23 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_dimens = '\x84\3\x84\1'
     data1 = '\0\0' + data_dimens
     data2 = '\0\x80\x80\xff\x81\x7f\x00\x7f' + data_dimens
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'wbmp')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'wbmp')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wbmp, data1),
                      {'format': 'wbmp', 'codec': 'uncompressed', 'height': 513, 'width': 515})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wbmp, data2),
                      {'format': 'wbmp', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_gd(self):
-    data1 = '\xff\xfe\2\3\2\1\1'
-    data2 = '\xff\xff\2\3\2\1\0\1\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'gd')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'gd')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd, '\xff\xfe\2\3\2\1\1'),
                      {'format': 'gd', 'codec': 'uncompressed', 'height': 513, 'width': 515})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd, '\xff\xff\2\3\2\1\0\1\0'),
                      {'format': 'gd', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_gd2(self):
-    data1 = 'gd2\0\0\2\2\3\2\1\0\1\0\2\0\1\0\1\0\1\0'
-    data2 = 'gd2\0\0\2\2\3\2\1\0\1\0\3\0\1\0\1\1'
-    data3 = 'gd2\0\0\1\2\3\2\1\0\1\0\3\0\1\0\1\2'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'gd2')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'gd2')
-    self.assertEqual(mediafileinfo_detect.detect_format(data3)[0], 'gd2')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, 'gd2\0\0\2\2\3\2\1\0\1\0\2\0\1\0\1\0\1\0'),
                      {'format': 'gd2', 'codec': 'flate', 'height': 513, 'width': 515})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, 'gd2\0\0\2\2\3\2\1\0\1\0\3\0\1\0\1\1'),
                      {'format': 'gd2', 'codec': 'uncompressed', 'height': 513, 'width': 515})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, data3),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_gd2, 'gd2\0\0\1\2\3\2\1\0\1\0\3\0\1\0\1\2'),
                      {'format': 'gd2', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_analyze_cups_raster(self):
@@ -1201,31 +1150,26 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     ))
     # If detect_format returns '?', then comment it out, and
     # analyze_cups_raster will report a detailed error.
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'cups-raster')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:4])[0], 'cups-raster')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cups_raster, data1[:4]),
                      {'format': 'cups-raster'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cups_raster, data1),
                      {'format': 'cups-raster', 'height': 513, 'width': 515, 'pt_height': 1025, 'pt_width': 1027})
 
   def test_analyze_alias_pix(self):
-    data1 = '\2\3\2\1\0\0\0\0\0\x18'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'alias-pix')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_alias_pix, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_alias_pix, '\2\3\2\1\0\0\0\0\0\x18'),
                      {'format': 'alias-pix', 'codec': 'rle', 'height': 513, 'width': 515})
 
   def test_analyze_photocd(self):
-    data1 = ''.join(('\xff' * 32, '\0' * 2016, 'PCD_IPI'))
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'photocd')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_photocd, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_photocd, ''.join(('\xff' * 32, '\0' * 2016, 'PCD_IPI'))),
                      {'format': 'photocd', 'codec': 'photocd', 'height': 768, 'width': 512})
 
   def test_analyze_fits(self):
     data1 = ''.join(s + ' ' * (80 - len(s)) for s in (
         "SIMPLE  =      T / Fits standard\nBITPIX  = -32 / Bits per pixel\nNAXIS   =  2 / Number of axes\nNAXIS1  =   515\nNAXIS2  =  513/ Axis Length\nOBJECT  = 'Cassiopeia A'\nEND".split('\n')))
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fits')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:80])[0], 'fits')
-    self.assertEqual(mediafileinfo_detect.detect_format('SIMPLE  = T')[0], 'fits')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, 'SIMPLE  = T'),
+                     {'format': 'fits'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, 'SIMPLE  =  T'),
+                     {'format': 'fits'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, data1[:80] + 'END' + ' ' * 77),
                      {'format': 'fits'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fits, data1),
@@ -1233,8 +1177,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_xloadimage_niff(self):
     data1 = 'NIFF\0\0\0\1\0\0\2\3\0\0\2\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xloadimage-niff')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'xloadimage-niff')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xloadimage_niff, data1[:8]),
                      {'format': 'xloadimage-niff', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xloadimage_niff, data1),
@@ -1242,8 +1184,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_sun_taac(self):
     data1 = 'ncaa\nrank = 2;\rsize=123 45;  \nanswer = 42\n\f\nsize = 2 22\n'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'sun-taac')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:6])[0], 'sun-taac')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_taac, data1[:6]),
                      {'format': 'sun-taac', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_sun_taac, data1),
@@ -1251,8 +1191,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_facesaver(self):
     data1 = 'FirstName: a\nLastName: b\r\nE-mail: \nTelephone:\nPicData: 123 45 8\r\nDate: 42\n\r\nPicData: 2 22 8\n\n\n'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'facesaver')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:data1.find(':') + 1])[0], 'facesaver')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_facesaver, data1[:data1.find(':') + 1]),
                      {'format': 'facesaver', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_facesaver, data1),
@@ -1260,8 +1198,6 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_mcidas_area(self):
     data1 = '\0\0\0\0\4\0\0\0\xb4\0\0\0\xcf\xc5\1\0\xfc\xc4\2\0\x2c\x0a\0\0\x38\x23\0\0\0\0\0\0\1\2\0\0\3\2\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'mcidas-area')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:24])[0], 'mcidas-area')
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mcidas_area, data1[:24]),
                      {'format': 'mcidas-area', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mcidas_area, data1),
@@ -1271,54 +1207,50 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_macpaint(self):
     data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00PNTGMPNT\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
-    data2 = '\0\0\0\2\0\0\0\0\0\0\0\0'
-    data3 = '\0\0\0\3\xff\xff\xff\xff\xff\xff\xff\xff'
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macbinary, data_macbinary1),
                      {'format': 'macpaint', 'detected_format': 'macbinary', 'subformat': 'macbinary', 'codec': 'rle', 'height': 720, 'width': 576})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, '\0\0\0\2\0\0\0\0\0\0\0\0'),
                      {'format': 'macpaint', 'codec': 'rle', 'height': 720, 'width': 576})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, data3),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macpaint, '\0\0\0\3\xff\xff\xff\xff\xff\xff\xff\xff'),
                      {'format': 'macpaint', 'codec': 'rle', 'height': 720, 'width': 576})
 
   def test_analyze_fit(self):
-    data1 = 'IT01\0\0\2\3\0\0\2\1\0\0\0\1'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'fit')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fit, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_fit, 'IT01\0\0\2\3\0\0\2\1\0\0\0\1'),
                      {'format': 'fit', 'height': 513, 'width': 515})
 
   def test_analyze_icns(self):
     data1 = 'icns\0\0\0@icm#\0\0\x008????????????????????????????????????????????????'
     data2 = 'icns\0\0\0Aicm#\0\0\x009?????????????????????????????????????????????????'
-    data3 = 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0d'
-    data4 = 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0c'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'icns')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:8])[0], 'icns')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data1[:8]),
+                     {'format': 'icns', 'icon_count': 0})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data1),
                      {'format': 'icns', 'subformat': 'icm#', 'codec': 'uncompressed', 'height': 12, 'width': 16, 'icon_count': 1})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data2),
                      {'format': 'icns', 'subformat': 'icm#', 'codec': 'rle', 'height': 12, 'width': 16, 'icon_count': 1})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data3),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0d'),
                      {'format': 'icns', 'subformat': 'ic07', 'codec': 'flate', 'height': 13, 'width': 15, 'icon_count': 2})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, data4),  # PNG in ic07 has smaller dimensions, using icm#.
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_icns, 'icns\0\0\0aicm#\0\0\x009?????????????????????????????????????????????????ic07\0\0\0 \x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x0f\0\0\0\x0c'),  # PNG in ic07 has smaller dimensions, using icm#.
                      {'format': 'icns', 'subformat': 'icm#', 'codec': 'rle', 'height': 12, 'width': 16, 'icon_count': 2})
 
   def test_analyze_dds(self):
-    data1 = 'DDS |\0\0\0????\1\2\0\0\3\2\0\0???????????????????????????????????????????????????????? \0\0\0\4\0\0\0DXT5'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'dds')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dds, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_dds, 'DDS |\0\0\0????\1\2\0\0\3\2\0\0???????????????????????????????????????????????????????? \0\0\0\4\0\0\0DXT5'),
                      {'format': 'dds', 'codec': 'dxt5', 'height': 513, 'width': 515})
 
   def test_analyze_jpeg(self):
     data1 = '\xff\xd8\xff\xdb\x00\xc5\x00\x04\x03\x04\x05\x04\x03\x05\x05\x04\x05\x06\x06\x05\x06\x08\x0e\t\x08\x07\x07\x08\x11\x0c\r\n\x0e\x15\x12\x16\x15\x14\x12\x14\x13\x17\x1a!\x1c\x17\x18\x1f\x19\x13\x14\x1d\'\x1d\x1f"#%%%\x16\x1b)+($+!$%#\x01\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\x02\x04\x06\x06\x08\x07\x08\x11\t\t\x11#\x17\x13\x14##################################################\xff\xc0\x00\x11\x08\x00x\x00\xa0\x03\x01!\x00\x02\x11\x01\x03\x11\x02'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'jpeg')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:4])[0], 'jpeg')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg, data1[:3]),
+                     {'format': 'jpeg', 'detected_format': 'short3', 'codec': 'jpeg'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg, data1[:4]),
+                     {'format': 'jpeg', 'codec': 'jpeg'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg, data1[:5], expect_error=True),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'error': 'EOF in jpeg first.'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_jpeg, data1),
                      {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
 
   def test_analyze_ani(self):
     data1 = 'RIFF????ACONLIST\x2e\0\0\0INFOINAM\x14\0\0\0Disappearing Cheese\0IART\6\0\0\0lynne\0anih' + '24000000240000001800000019000000000000000000000000000000000000000a0000000300000072617465640000000a0000000a0000000a0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000003c0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000002800000005000000640000007365712064000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f0000000e00000010000000110000001200000013000000140000001500000016000000170000004c495354944800006672616d69636f6efe0200000000020001002120000000000000e802000016000000'.decode('hex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'ani')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:16])[0], 'ani')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ani, data1[:16]),
+                     {'format': 'ani', 'tracks': []})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ani, data1),
                      {'format': 'ani', 'tracks': [{'type': 'video', 'codec': 'uncompressed', 'width': 33, 'height': 32}]})
 
@@ -1333,21 +1265,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_amv(self):
     data1 = 'RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'amv')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:32])[0], 'amv')
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_amv, data1[:32]),
+                     {'format': 'amv', 'tracks': []})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_amv, data1),
                      {'format': 'amv',
                       'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
                                  {'type': 'audio', 'codec': 'adpcm'}]})
 
   def test_analyze_4xm(self):
-    data1 = 'RIFF????4XMVLIST\x72\1\0\0HEADLIST\x6e\0\0\0HNFO'
-    data2 = data1 + 'name)\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6_8k.4xa\x00\x00info\x1f\x00\x00\x00Packed with 4xmovie v. 1.0.0.3\x00\x00std_\x08\x00\x00\x00\xf3&\x00\x00\x00\x00\xc8@LIST\xf0\x00\x00\x00TRK_LIST~\x00\x00\x00VTRKname&\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6.avi\x00vtrkD\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00LIST^\x00\x00\x00STRKname"\x00\x00\x00E:\\brett\\ToyStory2\\TS2_7884Hz.wav\x00strk(\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\x01\x00\x00\x00\xcc\x1e\x00\x00\x10\x00\x00\x00'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], '4xm')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], '4xm')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data1),
+    data1 = 'RIFF????4XMVLIST\x72\1\0\0HEADLIST\x6e\0\0\0HNFOname)\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6_8k.4xa\x00\x00info\x1f\x00\x00\x00Packed with 4xmovie v. 1.0.0.3\x00\x00std_\x08\x00\x00\x00\xf3&\x00\x00\x00\x00\xc8@LIST\xf0\x00\x00\x00TRK_LIST~\x00\x00\x00VTRKname&\x00\x00\x00E:\\brett\\ToyStory2\\test_240x112x6.avi\x00vtrkD\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\xf0\x00\x00\x00p\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00LIST^\x00\x00\x00STRKname"\x00\x00\x00E:\\brett\\ToyStory2\\TS2_7884Hz.wav\x00strk(\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x01\x00\x03\x00\x00\x00\xdd\x06\x00\x00\x00\x00\x00\x00\xdc\x06\x00\x00\x01\x00\x00\x00\xcc\x1e\x00\x00\x10\x00\x00\x00'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data1[:36]),
                      {'format': '4xm', 'tracks': []})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_4xm, data1),
                      {'format': '4xm',
                       'tracks': [{'type': 'video', 'codec': '4xm', 'width': 240, 'height': 112},
                                  {'type': 'audio', 'codec': 'adpcm2', 'channel_count': 1, 'sample_rate': 7884, 'sample_size': 16}]})
@@ -1371,17 +1300,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'fpx', 'detected_format': 'olecf'})
 
   def test_analyze_binhex(self):
-    data1 = '(Convert with\r#TEXT$\n***RESOURCE'
-    data2 = '(Convert with\r#TEXT$\n\n\n***COMPRESSED'
-    data4 = '(This file must be converted; you knew that already.)\n\n:'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'binhex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'binhex')
-    self.assertEqual(mediafileinfo_detect.detect_format(data4)[0], 'binhex')
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data1),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, '(Convert with\r#TEXT$\n***RESOURCE'),
                      {'format': 'binhex', 'subformat': 'hex', 'codec': 'uncompressed'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data2),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, '(Convert with\r#TEXT$\n\n\n***COMPRESSED'),
                      {'format': 'binhex', 'subformat': 'hcx', 'codec': 'uncompressed'})
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, data4),
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_binhex, '(This file must be converted; you knew that already.)\n\n:'),
                      {'format': 'binhex', 'subformat': 'hqx', 'codec': 'rle'})
 
   def test_detect_rtf(self):

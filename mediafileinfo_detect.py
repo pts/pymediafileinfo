@@ -3776,17 +3776,18 @@ def analyze_mpeg_ps(fread, info, fskip, format='mpeg-ps'):
 def analyze_mpeg_cdxa(fread, info, fskip):
   # https://github.com/Kurento/gst-plugins-bad/blob/master/gst/cdxaparse/gstcdxaparse.c
   # https://en.wikipedia.org/wiki/Video_CD
-  data = fread(20)
+  data = fread(21)
   if len(data) < 16:
     raise ValueError('Too short for cdxa.')
   if not (data.startswith('RIFF') and data[8 : 16] == 'CDXAfmt ' and (len(data) < 20 or data[17 : 20] == '\0\0\0')):
     raise ValueError('cdxa signature not found.')
   info['format'] = 'mpeg-cdxa'
-  if len(data) < 20:
+  if len(data) <= 20:
     return
   size, = struct.unpack('<L', data[16 : 20])
-  if not fskip(size):
-    raise ValueError('EOF in cdxa fmt.')
+  if size > 1:
+    if not fskip(size - 1):
+      raise ValueError('EOF in cdxa fmt.')
   data = fread(8)
   if len(data) < 8:
     return
@@ -3854,7 +3855,7 @@ def analyze_mpeg_cdxa(fread, info, fskip):
 # --- mpeg-ts (MPEG TS).
 
 
-def get_jpeg_dimensions(fread, header=''):
+def get_jpeg_dimensions(fread, header='', is_first_eof_ok=False):
   """Returns (width, height) of a JPEG file.
 
   Args:
@@ -3892,7 +3893,7 @@ def get_jpeg_dimensions(fread, header=''):
     raise ValueError('Preread too long for jpeg.')
   if not data.startswith('\xff\xd8\xff'):
     raise ValueError('jpeg signature not found: %r.')
-  m = ord(data[3])
+  m, is_first = ord(data[3]), is_first_eof_ok
   while 1:
     while m == 0xff:  # Padding.
       m = ord(read_all(1))
@@ -3901,7 +3902,16 @@ def get_jpeg_dimensions(fread, header=''):
       # 0xd9: EOI unexpected before SOF.
       # 0xda: SOS unexpected before SOF.
       raise ValueError('Unexpected marker: 0x%02x' % m)
-    ss, = struct.unpack('>H', read_all(2))
+    if is_first:
+      data = fread(2)
+      if not data:
+        return ()
+      if len(data) != 2:
+        raise ValueError('EOF in jpeg first.')
+      is_first = False
+    else:
+      data = read_all(2)
+    ss, = struct.unpack('>H', data)
     if ss < 2:
       raise ValueError('Segment too short.')
     ss -= 2
@@ -3921,13 +3931,16 @@ def get_jpeg_dimensions(fread, header=''):
 
 
 def analyze_jpeg(fread, info, fskip):
-  header = fread(3)
+  header = fread(4)
   if len(header) < 3:
     raise ValueError('Too short for jpeg.')
   if not header.startswith('\xff\xd8\xff'):
     raise ValueError('jpeg signature not found.')
   info['format'] = info['codec'] = 'jpeg'
-  info['width'], info['height'] = get_jpeg_dimensions(fread, header)
+  if len(header) >= 4:
+    dimensions = get_jpeg_dimensions(fread, header, is_first_eof_ok=True)
+    if len(dimensions) == 2:
+      info['width'], info['height'] = dimensions
 
 
 def get_string_fread(header):
@@ -4828,6 +4841,15 @@ def analyze_jpegxl(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
+def yield_early_eof(it):
+  is_empty = 1  # True.
+  for item in it:
+    is_empty = 0
+    yield item
+  if is_empty:
+    raise EOFError
+
+
 def analyze_pik(fread, info, fskip):
   # subformat=pik1: http://libwebpjs.hohenlimburg.org/pik-in-javascript/
   # subformat=pik1: http://libwebpjs.hohenlimburg.org/pik-in-javascript/images/2.pik
@@ -4839,7 +4861,7 @@ def analyze_pik(fread, info, fskip):
     raise ValueError('Too short for pik.')
   if header == 'P\xccK\x0a':
     info['subformat'] = 'pik1'
-    bits = yield_bits_msbfirst(fread)
+    bits = yield_early_eof(yield_bits_msbfirst(fread))
     def read_u(n):
       result = i = 0
       if n > 0:
@@ -4855,7 +4877,7 @@ def analyze_pik(fread, info, fskip):
       return read_u((9, 11, 13, 32)[read_u(2)])
   elif header == '\xd7LM\x0a':
     info['subformat'] = 'pik2'
-    bits = yield_bits_lsbfirst(fread)
+    bits = yield_early_eof(yield_bits_lsbfirst(fread))
     def read_u(n):
       result = i = 0
       if n > 0:
@@ -4872,8 +4894,11 @@ def analyze_pik(fread, info, fskip):
   else:
     raise ValueError('pik signature not found.')
   info['format'] = info['codec'] = 'pik'
-  width = read_dimen()
-  height = read_dimen()
+  try:
+    width = read_dimen()
+    height = read_dimen()
+  except EOFError:
+    return
   info['width'], info['height'] = width, height
 
 
@@ -4893,16 +4918,22 @@ def analyze_qtif(fread, info, fskip):
   while xtype != 'idsc':
     if xtype in had_xtypes:
       raise ValueError('Duplicate qtif idsc atom: %s' % xtype)
-    had_xtypes.add(xtype)
     if size >> 25:
       raise ValueError('qtif %s atom too large.' % xtype)
     if size < 8:
       raise ValueError('qtif atom too small.')
+    if not had_xtypes and size > 8:
+      if not fread(1):
+        return
+      size -= 1
     if not fskip(size - 8):
       raise ValueError('EOF in qtif %s atom.' % xtype)
     data = fread(8)
+    if not data and not had_xtypes:
+      return
     if len(data) < 8:
       raise ValueError('Too short for qtif atom.')
+    had_xtypes.add(xtype)
     size, xtype = struct.unpack('>L4s', data)
     if xtype not in ('idsc', 'iicc', 'idat'):
       raise ValueError('Bad qtif atom: %r' % xtype)
@@ -4911,6 +4942,8 @@ def analyze_qtif(fread, info, fskip):
   if size < 36 + 8:
     raise ValueError('qtif idsc atom too small.')
   data = fread(36)
+  if not data and not had_xtypes:
+    return
   if len(data) < 36:
     raise ValueError('EOF in qtif idsc atom.')
   (size2, codec, r1, r2, version, vendor, tq, sq, width, height,
@@ -4943,9 +4976,9 @@ def analyze_psp(fread, info, fskip):
     raise ValueError('Too short for psp.')
   if not data.startswith('Paint Shop Pro Image File\n\x1a\0\0\0\0\0'):
     raise ValueError('psp signature not found.')
-  if len(data) < 58:
-    raise ValueError('EOF in psp image header.')
   info['format'] = 'psp'
+  if len(data) < 58:
+    return
   major_version, minor_version, header_id, block_id, block_size1, block_size2, width, height = struct.unpack('<32xHHLHLLLL', data[:58])
   if header_id != 0x4b427e:
     raise ValueError('Bad psp header_id.')
@@ -4969,16 +5002,16 @@ def analyze_ras(fread, info, fskip):
   # https://www.fileformat.info/format/sunraster/egff.htm
   # https://en.wikipedia.org/wiki/Sun_Raster
   # http://fileformats.archiveteam.org/wiki/Sun_Raster
-  data = fread(4)
+  data = fread(24)
   if len(data) < 4:
     raise ValueError('Too short for ras.')
   if not data.startswith('\x59\xa6\x6a\x95'):
     raise ValueError('ras signature not found.')
   info['format'] = 'ras'
-  data = fread(8)
-  if len(data) < 4:
-    raise ValueError('EOF in ras header.')
-  info['width'], info['height'] = struct.unpack('>LL', data)
+  if len(data) >= 24:
+    info['width'], info['height'], itype = struct.unpack('>4xLL8xL', data)
+    if itype < 3:
+      info['codec'] = ('uncompressed', 'rle')[itype == 2]
 
 
 GEM_NOSIG_HEADERS = (
@@ -5031,7 +5064,8 @@ def analyze_gem(fread, info, fskip):
   else:
     raise ValueError('gem signature not found.')
   info['format'], info['codec'] = 'gem', 'rle'
-  info['width'], info['height'] = struct.unpack('>HH', data[12 : 16])
+  if len(data) >= 16:
+    info['width'], info['height'] = struct.unpack('>HH', data[12 : 16])
 
 
 def analyze_pcpaint_pic(fread, info, fskip):
@@ -5060,29 +5094,37 @@ def analyze_xwd(fread, info, fskip):
   # https://www.fileformat.info/format/xwd/egff.htm
   # http://fileformats.archiveteam.org/wiki/XWD
   # https://en.wikipedia.org/wiki/Xwd
-  data = fread(28)
-  if len(data) < 28:
+  header = fread(28)
+  if len(header) < 16:
     raise ValueError('Too short for xwd.')
-  fmt = '<>'[data[4 : 7] == '\0\0\0']  # Use file_version.
-  header_size, file_version = struct.unpack(fmt + 'LL', data[:8])
+  fmt = '<>'[header[4 : 7] == '\0\0\0']  # Use file_version.
+  header_size, file_version = struct.unpack(fmt + 'LL', header[:8])
   if not 28 <= header_size <= 512:
     raise ValueError('Bad xwd header size: %d' % header_size)
   if file_version == 6:
     info['format'], info['subformat'] = 'xwd', 'x10'
-    display_type, display_planes, pixmap_format, width, height = struct.unpack(fmt + '8x5L', data)
+    if len(header) < 20:
+      raise ValueError('Too short for xwd x10.')
+    display_type, display_planes, pixmap_format = struct.unpack(fmt + '3L', header[8 : 20])
     if display_type > 16:
       raise ValueError('Bad xwd display type: %d' % display_type)
     if not 1 <= display_planes <= 5:  # Typically 1 or 3.
       raise ValueError('Bad xwd display planes: %d' % display_planes)
     if pixmap_format > 1:
       raise ValueError('Bad xwd pixmap format: %d' % pixmap_format)
+    if len(header) < 28:
+      return
+    width, height = struct.unpack(fmt + 'LL', header[20 : 28])
   elif file_version == 7:
     info['format'], info['subformat'] = 'xwd', 'x11'
-    pixmap_format, pixmap_depth, width, height = struct.unpack(fmt + '8x4L4x', data)
+    pixmap_format, pixmap_depth = struct.unpack(fmt + '2L', header[8 : 16])
     if not 1 <= pixmap_depth <= 32:
       raise ValueError('Bad xwd pixmap depth: %d' % pixmap_depth)
     if pixmap_format > 2:
       raise ValueError('Bad xwd pixmap format: %d' % pixmap_format)
+    if len(header) < 28:
+      return
+    width, height = struct.unpack(fmt + 'LL', header[16 : 24])
   else:
     raise ValueError('Bad xwd file version: %d' % file_version)
   info['width'], info['height'] = width, height
@@ -5133,11 +5175,12 @@ def analyze_sun_icon(fread, info, fskip):
 
 def analyze_wav(fread, info, fskip):
   header = fread(36)
-  if len(header) < 36:
+  if len(header) < 16:
     raise ValueError('Too short for wav.')
   if not header.startswith('RIFF') or header[8 : 12] not in ('WAVE', 'RMP3'):
     raise ValueError('wav signature not found.')
   info['format'] = 'wav'
+  info['tracks'] = []
   while header[12 : 16] == 'bext':  # Skip 'bext' chunk(s).
     chunk_size, = struct.unpack('<L', header[16 : 20])
     chunk_size += chunk_size & 1
@@ -5151,7 +5194,7 @@ def analyze_wav(fread, info, fskip):
     if len(header) < 36:
       header += fread(36 - len(header))
       if len(header) < 36:
-        raise ValueError('EOF after bext chunk.')
+        return  #raise ValueError('EOF after bext chunk.')
   if header[12 : 16] != 'fmt ':
     raise ValueError('wav fmt chunk missing.')
   fmt_size, wave_format, channel_count, sample_rate, _, _, sample_size = (
@@ -5159,7 +5202,6 @@ def analyze_wav(fread, info, fskip):
   # Observation: 234 x fmt_size=16, 10 x fmt_size=18, 2 x fmt_size=50, 1 fmt_size=30.
   if not 16 <= fmt_size <= 80:
     raise ValueError('Bad wav fmt_size: %d' % fmt_size)
-  info['tracks'] = []
   info['tracks'].append({
       'type': 'audio',
       'codec': WINDOWS_AUDIO_FORMATS.get(
@@ -5637,7 +5679,7 @@ def analyze_lbm(fread, info, fskip):
   # https://en.wikipedia.org/wiki/ILBM
   # https://github.com/unwind/gimpilbm/blob/master/ilbm.c
   header = fread(24)
-  if len(header) < 24:
+  if len(header) < 20:
     raise ValueError('Too short for lbm.')
   if not (header.startswith('FORM') and
           # Different 'DEEP', 'SHAM', 'DHAM', 'RGFX'.
@@ -5646,11 +5688,9 @@ def analyze_lbm(fread, info, fskip):
           header[12 : 20] == 'BMHD\0\0\0\x14'):
     raise ValueError('lbm signature not found.')
   info['format'], info['subformat'] = 'lbm', header[8 : 12].strip().lower()
-  if header[8] == 'I':
-    info['codec'] = 'rle'
-  else:
-    info['codec'] = 'uncompressed'
-  info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
+  info['codec'] = ('uncompressed', 'rle')[header[8] == 'I']
+  if len(header) >= 24:
+    info['width'], info['height'] = struct.unpack('>HH', header[20 : 24])
 
 
 def analyze_deep(fread, info, fskip):
@@ -6034,7 +6074,7 @@ def analyze_pnm(fread, info, fskip):
   memory_budget = 100
   while 1:
     if not data:
-      raise ValueError('EOF in %s header.' % info['format'])
+      break # raise ValueError('EOF in %s header.' % info['format'])
     if memory_budget < 0:
       raise ValueError('pnm header too long.')
     if state == 0 and data.isdigit():
@@ -6059,7 +6099,8 @@ def analyze_pnm(fread, info, fskip):
     else:
       raise ValueError('Bad character in pnm header: %r' % data)
     data = fread(1)
-  info['width'], info['height'] = dimensions
+  if len(dimensions) == 2:
+    info['width'], info['height'] = dimensions
 
 
 def count_is_pam(header):
@@ -6111,7 +6152,7 @@ def analyze_pam(fread, info, fskip):
       c, j = data[i], i
       i = data.find('\n', i) + 1
       if i <= 0:
-        raise EOFError('EOF in pam header line.')
+        raise ValueError('EOF in pam header line.')
       if c in letters:
         line = data[j : i - 1]
         if line == 'ENDHDR':
@@ -6137,13 +6178,15 @@ def analyze_pam(fread, info, fskip):
         pass
       else:
         return 0  # Unsupported character in comment.
-    raise EOFError('EOF in pam header before ENDHDR.')
+    raise ValueError('EOF in pam header before ENDHDR.')
 
   while 1:
     try:
       process_lines(data)
       break
-    except EOFError:
+    except ValueError, e:
+      if not str(e).startswith('EOF '):
+        raise
       size = len(data)
       if size >= 8192 or size & (size - 1):  # Not a power of 2.
         raise
@@ -6165,7 +6208,10 @@ def analyze_ps(fread, info, fskip):
     has_preview = True
     assert eps_ofs >= len(header)
     header = fskip(eps_ofs - len(header)) and fread(21)
-    if len(header or '') < 15:
+    if not header:
+      info['format'], info['subformat'], info['has_preview'] = 'ps', 'preview', True
+      return
+    if len(header) < 15:
       raise ValueError('EOF before eps section.')
   if not ((header.startswith('%!PS-Adobe-') and
            header[11] in '123' and header[12] == '.') or
@@ -7296,10 +7342,10 @@ def analyze_flif(fread, info, fskip):
 
 def analyze_fuif(fread, info, fskip):
   # https://github.com/cloudinary/fuif/blob/3ed48249a9cbe68740aa4ea58098ab0cd4b87eaa/encoding/encoding.cpp#L456-L466
-  header = fread(6)
+  header = fread(7)
   if len(header) < 6:
     raise ValueError('Too short for fuif.')
-  signature, component_count, bpc = struct.unpack('>4sBB', header)
+  signature, component_count, bpc = struct.unpack('>4sBB', header[:6])
   component_count -= 0x30
   bpc -= 0x26
   if signature not in ('FUIF', 'FUAF'):
@@ -7310,13 +7356,18 @@ def analyze_fuif(fread, info, fskip):
     raise ValueError('Bad fuif component_count.')
   if not 1 <= bpc <= 16:
     raise ValueError('Bad fuif bpc.')
+  if len(header) < 7:
+    return
 
-  def read_varint(name):
+  def read_varint(name, data=''):
     v, c, cc = 0, 128, 0
     while c & 128:
       if cc > 8:  # 63 bits maximum.
         raise ValueError('fuif %s varint too long.' % name)
-      c = fread(1)
+      if data:
+        c, data = data, ''
+      else:
+        c = fread(1)
       if not c:
         raise ValueError('EOF in fuif %s.' % name)
       c = ord(c)
@@ -7324,7 +7375,7 @@ def analyze_fuif(fread, info, fskip):
       cc += 1
     return v
 
-  info['width'] = read_varint('width') + 1
+  info['width'] = read_varint('width', header[6]) + 1
   info['height'] = read_varint('height') + 1
   info['component_count'], info['bpc'] = component_count, bpc
 
@@ -7772,6 +7823,7 @@ def analyze_pds(fread, info, fskip):
   if len(data) == 2 and data[1] == '\0':
     size, = struct.unpack('<H', data)
     data = fread(size)
+    print [len(data), size]
     if len(data) < size:
       raise ValueError('Too short for pds size.')
     nulb = fread(1)
@@ -8622,13 +8674,16 @@ def analyze_icns(fread, info, fskip):
     raise ValueError('Bad icns size: %d' % size)
   info['format'], info['icon_count'] = 'icns', 0
   remaining = size - 8
-  best = ()
+  best, is_first = (), True
   while remaining > 0:  # Find the largest icon. The earlier the better.
     if remaining < 16:
       raise ValueError('Too few bytes remaining in icns.')
     data = fread(16)
     if len(data) != 16:
+      if not data and is_first:
+        return
       raise ValueError('EOF in icns icon header.')
+    is_first = False
     xtype, size, magic = struct.unpack('>4sL8s', data)
     if not 16 <= size <= remaining:
       raise ValueError('Bad icns icon size: %d')
@@ -9043,7 +9098,7 @@ FORMAT_ITEMS = (
     # By Paint Shop Pro.
     ('psp', (0, 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0')),
     # Sun Raster.
-    ('ras', (0, '\x59\xa6\x6a\x95')),
+    ('ras', (0, '\x59\xa6\x6a\x95', 24, lambda header: (len(header) < 24 or header[20 : 23] == '\0\0\0' and header[23] in ('\0', '\1', '\2', '\3', '\4', '\5'), 363 * (len(header) >= 24)))),
     ('gem', (0, GEM_NOSIG_HEADERS)),
     ('gem', (0, GEM_HYPERPAINT_HEADERS, 16, '\0\x80')),
     ('gem', (0, GEM_STTT_HEADERS, 16, 'STTT\0\x10')),
