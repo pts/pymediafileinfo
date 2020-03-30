@@ -16,6 +16,7 @@ Typical usage: media_scan.py --old=mscan.out .
 """
 
 import mediafileinfo_detect
+import mediafileinfo_formatdb
 
 import cStringIO
 import re
@@ -31,6 +32,9 @@ try:
 except ImportError:
   if sys.version_info < (2, 5):
     sys.exit('fatal: Install hashlib from PyPI or use Python >=2.5.')
+
+ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS).analyze
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
 
 # --- Image fingerprinting for similarity with findimagedupes.pl.
 #
@@ -679,8 +683,9 @@ def detect_file(filename, filesize, do_fp, do_sha256, filemtime):
         fh = f
       had_error_here, info = True, {'f': filename}
       try:
-        info = mediafileinfo_detect.analyze(
-            fh, info, file_size_for_seek=filesize or None)
+        info = ANALYZE(
+            fh, info, file_size_for_seek=filesize or None,
+            analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT)
         had_error_here = False
       except ValueError, e:
         info['error'] = 'bad_data'

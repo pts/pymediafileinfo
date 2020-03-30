@@ -20,6 +20,11 @@ import sys
 import unittest
 
 import mediafileinfo_detect
+import mediafileinfo_formatdb
+
+
+FORMAT_DB = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS)
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
 
 
 def analyze_string(analyze_func, data, expect_error=False):
@@ -35,9 +40,9 @@ def analyze_string(analyze_func, data, expect_error=False):
     analyze_func(fread, info, fskip)
     if info.get('format') is None:
       raise AssertionError('Format not populated in info.')
-  if info.get('format') is not None and info.get('format') not in mediafileinfo_detect.FORMAT_DB.formats:
+  if info.get('format') is not None and info.get('format') not in FORMAT_DB.formats:
     raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
-  detected_format = mediafileinfo_detect.detect_format(data)[0]
+  detected_format = FORMAT_DB.detect(data)[0]
   if detected_format != info.get('format'):
     info['detected_format'] = detected_format
   return info
@@ -47,7 +52,7 @@ class FormatDbTest(unittest.TestCase):
   maxDiff = None
 
   def test_get_spec_prefixes(self):
-    f = mediafileinfo_detect.get_spec_prefixes
+    f = mediafileinfo_formatdb.get_spec_prefixes
     self.assertEqual(('',), f((0, lambda header: (True, 1)))),
     self.assertEqual(('',), f((1, lambda header: (True, 1)))),
     self.assertEqual(('',), f((3, 'bar', 6, 'foo')))
@@ -73,11 +78,13 @@ class FormatDbTest(unittest.TestCase):
     self.assertEqual(('foobar/',) * 10, f((0, ('foo',) * 10, 3, 'bar', 6, '/', 7, ('a', 'a')), count_limit=10))
 
   def test_analyze(self):
-    self.assertEqual(mediafileinfo_detect.analyze(cStringIO.StringIO('RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0')),
+    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO('RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT),
                      {'format': 'amv', 'vcodec': 'mjpeg', 'width': 515, 'height': 513, 'acodec': 'adpcm',
                       'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
                                  {'type': 'audio', 'codec': 'adpcm'}]})
-    self.assertEqual(mediafileinfo_detect.analyze(cStringIO.StringIO('\x01vorbis\0\0\0\0\x01D\xac\0\0')),
+    data_vorbis = '\x01vorbis\0\0\0\0\x01D\xac\0\0'
+    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO(data_vorbis)), {'format': 'vorbis'})
+    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO(data_vorbis), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT),
                      {'format': 'vorbis', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
                       'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
 
@@ -858,12 +865,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'cmuwm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_detect_unixscript(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('#! /usr/bin/perl')[0], 'unixscript')
-    self.assertEqual(mediafileinfo_detect.detect_format('#!/usr/bin/perl')[0], 'unixscript')
+    self.assertEqual(FORMAT_DB.detect('#! /usr/bin/perl')[0], 'unixscript')
+    self.assertEqual(FORMAT_DB.detect('#!/usr/bin/perl')[0], 'unixscript')
 
   def test_detect_windows_cmd(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('@echo off\r\n')[0], 'windows-cmd')
-    self.assertEqual(mediafileinfo_detect.detect_format('@ECho oFF\r\n')[0], 'windows-cmd')
+    self.assertEqual(FORMAT_DB.detect('@echo off\r\n')[0], 'windows-cmd')
+    self.assertEqual(FORMAT_DB.detect('@ECho oFF\r\n')[0], 'windows-cmd')
 
   def test_analyze_xwd(self):
     data1 = '\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\1\xd3\0\0\0\x3c\0\0\0\0'
@@ -961,20 +968,20 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'utah-rle', 'codec': 'rle', 'height': 50, 'width': 62})
 
   def test_detect_fig(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('#FIG 3.2\n')[0], 'fig')
+    self.assertEqual(FORMAT_DB.detect('#FIG 3.2\n')[0], 'fig')
 
   def test_detect_zoo(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
-    self.assertEqual(mediafileinfo_detect.detect_format('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
+    self.assertEqual(FORMAT_DB.detect('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
+    self.assertEqual(FORMAT_DB.detect('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
 
   def test_detect_arj(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2')[0], 'arj')
+    self.assertEqual(FORMAT_DB.detect('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2')[0], 'arj')
 
   def test_detect_lha(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1')[0], 'lha')
+    self.assertEqual(FORMAT_DB.detect('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1')[0], 'lha')
 
   def test_detect_unknown(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('Unknown'), ('?', 'Unknown'))
+    self.assertEqual(FORMAT_DB.detect('Unknown'), ('?', 'Unknown'))
 
   def test_analyze_mpeg_ps(self):
     data1 = '000001ba4400040004010189c3f8000001bb001280c4e104e17fb9e0e8b8c020bde03abfe002000001e0007681c10d310001b8611100019c411e60e8000001b32c0240231755e38110111112121213131313141414141415151515151516161616161616171717171717171718181819181818191a1a1a1a191b1b1b1b1b1c1c1c1c1e1e1e1f1f21000001b5148200010000000001b52305050508721200000001b8'.decode('hex')
@@ -1063,9 +1070,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_midi(self):
     data1 = 'MThd\0\0\0\6\0\0\0\1'
     data2 = 'MThd\0\0\0\6\0\2\3'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'midi')
-    self.assertEqual(mediafileinfo_detect.detect_format(data2)[0], 'midi')
-    self.assertEqual(mediafileinfo_detect.detect_format('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2)[0], 'midi-rmid')
+    self.assertEqual(FORMAT_DB.detect(data1)[0], 'midi')
+    self.assertEqual(FORMAT_DB.detect(data2)[0], 'midi')
+    self.assertEqual(FORMAT_DB.detect('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2)[0], 'midi-rmid')
 
   def test_analyze_wav(self):
     data_riff = 'RIFF\x44\xc2\1\0WAVE'
@@ -1309,12 +1316,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_detect_xar(self):
     data1 = 'XARA\xa3\xa3\r\n\2\0\0\0\x25\0\0\0CXN????\0\0\0\0'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'xara')
+    self.assertEqual(FORMAT_DB.detect(data1)[0], 'xara')
 
   def test_detect_cdr(self):
     data1 = 'RIFF????CDR9vrsn\2\0\0\0DISP'
-    self.assertEqual(mediafileinfo_detect.detect_format(data1)[0], 'cdr')
-    self.assertEqual(mediafileinfo_detect.detect_format(data1[:20])[0], 'cdr')
+    self.assertEqual(FORMAT_DB.detect(data1)[0], 'cdr')
+    self.assertEqual(FORMAT_DB.detect(data1[:20])[0], 'cdr')
 
   def test_analyze_amv(self):
     data1 = 'RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'
@@ -1389,7 +1396,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'lzma', 'codec': 'lzma'})
 
   def test_detect_rtf(self):
-    self.assertEqual(mediafileinfo_detect.detect_format(r'{\rtf1')[0], 'rtf')
+    self.assertEqual(FORMAT_DB.detect(r'{\rtf1')[0], 'rtf')
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1'), 600)
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info\title '), 1200)
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info \title '), 1300)
@@ -1401,11 +1408,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1\foo'), 600)
 
   def test_detect_troff(self):
-    self.assertEqual(mediafileinfo_detect.detect_format('.\\" DO NOT MODIFY THIS FILE!  \n.TH x')[0], 'troff')
-    self.assertEqual(mediafileinfo_detect.detect_format('.TH LS "1"')[0], 'troff')
-    self.assertEqual(mediafileinfo_detect.detect_format('.SH NAME')[0], 'troff')
-    self.assertEqual(mediafileinfo_detect.detect_format('.de xy')[0], 'troff')
-    self.assertEqual(mediafileinfo_detect.detect_format('.EF \'hi\'')[0], 'troff')
+    self.assertEqual(FORMAT_DB.detect('.\\" DO NOT MODIFY THIS FILE!  \n.TH x')[0], 'troff')
+    self.assertEqual(FORMAT_DB.detect('.TH LS "1"')[0], 'troff')
+    self.assertEqual(FORMAT_DB.detect('.SH NAME')[0], 'troff')
+    self.assertEqual(FORMAT_DB.detect('.de xy')[0], 'troff')
+    self.assertEqual(FORMAT_DB.detect('.EF \'hi\'')[0], 'troff')
 
 
 if __name__ == '__main__':

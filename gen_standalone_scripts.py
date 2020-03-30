@@ -42,7 +42,7 @@ def module(f):
 def main(argv):
   if len(argv) > 1:
     sys.exit('fatal: too many command-line arguments')
-  modules_to_embed = ('mediafileinfo_detect',)
+  modules_to_embed = ('mediafileinfo_detect', 'mediafileinfo_formatdb')
   main_filenames = ('mediafileinfo.py', 'media_scan.py')
 
   modules = {}

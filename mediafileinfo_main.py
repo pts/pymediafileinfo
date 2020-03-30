@@ -23,12 +23,16 @@ Typical usage: mediafileinfo.py *.mp4
 # * size: for width and height, use ``dimensions'' instead.
 
 import mediafileinfo_detect
+import mediafileinfo_formatdb
 
 import os
 import os.path
 import stat
 import struct
 import sys
+
+ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS).analyze
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
 
 
 def format_info(info):
@@ -81,7 +85,9 @@ def get_file_info(filename, stat_obj):
   try:
     had_error_here, info = True, {'f': filename}
     try:
-      info = mediafileinfo_detect.analyze(f, info, file_size_for_seek=filesize)
+      info = ANALYZE(
+          f, info, file_size_for_seek=filesize,
+          analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT)
       had_error_here = False
     except ValueError, e:
       #raise
