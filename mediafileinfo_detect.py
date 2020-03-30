@@ -3930,12 +3930,14 @@ def get_jpeg_dimensions(fread, header='', is_first_eof_ok=False):
   raise AssertionError('Internal JPEG parser error.')
 
 
-def analyze_jpeg(fread, info, fskip):
+def analyze_jpeg(fread, info, fskip, format='jpeg', tags=('image',),
+                 spec=(0, '\xff\xd8\xff')):
   header = fread(4)
   if len(header) < 3:
     raise ValueError('Too short for jpeg.')
   if not header.startswith('\xff\xd8\xff'):
     raise ValueError('jpeg signature not found.')
+  # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
   info['format'] = info['codec'] = 'jpeg'
   if len(header) >= 4:
     dimensions = get_jpeg_dimensions(fread, header, is_first_eof_ok=True)
@@ -9049,9 +9051,10 @@ WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
 
 MAX_CONFIDENCE = 100000
 
-# TODO(pts): Static analysis: fail on duplicate format name. (Do we want this?)
+# TODO(pts): Move everything from here to analyze_...(..., format=..., spec=...).
+# TODO(pts): Make Spec matching callable from analyze_...().
 # TODO(pts): Static analysis: autodetect conflicts and subsumes in string-only matchers.
-# TODO(pts): Optimization: create prefix dicts (for 4 bytes and 8 bytes).
+# TODO(pts): Optimization: create prefix dict of 8 bytes as well.
 FORMAT_ITEMS = (
     # (n, f, ...) means: read at most n bytes from the beginning of the file
     # to header, call f(header).
@@ -9134,8 +9137,6 @@ FORMAT_ITEMS = (
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
     ('agif',),  # From 'gif'.
-    # TODO(pts): Which JPEG marker can be header[3]? Typically it's '\xe0'.
-    ('jpeg', (0, '\xff\xd8\xff')),
     ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
     ('apng',),  # From 'png'.
     ('jng', (0, '\213JNG\r\n\032\n\0\0\0')),
@@ -9560,6 +9561,7 @@ FORMAT_ITEMS = (
 )
 
 
+# TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
     'flv': analyze_flv,
     'mkv': analyze_mkv,
@@ -9585,7 +9587,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'realvideo': analyze_realvideo,
     'wav': analyze_wav,
     'gif': analyze_gif,
-    'jpeg': analyze_jpeg,
     'png': analyze_png,
     'jng': analyze_jng,
     'lbm': analyze_lbm,

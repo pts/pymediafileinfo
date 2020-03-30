@@ -31,8 +31,8 @@ import stat
 import struct
 import sys
 
-ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS).analyze
-ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
+ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect).analyze
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_formatdb.get_analyze_funcs_by_format(mediafileinfo_detect)
 
 
 def format_info(info):

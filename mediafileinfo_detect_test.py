@@ -23,8 +23,8 @@ import mediafileinfo_detect
 import mediafileinfo_formatdb
 
 
-FORMAT_DB = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS)
-ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
+FORMAT_DB = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect)
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_formatdb.get_analyze_funcs_by_format(mediafileinfo_detect)
 
 
 def analyze_string(analyze_func, data, expect_error=False):
@@ -87,6 +87,8 @@ class FormatDbTest(unittest.TestCase):
     self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO(data_vorbis), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT),
                      {'format': 'vorbis', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
                       'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
+    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO('\xff\xd8\xff\xe0'), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT), {'format': 'jpeg', 'codec': 'jpeg'})
+
 
 class MediaFileInfoDetectTest(unittest.TestCase):
   maxDiff = None

@@ -33,8 +33,8 @@ except ImportError:
   if sys.version_info < (2, 5):
     sys.exit('fatal: Install hashlib from PyPI or use Python >=2.5.')
 
-ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect.FORMAT_ITEMS).analyze
-ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_detect.ANALYZE_FUNCS_BY_FORMAT
+ANALYZE = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect).analyze
+ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_formatdb.get_analyze_funcs_by_format(mediafileinfo_detect)
 
 # --- Image fingerprinting for similarity with findimagedupes.pl.
 #

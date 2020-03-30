@@ -1,5 +1,7 @@
 """Defines FormatDb, class for detecting and analyzing file formats."""
 
+module_type = type(__import__('struct'))
+
 
 def get_spec_prefixes(spec, count_limit=50, max_prefix_size=0):
   """Calculates prefixes.
@@ -154,6 +156,47 @@ def copy_info_from_tracks(info):
     info.setdefault('vcodec', '?')
 
 
+def get_default_arg(func_obj, name):
+  if not isinstance(func_obj, type(get_default_arg)):
+    raise TypeError
+  defaults = func_obj.func_defaults
+  if defaults:
+    varnames, i = func_obj.func_code.co_varnames, func_obj.func_code.co_argcount
+    d = len(defaults) - i
+    assert d <= 0, 'Too many defaults.'
+    while i > 0:
+      i -= 1
+      if varnames[i] == name:
+        return defaults[i + d]
+  return None
+
+
+def get_analyze_funcs_by_format(module_obj):
+  if not isinstance(module_obj, module_type):
+    raise TypeError('Module expected, got: %r' % type(module_obj))
+  analyze_funcs_by_format = dict(module_obj.ANALYZE_FUNCS_BY_FORMAT)
+  for name, obj in sorted(module_obj.__dict__.iteritems()):
+    if callable(obj) and name.startswith('analyze_') and get_default_arg(obj, 'spec') is not None:
+      format = get_default_arg(obj, 'format')
+      if format is not None:
+        analyze_funcs_by_format.setdefault(format, obj)
+  return analyze_funcs_by_format
+
+
+def get_format_items_from_module(module_obj):
+  if not isinstance(module_obj, module_type):
+    raise TypeError('Module expected, got: %r' % type(module_obj))
+  format_items = list(module_obj.FORMAT_ITEMS)
+  for name, obj in sorted(module_obj.__dict__.iteritems()):
+    if callable(obj) and name.startswith('analyze_'):
+      spec = get_default_arg(obj, 'spec')
+      if spec is not None:
+        format = get_default_arg(obj, 'format')
+        if format is not None:
+          format_items.append((format, spec))
+  return format_items
+
+
 class FormatDb(object):
   """Class for detection and analyzing of file formats.
 
@@ -210,6 +253,8 @@ class FormatDb(object):
   __slots__ = ('formats_by_prefix', 'header_preread_size', 'formats')
 
   def __init__(self, format_items, max_prefix_size=4, header_size_limit=512):
+    if isinstance(format_items, module_type):
+      format_items = get_format_items_from_module(format_items)
     # It's OK to have duplicate, e.g. 'cue'.
     #if len(dict(format_items)) != len(format_items):
     #  raise ValueError('Duplicate key in format_items.')
