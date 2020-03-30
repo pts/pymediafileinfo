@@ -9504,15 +9504,30 @@ FORMAT_ITEMS = (
 HEADER_SIZE_LIMIT = 512
 
 
-def get_spec_prefixes(spec):
-  size, pattern = spec[:2]
+def get_spec_prefixes(spec, count_limit=50):
+  """Returns a tuple containing all possible prefix strings (of the same
+  size) of any string spec matches. The result has at most count_limit
+  elements; to achieve this, the prefixes may get truncated."""
   prefixes = ('',)
-  # TODO(pts): Do smarter prefix selection.
-  if size == 0:
-    if isinstance(pattern, str):
-      prefixes = (pattern,)
-    elif isinstance(pattern, tuple):
-      prefixes = pattern
+  if count_limit >= 2 and spec and spec[0] == 0:
+    ofs = i = 0
+    while i < len(spec):
+      size, pattern = spec[i], spec[i + 1]
+      i += 2
+      if isinstance(pattern, str) and size == ofs:
+        prefixes2 = (pattern,)
+      elif isinstance(pattern, tuple) and size == ofs:
+        prefixes2 = pattern
+        if not prefixes2:
+          raise ValueError('Empty pattern tuple.')
+      else:
+        break
+      if len(prefixes) * len(prefixes2) > count_limit:
+        break
+      prefixes = tuple(p1 + p2 for p1 in prefixes for p2 in prefixes2)
+      ofs += len(prefixes2[0])
+  elif count_limit < 1:
+    raise ValueError('Bad count_limit: %d' % count_limit)
   return prefixes
 
 

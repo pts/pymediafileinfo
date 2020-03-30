@@ -50,14 +50,17 @@ class FormatDbTest(unittest.TestCase):
     self.assertEqual(('',), f((0, lambda header: (True, 1)))),
     self.assertEqual(('',), f((1, lambda header: (True, 1)))),
     self.assertEqual(('',), f((3, 'bar', 6, 'foo')))
-    self.assertEqual(('foo',), f((0, 'foo', 3, 'bar')))
-    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar')))
-    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 7, ('baz', 'bez'))))
-    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 8, ('baz', 'bez'))))
-    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, lambda header: (True, 1), 8, ('baz', 'bez'))))
-    self.assertEqual(('foo',) * 100, f((0, ('foo',) * 100, 3, 'bar')))
+    self.assertEqual(('foo',), f((0, 'foo')))
+    self.assertEqual(('foobar',), f((0, 'foo', 3, 'bar')))
+    self.assertEqual(('foobar', 'foobar', 'foxbar'), f((0, ('foo', 'foo', 'fox'), 3, 'bar')))
+    self.assertEqual(('foobar/baz', 'foobar/bez', 'foobar/baz', 'foobar/bez', 'foxbar/baz', 'foxbar/bez'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 7, ('baz', 'bez'))))
+    self.assertEqual(('foobar/', 'foobar/', 'foxbar/'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 7, ('baz', 'bez')), count_limit=3))
+    self.assertEqual(('foobar/', 'foobar/', 'foxbar/'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 8, ('baz', 'bez'))))
+    self.assertEqual(('foobar', 'foobar', 'foxbar'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, lambda header: (True, 1), 8, ('baz', 'bez'))))
+    self.assertEqual(('foobar',) * 50, f((0, ('foo',) * 50, 3, 'bar')))
+    self.assertEqual(('',), f((0, ('foo',) * 51, 3, 'bar')))  # Over count_limit=50.
     self.assertEqual(('foo',), f((0, 'foo', 3, ('bar',) * 100, 6, 'done')))
-    self.assertEqual(('foo',) * 50, f((0, ('foo',) * 50, 3, 'bar', 6, '/', 7, ('a', 'b'))))
+    self.assertEqual(('foobar/',) * 10, f((0, ('foo',) * 10, 3, 'bar', 6, '/', 7, ('a', 'a')), count_limit=10))
   
 
 class MediaFileInfoDetectTest(unittest.TestCase):
