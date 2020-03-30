@@ -42,6 +42,24 @@ def analyze_string(analyze_func, data, expect_error=False):
   return info
 
 
+class FormatDbTest(unittest.TestCase):
+  maxDiff = None
+
+  def test_get_spec_prefixes(self):
+    f = mediafileinfo_detect.get_spec_prefixes
+    self.assertEqual(('',), f((0, lambda header: (True, 1)))),
+    self.assertEqual(('',), f((1, lambda header: (True, 1)))),
+    self.assertEqual(('',), f((3, 'bar', 6, 'foo')))
+    self.assertEqual(('foo',), f((0, 'foo', 3, 'bar')))
+    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar')))
+    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 7, ('baz', 'bez'))))
+    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, '/', 8, ('baz', 'bez'))))
+    self.assertEqual(('foo', 'foo', 'fox'), f((0, ('foo', 'foo', 'fox'), 3, 'bar', 6, lambda header: (True, 1), 8, ('baz', 'bez'))))
+    self.assertEqual(('foo',) * 100, f((0, ('foo',) * 100, 3, 'bar')))
+    self.assertEqual(('foo',), f((0, 'foo', 3, ('bar',) * 100, 6, 'done')))
+    self.assertEqual(('foo',) * 50, f((0, ('foo',) * 50, 3, 'bar', 6, '/', 7, ('a', 'b'))))
+  
+
 class MediaFileInfoDetectTest(unittest.TestCase):
   maxDiff = None
 
