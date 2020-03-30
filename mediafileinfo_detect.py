@@ -7823,7 +7823,6 @@ def analyze_pds(fread, info, fskip):
   if len(data) == 2 and data[1] == '\0':
     size, = struct.unpack('<H', data)
     data = fread(size)
-    print [len(data), size]
     if len(data) < size:
       raise ValueError('Too short for pds size.')
     nulb = fread(1)
@@ -9505,6 +9504,18 @@ FORMAT_ITEMS = (
 HEADER_SIZE_LIMIT = 512
 
 
+def get_spec_prefixes(spec):
+  size, pattern = spec[:2]
+  prefixes = ('',)
+  # TODO(pts): Do smarter prefix selection.
+  if size == 0:
+    if isinstance(pattern, str):
+      prefixes = (pattern,)
+    elif isinstance(pattern, tuple):
+      prefixes = pattern
+  return prefixes
+
+
 class FormatDb(object):
   __slots__ = ('formats_by_prefix', 'header_preread_size', 'formats')
 
@@ -9518,24 +9529,6 @@ class FormatDb(object):
       if len(format_spec) == 1:
         continue  # Indicates that analyze_* can generate this format.
       format, spec = format_spec
-      size, pattern = spec[0], spec[1]
-      prefixes = ('',)
-      # TODO(pts): Check that size==0 is first.
-      # TODO(pts): Do smarter prefix selection.
-      if isinstance(pattern, str):
-        if size == 0:
-          prefixes = (pattern,)
-      elif isinstance(pattern, tuple):
-        if size == 0:
-          prefixes = pattern
-      for prefix in prefixes:
-        i = min(4, len(prefix))
-        prefix2 = prefix[:i]
-        fbp2 = fbp[i]
-        if prefix2 in fbp2:
-          fbp2[prefix2].append(format_spec)
-        else:
-          fbp2[prefix2] = [format_spec]
       fps = 0
       for i in xrange(0, len(spec), 2):
         size, pattern = spec[i], spec[i + 1]
@@ -9552,6 +9545,14 @@ class FormatDb(object):
         else:
           fps = size
         hps = max(hps, fps)
+      for prefix in get_spec_prefixes(spec):
+        i = min(4, len(prefix))
+        prefix2 = prefix[:i]
+        fbp2 = fbp[i]
+        if prefix2 in fbp2:
+          fbp2[prefix2].append(format_spec)
+        else:
+          fbp2[prefix2] = [format_spec]
     self.header_preread_size = hps  # Typically 64, we have 408.
     assert hps <= HEADER_SIZE_LIMIT, 'Header too long.'
     self.formats_by_prefix = fbp
