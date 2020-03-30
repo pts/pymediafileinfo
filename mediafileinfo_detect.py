@@ -9175,7 +9175,7 @@ FORMAT_ITEMS = (
     # By Paint Shop Pro.
     ('psp', (0, 'Paint Shop Pro Image File\n\x1a\0\0\0\0\0')),
     # Sun Raster.
-    ('ras', (0, '\x59\xa6\x6a\x95', 24, lambda header: (len(header) < 24 or header[20 : 23] == '\0\0\0' and header[23] in ('\0', '\1', '\2', '\3', '\4', '\5'), 363 * (len(header) >= 24)))),
+    ('ras', (0, '\x59\xa6\x6a\x95', 24, lambda header: (len(header) < 24 or header[20 : 23] == '\0\0\0' and header[23] in ('\0', '\1', '\2', '\3', '\4', '\5'), 363 * (len(header) >= 24) or 1))),
     ('gem', (0, GEM_NOSIG_HEADERS)),
     ('gem', (0, GEM_HYPERPAINT_HEADERS, 16, '\0\x80')),
     ('gem', (0, GEM_STTT_HEADERS, 16, 'STTT\0\x10')),
@@ -9284,7 +9284,7 @@ FORMAT_ITEMS = (
     # Audio.
 
     # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
-    ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ')))),
+    ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))),
     # https://en.wikipedia.org/wiki/ID3
     # http://id3.org/id3v2.3.0
     # ID3v1 is at the end of the file, so we don't care.
@@ -9485,7 +9485,7 @@ FORMAT_ITEMS = (
     ('binhex', (0, '(This file must be converted with BinHex')),
     ('binhex', (0, '(This file ')),
     ('binhex', (0, '(Convert with')),
-    ('macbinary', (0, '\0', 128, lambda header: (800, is_macbinary(header)))),
+    ('macbinary', (0, '\0', 128, lambda header: (is_macbinary(header), 800))),
 
     # Non-compressed, non-media.
 
