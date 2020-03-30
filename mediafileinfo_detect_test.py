@@ -14,6 +14,7 @@ This script need Python 2.4, 2.5, 2.6 or 2.7. Python 3.x won't work.
 Typical usage: mediafileinfo.py *.mp4
 """
 
+import cStringIO
 import struct
 import sys
 import unittest
@@ -70,7 +71,15 @@ class FormatDbTest(unittest.TestCase):
     self.assertEqual(('',), f((0, ('foo',) * 51, 3, 'bar')))  # Over count_limit=50.
     self.assertEqual(('foo',), f((0, 'foo', 3, ('bar',) * 100, 6, 'done')))
     self.assertEqual(('foobar/',) * 10, f((0, ('foo',) * 10, 3, 'bar', 6, '/', 7, ('a', 'a')), count_limit=10))
-  
+
+  def test_analyze(self):
+    self.assertEqual(mediafileinfo_detect.analyze(cStringIO.StringIO('RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0')),
+                     {'format': 'amv', 'vcodec': 'mjpeg', 'width': 515, 'height': 513, 'acodec': 'adpcm',
+                      'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
+                                 {'type': 'audio', 'codec': 'adpcm'}]})
+    self.assertEqual(mediafileinfo_detect.analyze(cStringIO.StringIO('\x01vorbis\0\0\0\0\x01D\xac\0\0')),
+                     {'format': 'vorbis', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
+                      'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
 
 class MediaFileInfoDetectTest(unittest.TestCase):
   maxDiff = None

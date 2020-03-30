@@ -9921,9 +9921,8 @@ ANALYZE_FUNCS_BY_FORMAT = {
 }
 
 
-def _analyze_detected_format(f, info, header, file_size_for_seek):
-  prebuf = [0, header]
-  header = ''
+def preread_fread_and_fskip(f, data, file_size_for_seek):
+  prebuf, data = [0, data], None
 
   def fread(n):
     """Reads from prebuf (header) first, then from f."""
@@ -9974,9 +9973,7 @@ def _analyze_detected_format(f, info, header, file_size_for_seek):
         f.seek(size, 1)
         return f.tell() <= file_size_for_seek
 
-  analyze_func = ANALYZE_FUNCS_BY_FORMAT.get(info['format'])
-  if analyze_func is not None:
-    analyze_func(fread, info, fskip)
+  return fread, fskip
 
 
 def analyze(f, info=None, file_size_for_seek=None):
@@ -10001,9 +9998,12 @@ def analyze(f, info=None, file_size_for_seek=None):
   # Set it early, in case of an exception.
   info.setdefault('format', '?')
   format, header = detect_format(f)
+  analyze_func = ANALYZE_FUNCS_BY_FORMAT.get(format)
   info['format'] = format
   try:
-    _analyze_detected_format(f, info, header, file_size_for_seek)
+    if analyze_func is not None:
+      fread, fskip = preread_fread_and_fskip(f, header, file_size_for_seek)
+      analyze_func(fread, info, fskip)
   finally:
     if info.get('tracks'):
       copy_info_from_tracks(info)
