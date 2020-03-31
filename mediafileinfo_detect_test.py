@@ -1316,6 +1316,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ani, data1),
                      {'format': 'ani', 'tracks': [{'type': 'video', 'codec': 'uncompressed', 'width': 33, 'height': 32}]})
 
+  def test_analyze_mkv(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mkv, '\x1a\x45\xdf\xa3'),
+                     {'format': 'mkv', 'tracks': []})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_mkv, '\x1aE\xdf\xa3\x01\0\0\0\0\0\0\x1fB\x86\x81\x01B\xf7\x81\x01B\xf2\x81\x04B\xf3\x81\x08B\x82\x84webmB\x87\x81\x02B\x85\x81\x02'),
+                     {'format': 'webm', 'detected_format': 'mkv', 'subformat': 'webm', 'brands': ['mkv', 'webm'], 'tracks': []})
+
   def test_detect_xar(self):
     data1 = 'XARA\xa3\xa3\r\n\2\0\0\0\x25\0\0\0CXN????\0\0\0\0'
     self.assertEqual(FORMAT_DB.detect(data1)[0], 'xara')

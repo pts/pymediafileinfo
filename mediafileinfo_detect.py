@@ -352,7 +352,9 @@ MKV_CODEC_IDS = {
 }
 
 
-def analyze_mkv(fread, info, fskip):
+def analyze_mkv(fread, info, fskip, format='mkv', extra_formats=('webm',), tags=('media',),
+                spec=(0, '\x1a\x45\xdf\xa3')):
+  # Can also be .webm as a subformat.
   # https://matroska.org/technical/specs/index.html
 
   # list so that inner functions can modify it.
@@ -368,8 +370,8 @@ def analyze_mkv(fread, info, fskip):
     ofs_list[0] += len(data)
     return data
 
-  def read_id():
-    c = read_n(1)
+  def read_id(c=''):
+    c = c or read_n(1)
     if not c:
       raise ValueError('EOF in mkv ID 1')
     b = ord(c)
@@ -392,8 +394,8 @@ def analyze_mkv(fread, info, fskip):
       return c + data
     raise ValueError('Invalid ID prefix: %d' % b)
 
-  def read_size():
-    c = read_n(1)
+  def read_size(c=''):
+    c = c or read_n(1)
     if not c:
       raise ValueError('EOF in mkv element size 5')
     if c == '\1':
@@ -438,9 +440,9 @@ def analyze_mkv(fread, info, fskip):
       return (b & 1) << 48 | struct.unpack('>Q', '\0\0' + data)[0]
     raise ValueError('Invalid ID prefix: %d' % b)
 
-  def read_id_skip_void():
+  def read_id_skip_void(c=''):
     while 1:
-      xid = read_id()
+      xid, c = read_id(c), ''
       if xid != '\xec':  # Void.
         return xid
       size = read_size()
@@ -454,11 +456,15 @@ def analyze_mkv(fread, info, fskip):
 
   if xid != '\x1a\x45\xdf\xa3':
     raise ValueError('mkv signature not found.')
-  size = read_size()
+  info['format'], info['tracks'] = 'mkv', []
+  c = fread(1)
+  if not c:
+    return
+  ofs_list[0] += 1
+  size = read_size(c)
   if size >= 256:
     raise ValueError('mkv header unreasonably large: %d' % size)
   header_end = ofs_list[0] + size
-  info['format'] = 'mkv'
   while ofs_list[0] < header_end:
     xid = read_id_skip_void()
     size = read_size()
@@ -479,12 +485,15 @@ def analyze_mkv(fread, info, fskip):
         info['brands'] = ['mkv']
   if 'subformat' not in info:
     raise('mkv DocType not found.')
-  xid = read_id_skip_void()
+  c = fread(1)
+  if not c:
+    return
+  ofs_list[0] += 1
+  xid = read_id_skip_void(c)
   if xid != '\x18\x53\x80\x67':  # Segment.
     raise ValueError('Expected Segment element, got: %s' % xid.encode('hex'))
   size = read_size()
   segment_end = ofs_list[0] + size
-  info['tracks'] = []
   while ofs_list[0] < segment_end:
     xid = read_id_skip_void()
     size = read_size()
@@ -578,6 +587,7 @@ def analyze_mkv(fread, info, fskip):
           info['tracks'].append(track_info)
       break  #  in Segment, don't read anything beyond Tracks, they are large.
     else:
+      # TODO(pts): Ignore: Unexpected ID in Segment: 1043a770
       raise ValueError('Unexpected ID in Segment: %s' % xid.encode('hex'))
   return info
 
@@ -746,8 +756,8 @@ def parse_isobmff_infe_box(version, flags, data):
 
 
 def analyze_mov(
-    fread, info, fskip, header='', format='mov',
-    extra_formats=('mp4', 'webm', 'jp2', 'isobmff-image', 'f4v'),
+    fread, info, fskip, header='', format='mov', tags=('media',),
+    extra_formats=('mp4', 'jp2', 'isobmff-image', 'f4v'),
     spec=(
         # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
         (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx '), 12, lambda header: (is_mp4(header), 26)),
@@ -9079,8 +9089,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    # Can also be .webm as a subformat.
-    ('mkv', (0, '\x1a\x45\xdf\xa3')),
     ('ogg', (0, 'OggS\0')),
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
     ('wmv',),  # From 'asf'.
@@ -9564,7 +9572,6 @@ FORMAT_ITEMS = (
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
     'flv': analyze_flv,
-    'mkv': analyze_mkv,
     'asf': analyze_asf,
     'avi': analyze_avi,
     'rmmp': analyze_rmmp,
