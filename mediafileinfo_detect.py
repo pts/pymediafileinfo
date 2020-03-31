@@ -8916,7 +8916,8 @@ def analyze_gz(fread, info, fskip):
   info['format'], info['codec'] = 'gz', 'flate'
 
 
-def analyze_xz(fread, info, fskip):
+def analyze_xz(fread, info, fskip, format='xz',
+               spec=(0, '\xfd7zXZ\0')):
   # http://fileformats.archiveteam.org/wiki/XZ
   header = fread(6)
   if len(header) < 6:
@@ -9447,7 +9448,6 @@ FORMAT_ITEMS = (
     ('lzx', (0, 'LZX')),
     # http://fileformats.archiveteam.org/wiki/Lzop
     ('lzop', (0, '\x89LZO\0\r\n\x1a\x0a')),
-    ('xz', (0, '\xfd7zXZ\0')),
     ('lzma', (0, '\x5d\0\0', 12, ('\0', '\xff'))),
     ('flate', (0, '\x78', 1, ('\x01', '\x5e', '\x9c', '\xda'))),
     ('flate', (0, ('\x08', '\x18', '\x28', '\x38', '\x48', '\x58', '\x68'), 1, ('\x01', '\x5e', '\x9c', '\xda'))),  # Flate width small window.
@@ -9667,7 +9667,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'dds': analyze_dds,
     'flate': analyze_flate,
     'gz': analyze_gz,
-    'xz': analyze_xz,
     'lzma': analyze_lzma,
     'olecf': analyze_olecf,
     'swf': analyze_swf,
