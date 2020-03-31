@@ -193,7 +193,13 @@ def get_format_items_from_module(module_obj):
       if spec is not None:
         format = get_default_arg(obj, 'format')
         if format is not None:
-          format_items.append((format, spec))
+          if isinstance(spec[0], tuple):
+            for spec2 in spec:
+              format_items.append((format, spec2))
+          else:
+            format_items.append((format, spec))
+        for extra_format in (get_default_arg(obj, 'extra_formats') or ()):
+          format_items.append((extra_format,))
   return format_items
 
 

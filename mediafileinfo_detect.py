@@ -745,7 +745,21 @@ def parse_isobmff_infe_box(version, flags, data):
   return {item_id: (item_protection_index, item_type)}
 
 
-def analyze_mp4(fread, info, fskip, header=''):
+def analyze_mov(
+    fread, info, fskip, header='', format='mov',
+    extra_formats=('mp4', 'webm', 'jp2', 'isobmff-image', 'f4v'),
+    spec=(
+        # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
+        (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx '), 12, lambda header: (is_mp4(header), 26)),
+        (0, '\0\0\0', 4, 'ftyp', 8, lambda header: (is_mp4(header), 26)),
+        (4, 'mdat'),  # TODO(pts): Analyze mpeg inside, if any.
+        # This box ('wide', 'free' or 'skip'), after it's data, is immediately
+        # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
+        # can't detect 'mdat' here, it's too far for us.
+        (0, '\0\0', 4, ('wide', 'free', 'skip', 'junk')),
+        (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',)),
+        (0, '\0\0\0', 4, 'ftypmif1', 12, lambda header: (is_mp4(header), 26)),  # 'isobmff-image'.
+    )):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
   # Also apple.com has some .mov docs.
 
@@ -1094,8 +1108,8 @@ def analyze_jp2(fread, info, fskip):
     raise ValueError('Too short for jp2.')
   if not is_jp2(header):
     raise ValueError('jp2 signature not found.')
-  info['format'] = 'jp2'  # analyze_mp4 also sets it from ftyp.
-  analyze_mp4(fread, info, fskip, header)
+  info['format'] = 'jp2'  # analyze_mov also sets it from ftyp.
+  analyze_mov(fread, info, fskip, header)
 
 
 def is_jpc(header):
@@ -1126,8 +1140,8 @@ def analyze_jpeg2000(fread, info, fskip):
   if len(header) < 6:
     raise ValueError('Too short for jpeg2000.')
   if is_jp2(header):
-    info['format'] = 'jp2'  # analyze_mp4 also sets it from ftyp.
-    analyze_mp4(fread, info, fskip, header)
+    info['format'] = 'jp2'  # analyze_mov also sets it from ftyp.
+    analyze_mov(fread, info, fskip, header)
   elif is_jpc(header):
     analyze_jpc(fread, info, fskip, header)
   else:
@@ -1159,7 +1173,7 @@ def analyze_pnot(fread, info, fskip):
     raise ValueError('Bad pnot preview type (expecting %r): %r' % (preview_type, atom_type))
   if not fskip(atom_size - 8):
     raise ValueError('EOF in pnot preview data.')
-  analyze_mp4(fread, info, fskip)
+  analyze_mov(fread, info, fskip)
 
 
 # --- swf.
@@ -1340,7 +1354,7 @@ def get_ogg_es_track_info(header):
   elif header.startswith('#define'):
     return get_track_info_from_analyze_func(header, analyze_xbm)
   elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # This doesn't conflict with the codecs below.
-    return get_track_info_from_analyze_func(header, analyze_mp4)  # HEIF or AVIF.
+    return get_track_info_from_analyze_func(header, analyze_mov)  # HEIF or AVIF.
   elif (header.startswith('\0\0\0\1\x09') or
         header.startswith('\0\0\0\1\x27') or
         header.startswith('\0\0\0\1\x47') or
@@ -4007,7 +4021,7 @@ def get_mpeg_ts_es_track_info(header, stream_type):
           get_string_fread(header))
     elif is_jp2(header):
       track_info = get_track_info_from_analyze_func(
-          buffer(header, 12), analyze_mp4,
+          buffer(header, 12), analyze_mov,
           {'type': 'video', 'codec': 'mjpeg2000'})
     elif is_jpc(header):
       track_info = get_track_info_from_analyze_func(
@@ -4026,7 +4040,7 @@ def get_mpeg_ts_es_track_info(header, stream_type):
     track_info = {'type': 'video', 'codec': 'mjpeg2000'}
     if is_jp2(header):
       track_info = get_track_info_from_analyze_func(
-          buffer(header, 12), analyze_mp4,
+          buffer(header, 12), analyze_mov,
           {'type': 'video', 'codec': 'mjpeg2000'})
     elif header:
       raise ValueError('jp2 signature not found.')
@@ -6600,7 +6614,7 @@ def quick_detect_image_format(header):
   #elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' L'):  # Needs 12 bytes.
   #  return get_track_info_from_analyze_func(header, analyze_webp)
   #elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # Needs 12 bytes.
-  #  return get_track_info_from_analyze_func(header, analyze_mp4)  # HEIF or AVIF.
+  #  return get_track_info_from_analyze_func(header, analyze_mov)  # HEIF or AVIF.
   else:
     return None
 
@@ -9067,19 +9081,6 @@ FORMAT_ITEMS = (
 
     # Can also be .webm as a subformat.
     ('mkv', (0, '\x1a\x45\xdf\xa3')),
-    # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
-    ('mp4-wellknown-brand', (0, '\0\0\0', 4, 'ftyp', 8, ('qt  ', 'f4v ', 'isom', 'mp41', 'mp42', 'jp2 ', 'jpm ', 'jpx '), 12, lambda header: (is_mp4(header), 26))),
-    ('mp4', (0, '\0\0\0', 4, 'ftyp', 8, lambda header: (is_mp4(header), 26))),
-    ('f4v',),  # From 'mp4'.
-    ('webm',),  # From 'mp4'.
-    ('mov',),  # From 'mp4'.
-    ('isobmff-image',),  # From 'mp4'.
-    ('mov-mdat', (4, 'mdat')),  # TODO(pts): Analyze mpeg inside.
-    # This box ('wide', 'free' or 'skip'), after it's data, is immediately
-    # followed by an 'mdat' box (typically 4-byte size, then 'mdat'), but we
-    # can't detect 'mdat' here, it's too far for us.
-    ('mov-skip', (0, '\0\0', 4, ('wide', 'free', 'skip', 'junk'))),
-    ('mov-moov', (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',))),
     ('ogg', (0, 'OggS\0')),
     ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
     ('wmv',),  # From 'asf'.
@@ -9166,7 +9167,6 @@ FORMAT_ITEMS = (
     ('flif', (0, 'FLIF', 4, ('\x31', '\x33', '\x34', '\x41', '\x43', '\x44', '\x51', '\x53', '\x54', '\x61', '\x63', '\x64'), 5, ('0', '1', '2'))),
     ('fuif', (0, ('FUIF', 'FUAF'), 4, ('\x31', '\x32', '\x33', '\x34', '\x35'), 5, tuple(chr(c) for c in xrange(0x26 + 1, 0x26 + 16)))),
     ('bpg', (0, 'BPG\xfb', 6, lambda header: (is_bpg(header), 30))),
-    ('isobmff-image', (0, '\0\0\0', 4, 'ftypmif1', 12, lambda header: (is_mp4(header), 26))),
     # By ImageMagick.
     ('miff', (0, 'id=ImageMagick')),
     # By GIMP.
@@ -9663,13 +9663,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'xz': analyze_xz,
     'lzma': analyze_lzma,
     'olecf': analyze_olecf,
-    'mp4': analyze_mp4,
-    'mp4-wellknown-brand': analyze_mp4,
-    'isobmff-image': analyze_mp4,
-    'mov': analyze_mp4,
-    'mov-mdat': analyze_mp4,
-    'mov-small': analyze_mp4,
-    'mov-moov': analyze_mp4,
     'swf': analyze_swf,
     'ogg': analyze_ogg,
     'realmedia': analyze_realmedia,
