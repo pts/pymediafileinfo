@@ -8831,10 +8831,12 @@ def analyze_olecf(fread, info, fskip):
   if byte_order != 0xfffe:
     raise ValueError('Bad olecf byte_order.')
   # http://fileformats.archiveteam.org/wiki/FlashPix
+  # TODO(pts): Check dll_version and sector_shift based on olefile.
   if (magic[0] == '\xd0' and 9 <= sector_shift <= 18 and
       not reserved0 and not reserved1 and not reserved2 and
       clid == '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'):
-    root_dir_ofs = 512 + (sect_dir_start << sector_shift)
+    # https://github.com/decalage2/olefile/blob/7f15211f136146df0ccfc5b70be3961944a8be92/olefile/olefile.py#L1673-L1685
+    root_dir_ofs = (sect_dir_start + 1) << sector_shift
     if fskip(root_dir_ofs - len(header)):
       data = fread(96)
       if len(data) == 96:
