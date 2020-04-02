@@ -94,6 +94,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   maxDiff = None
 
   JP2_HEADER = '0000000c6a5020200d0a870a00000014667479706a703220000000006a7032200000002d6a703268000000166968647200000120000001600003080700000000000f636f6c7201000000000012'.decode('hex')
+  HXS_HEADER = 'ITOLITLS\1\0\0\0\x28\0\0\0????????\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'
 
   def test_yield_swapped_bytes(self):
     f = mediafileinfo_detect.yield_swapped_bytes
@@ -1428,6 +1429,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'pe-nonexec', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 58, 'A\0\0\0?PE\0\0\x64\x86\1\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22, '.its\0\0\0\0\x50\0\0\0\x52\0\0\0', '?' * 24))),
                      {'format': 'pe-nonexec', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 58, 'A\0\0\0?PE\0\0\x64\x86\1\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22, '.its\0\0\0\0\x50\0\0\0\x52\0\0\0', '?' * 24, '-' * 9, self.HXS_HEADER))),
+                     {'format': 'hxs', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64'})
+
+  def test_detect_hxs(self):
+    self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 
   def test_detect_rtf(self):
     self.assertEqual(FORMAT_DB.detect(r'{\rtf1')[0], 'rtf')

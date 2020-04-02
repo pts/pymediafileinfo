@@ -5314,6 +5314,30 @@ def analyze_exe(fread, info, fskip):
       info['format'] = 'win' + suffix  # 'winexe'
   else:  # Not executable.
     info['format'] = 'pe-nonexec'
+    its_ofs = None
+    for _ in xrange(section_count):
+      data = fread(40)
+      if len(data) < 40:
+        raise ValueError('EOF in pe section table.')
+      name, virtual_size, virtual_address = struct.unpack('<8sLL', data[:16])
+      name = name.rstrip('\0')
+      # http://www.russotto.net/chm/itolitlsformat.html
+      if name == '.its':
+        its_ofs = virtual_size + virtual_address
+    if its_ofs is not None:
+      ofs = len(header) + 40 * section_count
+      if its_ofs <= ofs:
+        data = header[its_ofs:]
+      else:
+        data = ''
+        if not fskip(its_ofs - ofs):
+          data = None
+      if data is not None:
+        if len(data) < 40:
+          data += fread(40 - len(data))
+        if (len(data) >= 40 and data.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and data[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'):
+          # http://www.russotto.net/chm/itolitlsformat.html
+          info['format'] = 'hxs'
 
 
 def parse_svg_dimen(data):
@@ -9427,6 +9451,12 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/CHM
     # http://www.russotto.net/chm/itolitlsformat.html
     ('chm', (0, 'ITSF\3\0\0\0', 9, '\0\0\0\1\0\0\0', 22, '\0\0\x10\xfd\x01\x7c\xaa\x7b\xd0\x11\x9e\x0c\x00\xa0\xc9\x22\xe6\xec\x11\xfd\x01\x7c\xaa\x7b\xd0\x11\x9e\x0c\x00\xa0\xc9\x22\xe6\xec')),
+    # http://fileformats.archiveteam.org/wiki/Microsoft_Help_2
+    # http://www.russotto.net/chm/itolitlsformat.html
+    # TODO(pts): Also add .mshc (.zip-based). https://fileinfo.com/extension/mshc
+    # Please note that typically there is a pe header (analyze_exe) in front
+    # of this.
+    ('hxs', (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
 
     # Compressed archive.
 
