@@ -5239,42 +5239,81 @@ def analyze_wav(fread, info, fskip):
   })
 
 
+
+PE_ARCHITECTURES = {
+    0x14c: 'i386',
+    0x8664: 'amd64',
+    0x1c0: 'arm',
+    0x1c4: 'arm-thumb2',
+    0xaa64: 'arm64',
+    0xebc: 'efi',
+    0x200: 'ia64',  # Itanium.
+}
+
+
+
 def analyze_exe(fread, info, fskip):
   header = fread(64)
   if len(header) < 64:
     raise ValueError('Too short for exe.')
   if not header.startswith('MZ'):
     raise ValueError('exe signature not found.')
-  info['format'] = 'exe'
   pe_ofs, = struct.unpack('<L', header[60 : 64])
-  if pe_ofs < 8180 and len(header) < pe_ofs + 300:
-    header += fread(pe_ofs + 300 - len(header))
-  if (len(header) >= pe_ofs + 6 and
-      header[pe_ofs : pe_ofs + 4] == 'PE\0\0' and
-      header[pe_ofs + 24 : pe_ofs + 26] in ('\x0b\1', '\x0b\2') and
-      # Some known architectures.
-      header[pe_ofs + 4 : pe_ofs + 6] in ('\x4c\01', '\x64\x86', '\x64\xaa', '\xc0\x01', '\xc4\x01', '\xbc\x0e', '\x00\x02')):
-    characteristics, = struct.unpack('<H', header[pe_ofs + 22 : pe_ofs + 24])
-    if characteristics & 0x2000:
-      suffix = 'dll'
-    else:
-      suffix = 'exe'
-    # Windows .exe file (PE, Portable Executable).
-    # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
-    info['format'] = 'win' + suffix  # 'winexe'
-    # 108 bytes for PE32+, 92 bytes for PE32.
-    rva_ofs = pe_ofs + 24 + 92 + 16 * (
-        header[pe_ofs + 24 : pe_ofs + 26] == '\x0b\2')
+  if pe_ofs < 8180 and len(header) < pe_ofs + 26:
+    header += fread(pe_ofs + 26 - len(header))
+  if not (len(header) >= pe_ofs + 24 and
+          header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
+    info['format'], info['arch'] = 'exe', '8086'  # MS-DOS .exe.
+    return
+  # Windows .exe file (PE, Portable Executable).
+  # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
+  (machine, section_count, date_time, symbol_table_ofs, symbol_count,
+   opthd_size, characteristics,
+  ) = struct.unpack('<HHLLLHH', header[pe_ofs + 4 : pe_ofs + 24])
+  info['arch'] = PE_ARCHITECTURES.get(machine) or '0x%x' % machine
+  if not 24 <= opthd_size <= 255:
+    info['format'] = 'coff'
+    return
+  if len(header) < pe_ofs + 26:
+    raise ValueError('EOF in pe magic.')
+  magic, = struct.unpack('<H', header[pe_ofs + 24 : pe_ofs + 26])
+  info['format'] = 'pe'
+  if magic == 0x10b:  # 32-bit.
+    info['subformat'], opthd12_size = 'pe32', 96
+  elif magic == 0x20b:  # 64-bit.
+    info['subformat'], opthd12_size = 'pe32+', 112
+  elif magic == 0x107:
+    info['subformat'] = 'rom-image'
+    return
+  else:
+    info['subformat'] = '0x%x' % magic
+    return
+  if len(header) < pe_ofs + 24 + opthd_size:
+    header += fread(pe_ofs + 24 + opthd_size - len(header))
+    if len(header) < pe_ofs + 24 + opthd_size:
+      raise ValueError('EOF in pe optional header.')
+  if characteristics & 2:  # Exectuable.
+    if opthd_size < opthd12_size:
+      raise ValueError('pe optional header too short.')
+    suffix = ('exe', 'dll')[bool(characteristics & 0x2000)]
+    rva_ofs = pe_ofs + 24 + (opthd12_size - 4)
     rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
+    if rva_count > ((opthd_size - opthd12_size) >> 2):
+      raise ValueError('pe rva_count too large.')
+    vaddr = size = 0
     if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
       vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
-      if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
-        info['format'] = 'dotnet' + suffix  # 'dotnetexe'  # .NET executable assembly.
-        return
-        # Check the subsystem field for UEFI.
-    if header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
+    # https://stackoverflow.com/q/36569710
+    # https://reverseengineering.stackexchange.com/q/1614
+    if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
+      info['format'] = 'dotnet' + suffix  # 'dotnetexe'  # .NET executable assembly.
+    elif header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
+      # Above: check the subsystem field for UEFI.
       info['format'] = 'efi' + suffix  # 'efiexe'
-      return
+    else:
+      info['format'] = 'win' + suffix  # 'winexe'
+  else:  # Not executable.
+    info['format'] = 'pe-nonexec'
 
 
 def parse_svg_dimen(data):
@@ -9547,6 +9586,10 @@ FORMAT_ITEMS = (
     ('dotnetdll',),  # From 'exe'.
     ('windll',),  # From 'exe'.
     ('efidll',),  # From 'exe'.
+    ('pe',),  # From 'exe'.
+    ('pe-nonexec',),  # From 'exe'.
+    ('coff',),  # From 'exe'.
+    ('hxs',),  # From 'exe'.
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
     ('com32r', (0, '\xb8\xfeL\xcd!')),  # .c32
     # https://github.com/pts/pts-xcom
