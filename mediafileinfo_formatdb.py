@@ -420,6 +420,6 @@ class FormatDb(object):
       finally:
         if info.get('tracks'):
           copy_info_from_tracks(info)
-      if info['format'] not in self.formats:
+      if info['format'] not in self.formats and info['format'] != '?':
         raise RuntimeError('Analyzing of format %s returned unknown format: %r' % (format, info['format']))
     return info
