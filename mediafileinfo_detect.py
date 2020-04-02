@@ -9064,6 +9064,28 @@ def count_is_troff(header):
   return 0
 
 
+def count_is_info(header):
+  # https://www.gnu.org/software/texinfo/manual/texinfo/html_node/Info-Format-Specification.html
+  # https://www.gnu.org/software/texinfo/manual/texinfo/html_node/Info-Format-Preamble.html
+  if not header.startswith('This is '):
+    return 0
+  i = header.find('\n')
+  if not 0 <= i < 170:  # The number 170 is abitrary.
+    return 0
+  header = header[:i]
+  # Even Texinfo generates this.
+  i = header.find(', produced by ')
+  if i < 0:
+    return 0
+  i += 14
+  if i >= len(header):
+    return 0
+  if header[i : i + 17] == 'makeinfo version ' and header[i + 17 : i + 18].isdigit():
+    return (i + 19) * 100 + 55
+  else:
+    return (i + 1) * 100  # +1: '\n'
+
+
 def count_is_xml(header):
   # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   if header.startswith('<?xml?>'):
@@ -9450,6 +9472,7 @@ FORMAT_ITEMS = (
     ('texinfo', (0, '\\input texinfo', 14, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@ignore', 7, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@comment', 8, ('\r', '\n', ' ', '\t'))),
+    ('info', (0, 'This is ', 170, lambda header: adjust_confidence(800, count_is_info(header)))),
     # http://fileformats.archiveteam.org/wiki/HLP_(WinHelp)
     # http://www.oocities.org/mwinterhoff/helpfile.htm
     ('winhelp', (0, '\x3f\x5f\3\0', 6, '\0\0', 12, lambda header: (True, 400 * (len(header) >= 12 and header[8 : 12] == '\xff\xff\xff\xff') or 1))),

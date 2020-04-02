@@ -1454,6 +1454,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(FORMAT_DB.detect('.de xy')[0], 'troff')
     self.assertEqual(FORMAT_DB.detect('.EF \'hi\'')[0], 'troff')
 
+  def test_detect_info(self):
+    self.assertEqual(FORMAT_DB.detect('This is grep.info-t, produced by t\n')[0], 'info')
+    data1 = 'This is grep.info-t, produced by makeinfo version 6.3 from grep.texi.\n'
+    self.assertEqual(FORMAT_DB.detect(data1)[0], 'info')
+    self.assertEqual(mediafileinfo_detect.count_is_info(data1), 5255)
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
