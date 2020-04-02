@@ -9385,6 +9385,9 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/HLP_(WinHelp)
     # http://www.oocities.org/mwinterhoff/helpfile.htm
     ('winhelp', (0, '\x3f\x5f\3\0', 6, '\0\0', 12, lambda header: (True, 400 * (len(header) >= 12 and header[8 : 12] == '\xff\xff\xff\xff') or 1))),
+    # http://fileformats.archiveteam.org/wiki/CHM
+    # http://www.russotto.net/chm/itolitlsformat.html
+    ('chm', (0, 'ITSF\3\0\0\0', 9, '\0\0\0\1\0\0\0', 22, '\0\0\x10\xfd\x01\x7c\xaa\x7b\xd0\x11\x9e\x0c\x00\xa0\xc9\x22\xe6\xec\x11\xfd\x01\x7c\xaa\x7b\xd0\x11\x9e\x0c\x00\xa0\xc9\x22\xe6\xec')),
 
     # Compressed archive.
 
