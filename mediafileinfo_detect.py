@@ -9382,6 +9382,9 @@ FORMAT_ITEMS = (
     ('latex', (0, '\\documentclass', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
     # Older than 'latex', now obsolete.
     ('latex-209', (0, '\\documentstyle', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
+    # http://fileformats.archiveteam.org/wiki/HLP_(WinHelp)
+    # http://www.oocities.org/mwinterhoff/helpfile.htm
+    ('winhelp', (0, '\x3f\x5f\3\0', 6, '\0\0', 12, lambda header: (True, 400 * (len(header) >= 12 and header[8 : 12] == '\xff\xff\xff\xff') or 1))),
 
     # Compressed archive.
 
