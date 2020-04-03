@@ -1405,10 +1405,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'lzma', 'codec': 'lzma'})
 
   def test_analyze_exe(self):
-    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, 'MZ' + '?' * 62),
-                     {'format': 'exe', 'arch': '8086'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, 'MZ' + '?' * 30),
+                     {'format': 'exe'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 14, ' \0', '?' * 14))),
+                     {'format': 'dosexe', 'detected_format': 'exe', 'arch': '8086'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 58, 'A\0\0\0?PE\0\0', '?' * 20))),
-                     {'format': 'coff', 'detected_format': 'exe', 'arch': '0x3f3f'})
+                     {'format': 'pe-coff', 'detected_format': 'exe', 'arch': '0x3f3f'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 58, 'A\0\0\0?PE\0\0\x4c\1', '?' * 14, '\x18\0??\1\2'))),
                      {'format': 'pe', 'subformat': '0x201', 'detected_format': 'exe', 'arch': 'i386'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ', '?' * 58, 'A\0\0\0?PE\0\0\x4c\1', '?' * 14, '\x18\0??\7\1'))),

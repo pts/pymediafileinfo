@@ -5251,19 +5251,22 @@ PE_ARCHITECTURES = {
 }
 
 
-
 def analyze_exe(fread, info, fskip):
   header = fread(64)
-  if len(header) < 64:
+  if len(header) < 32:
     raise ValueError('Too short for exe.')
   if not header.startswith('MZ'):
     raise ValueError('exe signature not found.')
-  pe_ofs, = struct.unpack('<L', header[60 : 64])
-  if pe_ofs < 8180 and len(header) < pe_ofs + 26:
+  pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
+  if 64 <= pe_ofs < 8180 and len(header) < pe_ofs + 26:
     header += fread(pe_ofs + 26 - len(header))
-  if not (len(header) >= pe_ofs + 24 and
+  if not (pe_ofs >= 64 and len(header) >= pe_ofs + 24 and
           header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
-    info['format'], info['arch'] = 'exe', '8086'  # MS-DOS .exe.
+    # http://www.fysnet.net/exehdr.htm
+    info['format'] = 'exe'
+    reloc_ofs, = struct.unpack('<H', header[16 : 18])
+    if reloc_ofs <= 64:  # file-5.14.
+      info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
     return
   # Windows .exe file (PE, Portable Executable).
   # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
@@ -5272,7 +5275,7 @@ def analyze_exe(fread, info, fskip):
   ) = struct.unpack('<HHLLLHH', header[pe_ofs + 4 : pe_ofs + 24])
   info['arch'] = PE_ARCHITECTURES.get(machine) or '0x%x' % machine
   if not 24 <= opthd_size <= 255:
-    info['format'] = 'coff'
+    info['format'] = 'pe-coff'
     return
   if len(header) < pe_ofs + 26:
     raise ValueError('EOF in pe magic.')
@@ -9638,8 +9641,10 @@ FORMAT_ITEMS = (
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
-    ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 64, 1))),
+    ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 32, 1))),
+    ('dosexe',),  # From 'exe'.
     ('dotnetexe',),  # From 'exe'.
+    ('pe-coff',),  # From 'exe'.
     ('winexe',),  # From 'exe'.
     ('efiexe',),  # From 'exe'.
     ('dotnetdll',),  # From 'exe'.
