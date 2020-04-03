@@ -5251,6 +5251,38 @@ PE_ARCHITECTURES = {
 }
 
 
+def count_is_exe(header):
+  if not header.startswith('MZ') or len(header) < 32:
+    return 0
+  magic, size_lo, size_hi, reloc_count = struct.unpack('<4H', header[:8])
+  if size_lo > 511 or (size_hi == 0 and size_lo > 0):
+    return 0
+  pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
+  if 64 <= pe_ofs <= 8166:  # Probably PE (Win32 etc.).
+    # We only get the extra 400 points if header is long enough. Typically
+    # pe_ofs is 64 or 96, so header is long enough.
+    return (438 + 88 + 400 * (header[pe_ofs : pe_ofs + 4] == 'PE\0\0') +
+            400 * (size_lo == 0 and size_hi == 0))
+  if size_hi == 0:
+    return 0
+  reloc_ofs, = struct.unpack('<H', header[24 : 26])
+  confidence = 201
+  if reloc_count == 0:
+    confidence += 200
+  if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx.
+    confidence += 800
+  else:
+    if size_lo == 0 and size_hi == 0:
+      confidence += 400
+    if reloc_count == 0 and reloc_ofs == 0:
+      confidence += 200
+    elif 28 <= reloc_ofs < 64:
+      confidence += 135
+    elif 64 <= reloc_ofs < 512:
+      confidence += 88
+  return confidence
+
+
 def analyze_exe(fread, info, fskip):
   header = fread(64)
   if len(header) < 32:
@@ -5258,15 +5290,46 @@ def analyze_exe(fread, info, fskip):
   if not header.startswith('MZ'):
     raise ValueError('exe signature not found.')
   pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
-  if 64 <= pe_ofs < 8180 and len(header) < pe_ofs + 26:
+  # 8166 is mostly arbitrary. Typically pe_ofs is 64 or 96.
+  if 64 <= pe_ofs < 8166 and len(header) < pe_ofs + 26:
     header += fread(pe_ofs + 26 - len(header))
-  if not (pe_ofs >= 64 and len(header) >= pe_ofs + 24 and
+  if not (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
           header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
     # http://www.fysnet.net/exehdr.htm
+    # http://www.delorie.com/djgpp/doc/exe/
     info['format'] = 'exe'
-    reloc_ofs, = struct.unpack('<H', header[16 : 18])
-    if reloc_ofs <= 64:  # file-5.14.
-      info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
+    magic, size_lo, size_hi, reloc_count = struct.unpack('<4H', header[:8])
+    reloc_ofs, = struct.unpack('<H', header[24 : 26])
+    if size_hi == 0:
+      raise ValueError('Empty exe image.')
+    if size_lo > 511:
+      raise ValueError('Bad exe size_lo: %d' % size_lo)
+    if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx.
+      # dosexe is exe with a DOS extender stub.
+      # https://en.wikipedia.org/wiki/DOS_extender
+      info['format'], info['subformat'], info['arch'] = 'dosxexe', 'wdosx', 'i386'
+    elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':
+      # https://en.wikipedia.org/wiki/PMODE
+      # TODO(pts): Add PMODE/W for Watcom C++ compiler.
+      # TODO(pts): Add PMODE.
+      # TODO(pts): Add X32VM with Digial Mars compiler (dmc -mx) (https://github.com/Olde-Skuul/KitchenSink/tree/master/sdks/dos/x32).
+      # TODO(pts): Add DOS/32 (https://en.wikipedia.org/wiki/DOS/32) == DOS/32A (https://dos32a.narechk.net/index_en.html).
+      # TODO(pts): Add DOS/4G and DOS/4GW.
+      info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodedj', 'i386'
+    elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
+      comment_ofs = reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
+      is_comment64 = False
+      if reloc_count == 0 and reloc_ofs == 0 and len(header) >= 64 and not header[22 : 64].rstrip('\0'):
+        comment_ofs, is_comment64 = 64, True
+      if comment_ofs <= 490 and len(header) < 512:
+        header += fread(512 - len(header))
+      if not is_comment64 and comment_ofs <= 200 and header[comment_ofs : comment_ofs + 14] == '\0\0\0\0\r\nCWSDPMI ':
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'cwsdpmi', 'i386'
+      elif is_comment64 and header[comment_ofs : comment_ofs + 24] == '\r\nstub.h generated from ':
+        # Also at offset 512: 'go32stub, v 2.02'.
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'djgpp', 'i386'
+      else:
+        info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
     return
   # Windows .exe file (PE, Portable Executable).
   # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
@@ -9641,8 +9704,10 @@ FORMAT_ITEMS = (
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
-    ('exe', (0, 'MZ', 64, lambda header: (len(header) >= 32, 1))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('exe', (0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header)))),
     ('dosexe',),  # From 'exe'.
+    ('dosxexe',),  # From 'exe'.
     ('dotnetexe',),  # From 'exe'.
     ('pe-coff',),  # From 'exe'.
     ('winexe',),  # From 'exe'.
