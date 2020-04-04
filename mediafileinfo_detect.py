@@ -9746,6 +9746,10 @@ FORMAT_ITEMS = (
     ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
     ('utf8', (0, '\xef\xbb\xbf')),  # BOM.
     ('utf16', (0, ('\xff\xfe', '\xfe\xff'))),  # BOM.
+    # http://fileformats.archiveteam.org/wiki/PostScript_Printer_Description
+    ('ppd', (0, '*PPD-Adobe: "')),  # Normal recommended header.
+    ('ppd', (0, '*PPD-Adobe:  "')),  # Windows 95 has some with double spaces.
+    ('ppd', (0, '*Product: "')),  # Windows 95 installer has many of these.
 )
 
 
