@@ -9750,6 +9750,23 @@ FORMAT_ITEMS = (
     ('ppd', (0, '*PPD-Adobe: "')),  # Normal recommended header.
     ('ppd', (0, '*PPD-Adobe:  "')),  # Windows 95 has some with double spaces.
     ('ppd', (0, '*Product: "')),  # Windows 95 installer has many of these.
+    # http://justsolve.archiveteam.org/wiki/ICC_profile
+    # http://www.color.org/specification/ICC.2-2019.pdf
+    # http://www.color.org/registry/signature/TagRegistry-2019-10.pdf
+    ('icm', (
+        0, '\0', 1, tuple(chr(c) for c in xrange(32)),  #  At most 2 MiB.
+        # CMM type. Superset of CMM signatures in: http://www.color.org/registry/signature/TagRegistry-2019-10.pdf
+        # Plus extra observed in the wild: ('\0\0\0\0', 'Lino', 'MSFT', 'SCRS', 'scrs').
+        4, ('\0\0\0\0', 'Lino', 'MSFT', 'SCRS', 'scrs', 'ADBE', 'ACMS', 'appl', 'CCMS', 'UCCM', 'UCMS', 'EFI ', 'FF  ', 'EXAC', 'HCMM', 'argl', 'LgoS', 'HDM ', 'lcms', 'RIMX', 'KCMS', 'MCML', 'WCS ', 'SIGN', 'ONYX', 'RGMS', 'SICC', 'TCMM', '32BT', 'vivo', 'WTG ', 'zc00'),
+        8, ('\1', '\2', '\3', '\4', '\5', '\6', '\7'),  # Profile version.
+        12, ('scnr', 'mntr', 'prtr', 'link', 'spac', 'abst', 'nmcl', 'cenc', 'mid ', 'mlnk', 'mvis'),
+        16, ('\0\0\0\0', 'XYZ ', 'Lab ', 'Luv ', 'YCbr', 'Yxy ', 'LMS ', 'RGB ', 'GRAY', 'HSV ', 'HLS ', 'CMYK', 'CMY ', '2CLR', '3CLR', '4CLR', '5CLR', '6CLR', '7CLR', '8CLR', '9CLR', 'ACLR', 'BCLR', 'CCLR', 'DCLR', 'ECLR', 'FCLR'),
+        20, ('\0\0\0\0', 'XYZ ', 'Lab '),
+        36, 'acsp',
+        40, ('\0\0\0\0', 'APPL', 'MSFT', 'SGI ', 'SUNW', '*nix'),
+        # 270 possible manufacturer values: http://www.color.org/signatureRegistry/index.xalter
+        #48, ('\0\0\0\0', 'ADBE', 'CANO', 'EPSO', 'HP  ', 'IBM ', 'IEC ', 'KODA', 'QMS ', 'TEKT', 'argl', 'none'),
+    )),
 )
 
 
