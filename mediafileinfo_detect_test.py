@@ -1448,6 +1448,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?PE\0\0\x64\x86\1\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22, '.its\0\0\0\0\x50\0\0\0\x52\0\0\0', '?' * 24, '-' * 9, self.HXS_HEADER))),
                      {'format': 'hxs', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64'})
 
+  def test_analyze_macho(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xce\xfa\xed\xfe\7\0\0\0\3\0\0\0\2\0\0\0'),
+                     {'format': 'macho', 'subformat': '32bit', 'binary_type': 'executable', 'arch': 'i386', 'endian': 'little'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xcf\xfa\xed\xfe\7\0\0\1\3\0\0\0\4\0\0\0'),
+                     {'format': 'macho', 'subformat': '64bit', 'binary_type': 'core', 'arch': 'amd64', 'endian': 'little'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xfe\xed\xfa\xce\0\0\0\x12????\0\0\0\6'),
+                     {'format': 'macho', 'subformat': '32bit', 'binary_type': 'shlib', 'arch': 'powerpc', 'endian': 'big'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xfe\xed\xfa\xcf\1\0\0\x12????\0\0\0\1'),
+                     {'format': 'macho', 'subformat': '64bit', 'binary_type': 'object', 'arch': 'powerpc64', 'endian': 'big'})
+
   def test_detect_hxs(self):
     self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 

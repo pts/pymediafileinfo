@@ -9098,6 +9098,72 @@ def analyze_macbinary(fread, info, fskip):
       raise
 
 
+MACHO_BINARY_TYPES = {
+    1: 'object',
+    2: 'executable',
+    3: 'fixedvm-shlib',
+    4: 'core',
+    5: 'preload',
+    6: 'shlib',
+    7: 'dld',
+    8: 'bundle',
+    9: 'shlib-stub',
+    10: 'dsym-cf',
+    11: 'kext',
+}
+
+MACHO_ARCHS = {
+    1: 'vax',
+    2: 'romp',
+    4: 'ns32032',
+    5: 'ns32332',
+    6: 'm68k',
+    7: 'i386',
+    8: 'mips',
+    9: 'ns32532',
+    10: 'mc98000',
+    11: 'hhpa',
+    12: 'arm',
+    13: 'm88k',
+    14: 'sparc',
+    15: 'i860g',
+    16: 'alpha',
+    17: 'rs6000',
+    18: 'powerpc',
+    107: 'amd64',
+    108: 'mips64',
+    112: 'arm64',
+    114: 'sparc',
+    118: 'powerpc64',
+}
+
+
+def analyze_macho(fread, info, fskip, format='macho',
+                  spec=((0, ('\xce\xfa\xed\xfe', '\xcf\xfa\xed\xfe'), 4, tuple(chr(c) for c in xrange(1, 23)), 5, '\0\0', 7, ('\0', '\1'), 12, tuple(chr(c) for c in xrange(1, 16)), 13, '\0\0\0'),
+                        (0, ('\xfe\xed\xfa\xce', '\xfe\xed\xfa\xcf'), 4, ('\0', '\1'), 5, '\0\0', 7, tuple(chr(c) for c in xrange(1, 23)), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 16))))):
+  # http://fileformats.archiveteam.org/wiki/Mach-O
+  header = fread(16)
+  if len(header) < 16:
+    raise ValueError('Too short for macho.')
+  fmt = '<>'[header.startswith('\xfe')]
+  magic, archx, subarch, binary_type = struct.unpack(fmt + 'LLLL', header[:16])
+  if (magic & ~1) != 0xfeedface:
+    raise ValueError('macho signature not found.')
+  archis64, arch = archx >> 24, archx & 0xffffff
+  if archis64 not in (0, 1):
+    raise ValueError('Bad macho archis64: %d' % archis64)
+  if not 1 <= arch < 23:
+    raise ValueError('Bad macho arch: %d' % arch)
+  if not 1 <= binary_type < 16:
+    raise ValueError('Bad macho binary_type: %d' % binary_type)
+  info['format'] = 'macho'
+  info['subformat'] = ('32bit', '64bit')[(magic & 1)]
+  info['binary_type'] = MACHO_BINARY_TYPES.get(binary_type, str(binary_type))
+  info['endian'] = ('little', 'big')[fmt == '>']
+  arch = arch + 100 * archis64
+  info['arch'] = MACHO_ARCHS.get(arch, str(arch))
+
+
 def count_is_rtf(header):
   # http://fileformats.archiveteam.org/wiki/RTF
   # RTF specification 1.9.1. https://interoperability.blob.core.windows.net/files/Archive_References/[MSFT-RTF].pdf
