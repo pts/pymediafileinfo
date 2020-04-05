@@ -1458,6 +1458,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xfe\xed\xfa\xcf\1\0\0\x12????\0\0\0\1'),
                      {'format': 'macho', 'subformat': '64bit', 'binary_type': 'object', 'arch': 'powerpc64', 'endian': 'big'})
 
+  def test_analyze_pef(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pef, 'Joy!peffpwpc\0\0\0\1????????????????\0\3\0\2'),
+                     {'format': 'pef', 'binary_type': 'executable', 'arch': 'powerpc', 'endian': 'big'})
+
   def test_detect_hxs(self):
     self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 

@@ -9164,6 +9164,30 @@ def analyze_macho(fread, info, fskip, format='macho',
   info['arch'] = MACHO_ARCHS.get(arch, str(arch))
 
 
+def analyze_pef(fread, info, fskip, format='pef',
+                spec=(0, 'Joy!peff', 8, ('pwpc', 'm68k'), 12, '\0\0\0\1', 32, '\0', 33, tuple(chr(c) for c in xrange(1, 33)), 34, '\0', 35, tuple(chr(c) for c in xrange(1, 33)))):
+  # https://en.wikipedia.org/wiki/Preferred_Executable_Format
+  # https://developer.apple.com/library/archive/documentation/mac/pdf/MacOS_RT_Architectures.pdf
+  # The PEF is usually in the data fork, and usually it's powerpc.
+  header = fread(36)
+  if len(header) < 36:
+    raise ValueError('Too short for pef.')
+  (magic, arch, version, section_count, inst_section_count,
+  ) = struct.unpack('>8s4sL16xHH', header[:36])
+  if magic != 'Joy!peff':
+    raise ValueError('pef signature not found.')
+  if arch not in ('pwpc', 'm64k'):
+    raise ValueError('Bad pef arch: %r' % arch)
+  if version != 1:
+    raise ValueError('Bad pef version: %d' % version)
+  if not 1 <= section_count < 33:
+    raise ValueError('Bad pef section_count: %d' % section_count)
+  if not 1 <= inst_section_count < 33:
+    raise ValueError('Bad pef inst_section_count: %d' % inst_section_count)
+  info['format'], info['endian'], info['binary_type'] = 'pef', 'big', 'executable'
+  info['arch'] = ('m68k', 'powerpc')[arch == 'pwpc']  # m68k here is CMF-86K.
+
+
 def count_is_rtf(header):
   # http://fileformats.archiveteam.org/wiki/RTF
   # RTF specification 1.9.1. https://interoperability.blob.core.windows.net/files/Archive_References/[MSFT-RTF].pdf
