@@ -9188,6 +9188,108 @@ def analyze_pef(fread, info, fskip, format='pef',
   info['arch'] = ('m68k', 'powerpc')[arch == 'pwpc']  # m68k here is CMF-86K.
 
 
+ELF_OSABIS = {
+    0: 'generic-sysv',
+    1: 'hpux',
+    2: 'netbsd',
+    3: 'linux',
+    4: 'hurd',
+    6: 'solaris',
+    7: 'aix',
+    8: 'irix',
+    9: 'freebsd',
+    10: 'tru64',
+    11: 'modesto',
+    12: 'openbsd',
+    13: 'openvms',
+    14: 'nonstop-kernel',
+    15: 'aros',
+    16: 'fenixos',
+    17: 'cloudabi',
+    18: 'openvos',
+}
+
+# Names are consistent which MACHO_BINARY_TYPES.
+ELF_BINARY_TYPES = {
+    1: 'object',  # Relocatable.
+    2: 'executable',
+    3: 'shlib',
+    4: 'core',
+}
+
+# Names are consistent which MACHO_ARCHS.
+# Obsolete and obscure architectures are left out.
+ELF_ARCHS = {
+    1: 'we32100',
+    2: 'sparc',
+    3: 'i386',
+    4: 'm68k',
+    5: 'm88k',
+    6: 'i386',  # Non-canonical i386.
+    7: 'i386',  # Canonical i386.
+    8: 'mips',  # Canonical mips.
+    9: 'amdahl',
+    10: 'mips',  # Non-canonical mips.
+    11: 'rs6000',
+    15: 'parisc',
+    16: 'ncube',
+    17: 'vpp500',
+    18: 'sparc32plus',
+    20: 'powerpc',
+    21: 'powerpc64',
+    22: 's390',
+    40: 'arm',
+    41: 'alpha',
+    42: 'superh',
+    43: 'sparcv9',
+    50: 'ia64',  # Itanium.
+    62: 'amd64',
+    75: 'vax',
+    80: 'mmix',
+    92: 'openrisc',
+    183: 'arm64',  # AArch64.
+    243: 'riscv',
+}
+
+
+def analyze_elf(fread, info, fskip, format='elf',
+                spec=((0, '\x7fELF', 4, ('\1', '\2'), 5, '\1', 6, '\1', 7, tuple(chr(c) for c in xrange(32)), 19, '\0', 20, '\1\0\0\0'),
+                      (0, '\x7fELF', 4, ('\1', '\2'), 5, '\2', 6, '\1', 7, tuple(chr(c) for c in xrange(32)), 18, '\0', 20, '\0\0\0\1'))):
+  # https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+  header = fread(24)
+  if len(header) < 24:
+    raise ValueError('Too short for elf.')
+  if not header.startswith('\x7fELF'):
+    raise ValueError('elf signature not found.')
+  fmt = '<>'[header[5] == '\2']
+  (magic, classx, endian, version, osabi, abiversion, pad, binary_type, arch, version2,
+  ) = struct.unpack(fmt + '4sBBBBB7sHHL', header)
+  if classx not in (1, 2):
+    raise ValueError('Bad elf class: %d' % classx)
+  if endian not in (1, 2):
+    raise ValueError('Bad elf endian: %d' % endian)
+  if version != 1:
+    raise ValueError('Bad elf version: %d' % version)
+  if version2 != 1:
+    raise ValueError('Bad elf version2: %d' % version2)
+  if osabi >= 32:
+    raise ValueError('Bad elf osabi: %d' % osabi)
+  if arch > 255:
+    raise ValueError('Bad elf arch: %d' % arch)
+  info['format'] = 'elf'
+  info['subformat'] = (0, '32bit', '64bit')[classx]
+  info['endian'] = (0, 'little', 'big')[endian]
+  info['os'] = ELF_OSABIS.get(osabi, str(osabi))
+  # Don't match spec on this, there can be os-specific values.
+  info['binary_type'] = ELF_BINARY_TYPES.get(binary_type, str(binary_type))
+  # Don't match spec on this, there can be high values.
+  info['arch'] = ELF_ARCHS.get(arch, str(arch))
+  if not (1 <= binary_type  <= 4) or (0xfe00 <= binary_type):
+    raise ValueError('Bad elf binary_type: %d' % binary_type)
+  if not arch:
+    raise ValueError('Bad elf arch, must not be 0.')
+
+
 def count_is_rtf(header):
   # http://fileformats.archiveteam.org/wiki/RTF
   # RTF specification 1.9.1. https://interoperability.blob.core.windows.net/files/Archive_References/[MSFT-RTF].pdf
@@ -9787,7 +9889,6 @@ FORMAT_ITEMS = (
     # *** JOE was aborted by UNIX signal ...
     # *** Modified files in JOE when it aborted on
     ('deadjoe', (0, '\n*** ', 5, ('These modified', 'JOE was aborte', 'Modified files'))),
-    ('elf', (0, '\x7fELF', 4, ('\1', '\2'), 5, ('\1', '\2'), 6, '\1')),
     # Filename extension: .mfo
     # Example: output of pymediafileinfo and media_scan.py.
     ('fileinfo', (0, 'format=')),
