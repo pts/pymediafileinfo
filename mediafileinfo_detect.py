@@ -9934,6 +9934,10 @@ FORMAT_ITEMS = (
     # http://nozdr.ru/marinais/
     # Krasilnikov 1993.
     ('com4mail', (0, 'BEGIN===tfud#of_Com4Mail_file#\r\n')),
+    # https://llvm.org/docs/BitCodeFormat.html#bitstream-format
+    # TODO(pts): For the ASCII (.ll) format: https://subscription.packtpub.com/book/application_development/9781785285981/1/ch01lvl1sec13/converting-ir-to-llvm-bitcode
+    ('llvm-bitcode', (0, '\xde\xc0\x17\x0b\0\0\0\0')),
+    ('llvm-bitcode', (0, 'BC\xc0\xde')),  # Usually continues with '\x21\0c\00' -- is it a function?
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
     ('cue', (0, 'REM DISCID ')),
