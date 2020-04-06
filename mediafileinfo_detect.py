@@ -5336,13 +5336,15 @@ def analyze_exe(fread, info, fskip):
       is_comment64 = False
       if reloc_count == 0 and reloc_ofs == 0 and len(header) >= 64 and not header[22 : 64].rstrip('\0'):
         comment_ofs, is_comment64 = 64, True
-      if comment_ofs <= 490 and len(header) < 512:
-        header += fread(512 - len(header))
+      if comment_ofs <= 624 and len(header) < 624:
+        header += fread(624 - len(header))
       if not is_comment64 and comment_ofs <= 200 and header[comment_ofs : comment_ofs + 14] == '\0\0\0\0\r\nCWSDPMI ':
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'cwsdpmi', 'i386'
       elif is_comment64 and header[comment_ofs : comment_ofs + 24] == '\r\nstub.h generated from ':
         # Also at offset 512: 'go32stub, v 2.02'.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'djgpp', 'i386'
+      elif len(header) >= 624 and comment_ofs <= 512 and header[597 : 612] == '\0\0\0\0\0\0\0DOS/4G  ' and not header[comment_ofs : 512].rstrip('\0'):
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos4gw', 'i386'
       else:
         info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
     return
