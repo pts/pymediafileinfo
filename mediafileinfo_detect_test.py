@@ -1468,6 +1468,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_elf, '\x7fELF\1\1\1\3\0\0\0\0\0\0\0\0\2\0\3\0\1\0\0\0'),
                      {'format': 'elf', 'subformat': '32bit', 'binary_type': 'executable', 'arch': 'i386', 'endian': 'little', 'os': 'linux'})
 
+  def test_analyze_wasm(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wasm, '\0asm\1\0\0\0'),
+                     {'format': 'wasm', 'subformat': 'binary'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wasm, '(module\t'),
+                     {'format': 'wasm', 'subformat': 'ascii'})
+
   def test_detect_hxs(self):
     self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 

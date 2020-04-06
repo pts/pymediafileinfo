@@ -2,6 +2,21 @@
 
 import struct
 
+# --- File format detection for many file formats and getting media
+# parameters for some.
+
+
+def adjust_confidence(base_confidence, confidence):
+  return (confidence, max(1, confidence - base_confidence))
+
+
+XML_WHITESPACE_TAGEND = ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '>')
+
+# Python whitespace (.isspace()).
+WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
+
+MAX_CONFIDENCE = 100000
+
 # ---
 
 
@@ -9290,6 +9305,22 @@ def analyze_elf(fread, info, fskip, format='elf',
     raise ValueError('Bad elf arch, must not be 0.')
 
 
+def analyze_wasm(fread, info, fskip, format='wasm',
+                 spec=((0, '\0asm\1\0\0\0'),
+                       (0, '(module', 7, WHITESPACE))):
+  header = fread(8)
+  if len(header) < 8:
+    raise ValueError('Too short for wasm.')
+  if header.startswith('\0asm\1\0\0\0'):
+    # https://webassembly.github.io/spec/core/bikeshed/index.html#modules%E2%91%A0%E2%93%AA
+    info['format'], info['subformat'] = 'wasm', 'binary'
+  elif header.startswith('(module') and header[7].isspace():
+    # https://webassembly.github.io/spec/core/bikeshed/index.html#modules%E2%91%A0%E2%93%AA
+    info['format'], info['subformat'] = 'wasm', 'ascii'
+  else:
+    raise ValueError('wasm signature not found.')
+
+
 def count_is_rtf(header):
   # http://fileformats.archiveteam.org/wiki/RTF
   # RTF specification 1.9.1. https://interoperability.blob.core.windows.net/files/Archive_References/[MSFT-RTF].pdf
@@ -9404,22 +9435,8 @@ def count_is_html(header):
   return False
 
 
+# ---
 
-
-# --- File format detection for many file formats and getting media
-# parameters for some.
-
-
-def adjust_confidence(base_confidence, confidence):
-  return (confidence, max(1, confidence - base_confidence))
-
-
-XML_WHITESPACE_TAGEND = ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '>')
-
-# Python whitespace (.isspace()).
-WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
-
-MAX_CONFIDENCE = 100000
 
 # TODO(pts): Move everything from here to analyze_...(..., format=..., spec=...).
 # TODO(pts): Make Spec matching callable from analyze_...().
