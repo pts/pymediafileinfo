@@ -1457,6 +1457,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'macho', 'subformat': '32bit', 'binary_type': 'shlib', 'arch': 'powerpc', 'endian': 'big'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xfe\xed\xfa\xcf\1\0\0\x12????\0\0\0\1'),
                      {'format': 'macho', 'subformat': '64bit', 'binary_type': 'object', 'arch': 'powerpc64', 'endian': 'big'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xca\xfe\xba\xbe\0\0\0\2\1\0\0\7\x80\0\0\3\0\0\x10\0\0\x00o\x10\0\0\0\x0c\0\0\0\7\0\0\0\3\0\0\x80\0\0\x00n \0\0\0\x0c'),
+                     {'format': 'macho', 'subformat': 'universal', 'binary_type': 'executable', 'arch': 'amd64,i386', 'endian': 'big'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xbe\xba\xfe\xca\2\0\0\0\7\0\0\1????????????????\7\0\0\0????????????????'),  # Maybe no such endian.
+                     {'format': 'macho', 'subformat': 'universal', 'binary_type': 'executable', 'arch': 'amd64,i386', 'endian': 'little'})
 
   def test_analyze_pef(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pef, 'Joy!peffpwpc\0\0\0\1????????????????\0\3\0\2'),

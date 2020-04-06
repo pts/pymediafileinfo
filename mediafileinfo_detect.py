@@ -9155,13 +9155,39 @@ MACHO_ARCHS = {
 
 def analyze_macho(fread, info, fskip, format='macho',
                   spec=((0, ('\xce\xfa\xed\xfe', '\xcf\xfa\xed\xfe'), 4, tuple(chr(c) for c in xrange(1, 23)), 5, '\0\0', 7, ('\0', '\1'), 12, tuple(chr(c) for c in xrange(1, 16)), 13, '\0\0\0'),
-                        (0, ('\xfe\xed\xfa\xce', '\xfe\xed\xfa\xcf'), 4, ('\0', '\1'), 5, '\0\0', 7, tuple(chr(c) for c in xrange(1, 23)), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 16))))):
+                        (0, ('\xfe\xed\xfa\xce', '\xfe\xed\xfa\xcf'), 4, ('\0', '\1'), 5, '\0\0', 7, tuple(chr(c) for c in xrange(1, 23)), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 16))),
+                        (0, '\xbe\xba\xfe\xca', 4, tuple(chr(c) for c in xrange(1, 31)), 5, '\0\0\0'),
+                        (0, '\xca\xfe\xba\xbe\0\0\0', 7, tuple(chr(c) for c in xrange(1, 31))))):
   # http://fileformats.archiveteam.org/wiki/Mach-O
+  # https://github.com/x64dbg/btparser/blob/d5034cf6d647e98cb01e9e1fc4efa5086f8fc6a5/btparser/tests/MachOTemplate.bt
   header = fread(16)
   if len(header) < 16:
     raise ValueError('Too short for macho.')
-  fmt = '<>'[header.startswith('\xfe')]
+  fmt = '<>'[header.startswith('\xfe') or header.startswith('\xca')]
   magic, archx, subarch, binary_type = struct.unpack(fmt + 'LLLL', header[:16])
+  if magic == 0xcafebabe and 1 <= archx <= 30:  # 30 to distinguish it from format=java-class.
+    # https://en.wikipedia.org/wiki/Universal_binary
+    # https://www.symbolcrash.com/2019/02/26/mach-o-universal-fat-binaries/
+    info['format'], info['subformat'], info['binary_type'] = 'macho', 'universal', 'executable'  # Fat binary.
+    info['endian'] = ('little', 'big')[fmt == '>']
+    arch_count, archs, data = archx, [], header[8:]
+    for _ in xrange(arch_count):
+      if len(data) != 20:
+        assert len(data) <= 20
+        data += fread(20 - len(data))
+        if len(data) < 20:
+          raise ValueError('EOF in macho universal fat record.')
+      archx, = struct.unpack(fmt + 'L', data[:4])
+      data = ''
+      archis64, arch = archx >> 24, archx & 0xffffff
+      if archis64 not in (0, 1):
+        raise ValueError('Bad macho archis64: %d' % archis64)
+      if not 1 <= arch < 23:
+        raise ValueError('Bad macho arch: %d' % arch)
+      arch = arch + 100 * archis64
+      archs.append(MACHO_ARCHS.get(arch, str(arch)))
+    info['arch'] = ','.join(archs)
+    return
   if (magic & ~1) != 0xfeedface:
     raise ValueError('macho signature not found.')
   archis64, arch = archx >> 24, archx & 0xffffff
