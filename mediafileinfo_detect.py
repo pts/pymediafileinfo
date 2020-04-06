@@ -5313,17 +5313,18 @@ def analyze_exe(fread, info, fskip):
     # http://www.fysnet.net/exehdr.htm
     # http://www.delorie.com/djgpp/doc/exe/
     info['format'] = 'exe'
-    magic, size_lo, size_hi, reloc_count = struct.unpack('<4H', header[:8])
+    magic, size_lo, size_hi, reloc_count, header_size16 = struct.unpack('<5H', header[:10])
     reloc_ofs, = struct.unpack('<H', header[24 : 26])
+    size = (size_lo or 512) + (size_hi << 9) - 512
     if size_hi == 0:
       raise ValueError('Empty exe image.')
-    if size_lo > 511:
+    if size_lo > 512:  # 512 is valid.
       raise ValueError('Bad exe size_lo: %d' % size_lo)
-    if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx.
+    if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx, embedded.
       # dosexe is exe with a DOS extender stub.
       # https://en.wikipedia.org/wiki/DOS_extender
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'wdosx', 'i386'
-    elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':
+    elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':  # Embedded.
       # https://en.wikipedia.org/wiki/PMODE
       # TODO(pts): Add PMODE/W for Watcom C++ compiler.
       # TODO(pts): Add PMODE.
@@ -5336,15 +5337,20 @@ def analyze_exe(fread, info, fskip):
       is_comment64 = False
       if reloc_count == 0 and reloc_ofs == 0 and len(header) >= 64 and not header[22 : 64].rstrip('\0'):
         comment_ofs, is_comment64 = 64, True
-      if comment_ofs <= 624 and len(header) < 624:
-        header += fread(624 - len(header))
-      if not is_comment64 and comment_ofs <= 200 and header[comment_ofs : comment_ofs + 14] == '\0\0\0\0\r\nCWSDPMI ':
+      if comment_ofs <= 640 and len(header) < 640:
+        header += fread(640 - len(header))
+      def is_watcom_suffix(header, size):
+        header = header[size - 72 : size]
+        return 'Can\'t run DOS/4G(W)' in header and 'DOS4GPATH' in header and 'DOS4GW.EXE\0' in header and 'DOS4G.EXE\0' in header
+      if not is_comment64 and comment_ofs <= 200 and header[comment_ofs : comment_ofs + 14] == '\0\0\0\0\r\nCWSDPMI ':  # Embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'cwsdpmi', 'i386'
-      elif is_comment64 and header[comment_ofs : comment_ofs + 24] == '\r\nstub.h generated from ':
+      elif is_comment64 and header[comment_ofs : comment_ofs + 24] == '\r\nstub.h generated from ':  # Not embedded.
         # Also at offset 512: 'go32stub, v 2.02'.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'djgpp', 'i386'
-      elif len(header) >= 624 and comment_ofs <= 512 and header[597 : 612] == '\0\0\0\0\0\0\0DOS/4G  ' and not header[comment_ofs : 512].rstrip('\0'):
+      elif len(header) >= 624 and comment_ofs <= 512 and header[597 : 612] == '\0\0\0\0\0\0\0DOS/4G  ' and not header[comment_ofs : 512].rstrip('\0'):  # Embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos4gw', 'i386'
+      elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and size in (0x200, 0x220, 0x280) and is_watcom_suffix(header, size):  # Not embedded.
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'watcom', 'i386'
       else:
         info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
     return

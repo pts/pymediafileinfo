@@ -1423,6 +1423,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'djgpp', 'arch': 'i386'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * (512 - 10), '?' * (597 - 512), '\0\0\0\0\0\0\0DOS/4G  ', '?' * 12))),
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'dos4gw', 'arch': 'i386'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * 12, 'x', '\0' * (512 - 10 - 13 - 72), '??????????Can\'t run DOS/4G(W)\r\n$\tDOS4GPATH\4PATHDOS4GW.EXE\0DOS4G.EXE\0????'))),
+                     {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'watcom', 'arch': 'i386'})
     data2 = ''.join(('MZ\xff\1', '?' * 56, 'A\0\0\0?PE\0\0', '?' * 20))
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, data2),
                      {'format': 'pe-coff', 'detected_format': 'exe', 'arch': '0x3f3f'})
