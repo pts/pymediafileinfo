@@ -9896,7 +9896,8 @@ FORMAT_ITEMS = (
     # pspbrwse.jbf
     # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
     ('jbf', (0, 'JASC BROWS FILE\0')),
-    ('java-class', (0, '\xca\xfe\xba\xbe')),
+    # Doing the major_version >= 30 check to distinguish from format=macho subformat=universal.
+    ('java-class', (0, '\xca\xfe\xba\xbe', 6, '\0', 8, lambda header: (len(header) >= 8 and ord(header[7]) >= 30, 1))),
     # OLE compound file == composite document file, including Thumbs.db and
     # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
     ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),

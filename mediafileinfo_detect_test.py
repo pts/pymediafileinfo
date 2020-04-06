@@ -1474,6 +1474,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_wasm, '(module\t'),
                      {'format': 'wasm', 'subformat': 'ascii'})
 
+  def test_detect_java_class(self):
+    self.assertEqual(FORMAT_DB.detect('\xca\xfe\xba\xbe\0\3\0\x2d')[0], 'java-class')
+
   def test_detect_hxs(self):
     self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 
