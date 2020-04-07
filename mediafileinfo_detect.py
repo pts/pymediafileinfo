@@ -5269,15 +5269,21 @@ PE_ARCHITECTURES = {
 def count_is_exe(header):
   if not header.startswith('MZ') or len(header) < 32:
     return 0
-  magic, size_lo, size_hi, reloc_count = struct.unpack('<4H', header[:8])
-  if size_lo > 511 or (size_hi == 0 and size_lo > 0):
+  magic, size_lo, size_hi, reloc_count, header_size16 = struct.unpack('<5H', header[:10])
+  if size_lo > 512 or (size_hi == 0 and size_lo > 0):  # 512 is valid.
     return 0
+  if header_size16 < 2 and not (size_hi == size_lo == header_size16 == 0):
+    return 0
+  size = (size_lo or 512) + (size_hi << 9) - 512
   pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
-  if 64 <= pe_ofs <= 8166:  # Probably PE (Win32 etc.).
+  if 64 <= pe_ofs <= 8166:  # Probably PE (Win32 etc.), NE (Win16), LE or LX.
+    # TODO(pts): Add extra confidence score as below.
+    is_pe = header[pe_ofs : pe_ofs + 4] == 'PE\0\0'
     # We only get the extra 400 points if header is long enough. Typically
     # pe_ofs is 64 or 96, so header is long enough.
-    return (438 + 88 + 400 * (header[pe_ofs : pe_ofs + 4] == 'PE\0\0') +
-            400 * (size_lo == 0 and size_hi == 0))
+    if len(header) < pe_ofs + 4 or is_pe:
+      return (438 + 88 + 400 * is_pe +
+              400 * ((size_lo == 0 and size_hi == 0) or size == pe_ofs))  # Typically `size > pe_ofs', but we give `==' a boost.
   if size_hi == 0:
     return 0
   reloc_ofs, = struct.unpack('<H', header[24 : 26])
@@ -5287,8 +5293,8 @@ def count_is_exe(header):
   if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx.
     confidence += 800
   else:
-    if size_lo == 0 and size_hi == 0:
-      confidence += 400
+    #if size_lo == 0 and size_hi == 0:
+    #  confidence += 400
     if reloc_count == 0 and reloc_ofs == 0:
       confidence += 200
     elif 28 <= reloc_ofs < 64:
@@ -5305,21 +5311,101 @@ def analyze_exe(fread, info, fskip):
   if not header.startswith('MZ'):
     raise ValueError('exe signature not found.')
   pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
+  # http://www.fysnet.net/exehdr.htm
+  # http://www.delorie.com/djgpp/doc/exe/
+  magic, size_lo, size_hi, reloc_count, header_size16 = struct.unpack('<5H', header[:10])
+  reloc_ofs, = struct.unpack('<H', header[24 : 26])
+  if size_lo > 512 or (size_hi == 0 and size_lo > 0):  # 512 is valid.
+    raise ValueError('Bad exe size.')
+  if header_size16 < 2 and not (size_hi == size_lo == header_size16 == 0):
+    raise ValueError('Bad exe header_size16.')
+  size = (size_lo or 512) + (size_hi << 9) - 512
   # 8166 is mostly arbitrary. Typically pe_ofs is 64 or 96.
-  if 64 <= pe_ofs < 8166 and len(header) < pe_ofs + 26:
-    header += fread(pe_ofs + 26 - len(header))
-  if not (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
-          header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
-    # http://www.fysnet.net/exehdr.htm
-    # http://www.delorie.com/djgpp/doc/exe/
-    info['format'] = 'exe'
-    magic, size_lo, size_hi, reloc_count, header_size16 = struct.unpack('<5H', header[:10])
-    reloc_ofs, = struct.unpack('<H', header[24 : 26])
-    size = (size_lo or 512) + (size_hi << 9) - 512
+  if 64 <= pe_ofs < 8166 and len(header) < pe_ofs + 55:
+    header += fread(pe_ofs + 55 - len(header))
+  if (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
+        header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
+    # PE (Portable Executable), usually 32-bit or 64-bit Windows.
+    # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
+    info['format'], info['subformat'], info['endian'] = 'pe-coff', 'pe', 'little'
+    (machine, section_count, date_time, symbol_table_ofs, symbol_count,
+     opthd_size, characteristics,
+    ) = struct.unpack('<HHLLLHH', header[pe_ofs + 4 : pe_ofs + 24])
+    info['arch'] = PE_ARCHITECTURES.get(machine) or '0x%x' % machine
+    if not 24 <= opthd_size <= 255:
+      info['format'] = 'pe-coff'
+      return
+    if len(header) < pe_ofs + 26:
+      raise ValueError('EOF in pe magic.')
+    magic, = struct.unpack('<H', header[pe_ofs + 24 : pe_ofs + 26])
+    info['format'] = 'pe'
+    if magic == 0x10b:  # 32-bit.
+      info['subformat'], opthd12_size = 'pe32', 96
+    elif magic == 0x20b:  # 64-bit.
+      info['subformat'], opthd12_size = 'pe32+', 112
+    elif magic == 0x107:
+      info['subformat'] = info['binary_type'] = 'rom-image'
+      return
+    else:
+      info['binary_type'] = '0x%x' % magic
+      return
+    if len(header) < pe_ofs + 24 + opthd_size:
+      header += fread(pe_ofs + 24 + opthd_size - len(header))
+      if len(header) < pe_ofs + 24 + opthd_size:
+        raise ValueError('EOF in pe optional header.')
+    if characteristics & 2:  # Exectuable.
+      if opthd_size < opthd12_size:
+        raise ValueError('pe optional header too short.')
+      suffix = ('exe', 'dll')[bool(characteristics & 0x2000)]
+      info['binary_type'] = ('executable', 'shlib')[suffix == 'dll']
+      rva_ofs = pe_ofs + 24 + (opthd12_size - 4)
+      rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
+      if rva_count > ((opthd_size - opthd12_size) >> 2):
+        raise ValueError('pe rva_count too large.')
+      vaddr = size = 0
+      if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
+        vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
+      # https://stackoverflow.com/q/36569710
+      # https://reverseengineering.stackexchange.com/q/1614
+      if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
+        info['format'], info['os'] = 'dotnet' + suffix, 'dotnet'  # 'dotnetexe'  # .NET executable assembly.
+      elif header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
+        # Above: check the subsystem field for UEFI.
+        info['format'], info['os'] = 'efi' + suffix, 'efi'  # 'efiexe'.
+      else:
+        info['format'], info['os'] = 'win' + suffix, 'windows'  # 'winexe'.
+    else:  # Not executable.
+      info['format'] = 'pe-nonexec'  # TODO(pts): Windows (non-Wine) .vxd?
+      data = header[pe_ofs + 24 + opthd_size:]
+      its_ofs = None
+      for _ in xrange(section_count):
+        if len(data) < 40:
+          data += fread(40 - len(data))
+          if len(data) < 40:
+            raise ValueError('EOF in pe section table.')
+        name, virtual_size, virtual_address = struct.unpack('<8sLL', data[:16])
+        name = name.rstrip('\0')
+        data = data[40:]  # Usually empty by now.
+        # http://www.russotto.net/chm/itolitlsformat.html
+        if name == '.its':
+          its_ofs = virtual_size + virtual_address
+      ofs = pe_ofs + 24 + opthd_size + 40 * section_count
+      if its_ofs is not None and its_ofs >= ofs:
+        if len(data) >= its_ofs - ofs:
+          data = data[its_ofs - ofs:]
+        elif not fskip(its_ofs - ofs - len(data)):
+          data = None
+        if data is not None:
+          if len(data) < 40:
+            data += fread(40 - len(data))
+          if (len(data) >= 40 and data.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and data[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'):
+            # http://www.russotto.net/chm/itolitlsformat.html
+            info['format'] = 'hxs'
+            info.pop('endian', None)
+  else:  # MS-DOS EXE (MZ), no PE, LE, LX or NE.
     if size_hi == 0:
       raise ValueError('Empty exe image.')
-    if size_lo > 512:  # 512 is valid.
-      raise ValueError('Bad exe size_lo: %d' % size_lo)
+    info['format'], info['subformat'], info['arch'], info['binary_type'], info['os'], info['endian'] = 'dosexe', 'dos', '8086', 'executable', 'dos', 'little'
     if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx, embedded.
       # dosexe is exe with a DOS extender stub.
       # https://en.wikipedia.org/wiki/DOS_extender
@@ -5351,82 +5437,8 @@ def analyze_exe(fread, info, fskip):
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos4gw', 'i386'
       elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and size in (0x200, 0x220, 0x280) and is_watcom_suffix(header, size):  # Not embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'watcom', 'i386'
-      else:
-        info['format'], info['arch'] = 'dosexe', '8086'  # MS-DOS .exe.
-    return
-  # Windows .exe file (PE, Portable Executable).
-  # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
-  (machine, section_count, date_time, symbol_table_ofs, symbol_count,
-   opthd_size, characteristics,
-  ) = struct.unpack('<HHLLLHH', header[pe_ofs + 4 : pe_ofs + 24])
-  info['arch'] = PE_ARCHITECTURES.get(machine) or '0x%x' % machine
-  if not 24 <= opthd_size <= 255:
-    info['format'] = 'pe-coff'
-    return
-  if len(header) < pe_ofs + 26:
-    raise ValueError('EOF in pe magic.')
-  magic, = struct.unpack('<H', header[pe_ofs + 24 : pe_ofs + 26])
-  info['format'] = 'pe'
-  if magic == 0x10b:  # 32-bit.
-    info['subformat'], opthd12_size = 'pe32', 96
-  elif magic == 0x20b:  # 64-bit.
-    info['subformat'], opthd12_size = 'pe32+', 112
-  elif magic == 0x107:
-    info['subformat'] = 'rom-image'
-    return
-  else:
-    info['subformat'] = '0x%x' % magic
-    return
-  if len(header) < pe_ofs + 24 + opthd_size:
-    header += fread(pe_ofs + 24 + opthd_size - len(header))
-    if len(header) < pe_ofs + 24 + opthd_size:
-      raise ValueError('EOF in pe optional header.')
-  if characteristics & 2:  # Exectuable.
-    if opthd_size < opthd12_size:
-      raise ValueError('pe optional header too short.')
-    suffix = ('exe', 'dll')[bool(characteristics & 0x2000)]
-    rva_ofs = pe_ofs + 24 + (opthd12_size - 4)
-    rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
-    if rva_count > ((opthd_size - opthd12_size) >> 2):
-      raise ValueError('pe rva_count too large.')
-    vaddr = size = 0
-    if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
-      vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
-    # https://stackoverflow.com/q/36569710
-    # https://reverseengineering.stackexchange.com/q/1614
-    if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
-      info['format'] = 'dotnet' + suffix  # 'dotnetexe'  # .NET executable assembly.
-    elif header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
-      # Above: check the subsystem field for UEFI.
-      info['format'] = 'efi' + suffix  # 'efiexe'
     else:
-      info['format'] = 'win' + suffix  # 'winexe'
-  else:  # Not executable.
-    info['format'] = 'pe-nonexec'
-    its_ofs = None
-    for _ in xrange(section_count):
-      data = fread(40)
-      if len(data) < 40:
-        raise ValueError('EOF in pe section table.')
-      name, virtual_size, virtual_address = struct.unpack('<8sLL', data[:16])
-      name = name.rstrip('\0')
-      # http://www.russotto.net/chm/itolitlsformat.html
-      if name == '.its':
-        its_ofs = virtual_size + virtual_address
-    if its_ofs is not None:
-      ofs = len(header) + 40 * section_count
-      if its_ofs <= ofs:
-        data = header[its_ofs:]
-      else:
-        data = ''
-        if not fskip(its_ofs - ofs):
-          data = None
-      if data is not None:
-        if len(data) < 40:
-          data += fread(40 - len(data))
-        if (len(data) >= 40 and data.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and data[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'):
-          # http://www.russotto.net/chm/itolitlsformat.html
-          info['format'] = 'hxs'
+      info['subformat'] = 'weird-reloc'
 
 
 def parse_svg_dimen(data):
