@@ -1445,6 +1445,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'efidll', 'subformat': 'pe32+', 'detected_format': 'exe', 'arch': 'i386', 'binary_type': 'shlib', 'endian': 'little', 'os': 'efi'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?PE\0\0\x4c\1', '?' * 14, '\x70\0\2\0\x0b\2', '?' * 66, '\x0a\00', '?' * 38, '\0\0\0\0'))),
                      {'format': 'efiexe', 'subformat': 'pe32+', 'detected_format': 'exe', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'efi'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?NE\5\1????????\0\0', '?' * 40, '\2'))),
+                     {'format': 'winexe', 'subformat': 'ne', 'detected_format': 'exe', 'arch': '8086', 'binary_type': 'executable', 'endian': 'little', 'os': 'windows'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?NE\5\1????????\0\x80', '?' * 40, '\2'))),
+                     {'format': 'windll', 'subformat': 'ne', 'detected_format': 'exe', 'arch': '8086', 'binary_type': 'shlib', 'endian': 'little', 'os': 'windows'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?PE\0\0\x64\x86\0\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22))),
                      {'format': 'pe-nonexec', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64', 'endian': 'little'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?PE\0\0\x64\x86\1\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22, '.its\0\0\0\0\x50\0\0\0\x52\0\0\0', '?' * 24))),

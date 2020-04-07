@@ -5279,10 +5279,11 @@ def count_is_exe(header):
   if 64 <= pe_ofs <= 8166:  # Probably PE (Win32 etc.), NE (Win16), LE or LX.
     # TODO(pts): Add extra confidence score as below.
     is_pe = header[pe_ofs : pe_ofs + 4] == 'PE\0\0'
+    is_ne = header[pe_ofs : pe_ofs + 2] == 'NE' and (header[pe_ofs + 2 : pe_ofs + 3] or 'x') in '\1\2\3\4\5\6\7\8'  # Typically linker major version is 5.
     # We only get the extra 400 points if header is long enough. Typically
     # pe_ofs is 64 or 96, so header is long enough.
-    if len(header) < pe_ofs + 4 or is_pe:
-      return (438 + 88 + 400 * is_pe +
+    if len(header) < pe_ofs + 4 or is_pe or is_ne:
+      return (438 + 88 + 400 * is_pe + 263 * is_ne +
               400 * ((size_lo == 0 and size_hi == 0) or size == pe_ofs))  # Typically `size > pe_ofs', but we give `==' a boost.
   if size_hi == 0:
     return 0
@@ -5304,6 +5305,15 @@ def count_is_exe(header):
   return confidence
 
 
+NE_OS_ARCHS = {
+    1: ('os2', '80286'),  # OS/2 1.x.
+    2: ('windows', '8086'),  # Windows 1.0--3.x.
+    3: ('dos4', '8086'),  # MS-DOS 4.x.
+    4: ('win32s', 'i386'),  # Windows for the 80386 (Win32s). 32-bit code. Windows NT 4.0 ... Windows 10 probably can't run them.
+    5: ('boss', '8086'),  # Borland Operating System Service. Is it 8086?
+}
+
+
 def analyze_exe(fread, info, fskip):
   header = fread(64)
   if len(header) < 32:
@@ -5323,7 +5333,27 @@ def analyze_exe(fread, info, fskip):
   # 8166 is mostly arbitrary. Typically pe_ofs is 64 or 96.
   if 64 <= pe_ofs < 8166 and len(header) < pe_ofs + 55:
     header += fread(pe_ofs + 55 - len(header))
-  if (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
+  if (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 40 and
+      header[pe_ofs : pe_ofs + 2] == 'NE' and
+      header[pe_ofs + 2 : pe_ofs + 3] in '\1\2\3\4\5\6\7\8'):
+    # NE (New Executable), usually 16-bit Windows 1.0--3.x.
+    # https://wiki.osdev.org/NE
+    # https://www.fileformat.info/format/exe/corion-ne.htm
+    # print [header[pe_ofs + 2 : pe_ofs + 4]]  # Linker version. Typically: 5.1; 5.60
+    info['subformat'], info['endian'] = 'ne', 'little'
+    osx = ord(header[pe_ofs + 54])
+    flags, = struct.unpack('<H', header[pe_ofs + 12 : pe_ofs + 14])
+    if osx in NE_OS_ARCHS:
+      info['os'], info['arch'] = NE_OS_ARCHS[osx]
+    else:
+      info['os'] = str(osx)
+    if flags & 0x8000:
+      info['format'], info['binary_type'] = 'dll', 'shlib'
+    else:
+      info['format'], info['binary_type'] = 'exe', 'executable'
+    if osx in (2, 4):
+      info['format'] = 'win' + info['format']
+  elif (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
         header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
     # PE (Portable Executable), usually 32-bit or 64-bit Windows.
     # https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
