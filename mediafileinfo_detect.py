@@ -5582,7 +5582,8 @@ def analyze_exe(fread, info, fskip):
       elif 28 <= comment_ofs <= header_size and 32 <= header_size <= 128 and header[26 : 32] == '\0\0\0\0\0\0' and (
           (header[header_size : header_size + 28] == 'STUB/32A\0Copyright (C) 1996-') or  # Not embedded.
           (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 56] == 'STUB/32C\0Copyright (C) 1996-') or  # Not embedded.
-          (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 55] == 'DOS/32A\0Copyright (C) 1996-')):  # Embedded.
+          (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 55] == 'DOS/32A\0Copyright (C) 1996-') or  # Embedded.
+          (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 38] == 'DOS/32A\0\0R')):  # Embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos32a', 'i386'
       elif header[pe_ofs : pe_ofs + 8] == 'LE\0\0\0\0\0\0':
         # First we checked for DOS extenders emitted by Watcom C compiler
