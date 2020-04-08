@@ -5278,12 +5278,13 @@ def count_is_exe(header):
   pe_ofs = int(len(header) >= 64 and struct.unpack('<L', header[60 : 64])[0])
   if 64 <= pe_ofs <= 8166:  # Probably PE (Win32 etc.), NE (Win16), LE or LX.
     # TODO(pts): Add extra confidence score as below.
+    is_lxle = header[pe_ofs : pe_ofs + 8] in ('LE\0\0\0\0\0\0', 'LX\0\0\0\0\0\0')
     is_pe = header[pe_ofs : pe_ofs + 4] == 'PE\0\0'
     is_ne = header[pe_ofs : pe_ofs + 2] == 'NE' and (header[pe_ofs + 2 : pe_ofs + 3] or 'x') in '\1\2\3\4\5\6\7\8'  # Typically linker major version is 5.
     # We only get the extra 400 points if header is long enough. Typically
     # pe_ofs is 64 or 96, so header is long enough.
-    if len(header) < pe_ofs + 4 or is_pe or is_ne:
-      return (438 + 88 + 400 * is_pe + 263 * is_ne +
+    if len(header) < pe_ofs + 4 or is_lxle or is_pe or is_ne:
+      return (438 + 88 + 400 * is_pe + 800 * is_lxle + 263 * is_ne +
               400 * ((size_lo == 0 and size_hi == 0) or size == pe_ofs))  # Typically `size > pe_ofs', but we give `==' a boost.
   if size_hi == 0:
     return 0
@@ -5314,6 +5315,94 @@ NE_OS_ARCHS = {
 }
 
 
+def parse_lxle_objects(fread, data, ot_count, arch):
+  """Parse each object table entry in LX or LE, infer archs."""
+  archs = set()
+  for _ in xrange(ot_count):
+    if len(data) < 24:
+      data += fread(24 - len(data))
+      if len(data) < 24:
+        raise ValueError('EOF in lxle object table entry.')
+    vsize, relbase, flags, pm_idx, pm_count, name = struct.unpack('<5L4s', data[:24])
+    if flags & 4 and vsize > 0:
+      if arch == 'i386':
+        # The function called in
+        # https://github.com/darkstar/2ine/blob/c9706154479af13ee61b2bca2aa0f5cbc5cac7ba/lx_loader.c#L1841
+        # indicates that these objects really contain 16-bit code.
+        archs.add(('8086', 'i386')[(flags >> 13) & 1])
+      else:
+        archs.append(arch)
+    data = data[24:]
+  return sorted(archs)
+
+
+LXLE_OSS = {
+    1: 'os2',
+    #2: 'windows',  # Not observed in the wild, indicates 16-bit Windows.
+    #3: 'dos4',  # Not observed in the wild.
+    4: 'windows',  # 32-bit Windows .vxd, may also contain some 16-bit code.
+}
+
+LXLE_CPU_ARCHS = {
+    1: '80286',
+    2: 'i386',
+    3: 'i386',  # Actually 486.
+    4: 'i386',  # Actually Pentium.
+    0x20: 'i860',  # N10.
+    0x21: 'i860',  # N11.
+    0x40: 'mips',  # MIPS I.
+    0x41: 'mips',  # MIPS II.
+    0x42: 'mips',  # MIPS III.
+}
+
+LX_BINARY_TYPES = {
+    0: 'executable',
+    1: 'shlib',
+    3: 'pmlib',  # Protected memory library.
+    4: 'physical-driver',
+    6: 'virtual-driver',
+}
+
+
+def parse_lxle(fread, info, fskip, pe_ofs, header):
+  # Both LX and LE, with diffs: https://www.program-transformation.org/Transform/PcExeFormat
+  # http://faydoc.tripod.com/formats/exe-LE.htm
+  # http://www.textfiles.com/programming/FORMATS/lxexe.txt
+  # https://svn.netlabs.org/repos/odin32/trunk/tools/common/LXexe.h
+  if len(header) < pe_ofs + 96:
+    header += fread(pe_ofs + 96 - len(header))
+    if len(header) < pe_ofs + 20:
+      raise ValueError('EOF in lxle header.')
+  prefix = header[pe_ofs : pe_ofs + 20]
+  # 'LX\1\1' would be big endian, we don't support that.
+  if not (prefix.startswith('LE\0\0\0\0\0\0') or prefix.startswith('LX\0\0\0\0\0\0')):
+    raise ValueError('lxle signature not found.')
+  info['format'], info['endian'] = 'exe', 'little'
+  info['subformat'] = ('le', 'lx')[prefix[1] == 'X']
+  cpu, osx, module_version, module_flags = struct.unpack('<8xHHLL', prefix)
+  if prefix[1] == 'X':
+    module_type = (module_flags >> 15) & 7
+    info['binary_type'] = LX_BINARY_TYPES.get(module_type, str(module_type))
+  else:
+    info['binary_type'] = ('executable', 'shlib')[(module_flags >> 15) & 1]
+  info['os'] = LXLE_OSS.get(osx, str(osx))
+  arch = LXLE_CPU_ARCHS.get(cpu, str(cpu))
+  if len(header) >= pe_ofs + 72:
+    ot_ofs, ot_count = struct.unpack('<LL', header[pe_ofs + 64 : pe_ofs + 72])
+    ot_ofs += pe_ofs
+    if ot_ofs > len(header):
+      if not fskip(ot_ofs - len(header)):
+        raise ValueError('EOF in le object table seek.')
+      ot_ofs = len(header)
+    info['arch'] = ','.join(parse_lxle_objects(fread, header[ot_ofs:], ot_count, arch)) or 'none'
+  else:
+    info['arch'] = arch
+  if info['binary_type'] == 'shlib' and info['os'] == 'windows' and arch == 'i386' and prefix[1] != 'X':
+    info['format'] = 'vxd'  # https://en.wikipedia.org/wiki/VxD
+  elif info['binary_type'] in ('executable', 'shlib') and info['os'] == 'os2' and prefix[1] == 'X':
+    info['format'] = ('os2exe', 'os2dll')[info['binary_type'] == 'shlib']  # OS/2 2.x.
+
+
 def analyze_exe(fread, info, fskip):
   header = fread(64)
   if len(header) < 32:
@@ -5325,6 +5414,8 @@ def analyze_exe(fread, info, fskip):
   # http://www.delorie.com/djgpp/doc/exe/
   magic, size_lo, size_hi, reloc_count, header_size16 = struct.unpack('<5H', header[:10])
   reloc_ofs, = struct.unpack('<H', header[24 : 26])
+  reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
+  header_size = header_size16 << 4
   if size_lo > 512 or (size_hi == 0 and size_lo > 0):  # 512 is valid.
     raise ValueError('Bad exe size.')
   if header_size16 < 2 and not (size_hi == size_lo == header_size16 == 0):
@@ -5360,6 +5451,8 @@ def analyze_exe(fread, info, fskip):
       info['format'], info['binary_type'] = 'exe', 'executable'
     if osx in (2, 4):
       info['format'] = 'win' + info['format']
+  elif header[pe_ofs : pe_ofs + 8] == 'LX\0\0\0\0\0\0' and size_hi > 0:
+    parse_lxle(fread, info, fskip, pe_ofs, header)
   elif (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
         header[pe_ofs : pe_ofs + 4] == 'PE\0\0'):
     # PE (Portable Executable), usually 32-bit or 64-bit Windows.
@@ -5441,10 +5534,14 @@ def analyze_exe(fread, info, fskip):
             # http://www.russotto.net/chm/itolitlsformat.html
             info['format'] = 'hxs'
             info.pop('endian', None)
+  elif size_hi == 0:
+    raise ValueError('Empty exe image.')
+  elif reloc_count and reloc_end_ofs > header_size:
+    raise ValueError('exe relocation table too long.')
   else:  # MS-DOS EXE (MZ), no PE, LE, LX or NE.
-    if size_hi == 0:
-      raise ValueError('Empty exe image.')
     info['format'], info['subformat'], info['arch'], info['binary_type'], info['os'], info['endian'] = 'dosexe', 'dos', '8086', 'executable', 'dos', 'little'
+    if reloc_count and not 28 <= reloc_ofs <= 512:
+      info['subformat'] = 'dos-weird-reloc'
     if reloc_count == 0 and header[24 : 32] == '>TIPPACH':  # wdosx, embedded.
       # dosexe is exe with a DOS extender stub.
       # https://en.wikipedia.org/wiki/DOS_extender
@@ -5452,10 +5549,9 @@ def analyze_exe(fread, info, fskip):
     elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':  # Embedded.
       # https://en.wikipedia.org/wiki/PMODE
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodedj', 'i386'
-    elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
-      comment_ofs = reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
+    else:
+      comment_ofs, is_comment64 = reloc_end_ofs, False
       is_comment64 = False
-      header_size = header_size16 << 4
       if reloc_count == 0 and reloc_ofs == 0 and len(header) >= 64 and not header[22 : 64].rstrip('\0'):
         comment_ofs, is_comment64 = 64, True
       if comment_ofs <= 640 and len(header) < 640:
@@ -5488,8 +5584,11 @@ def analyze_exe(fread, info, fskip):
           (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 56] == 'STUB/32C\0Copyright (C) 1996-') or  # Not embedded.
           (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 55] == 'DOS/32A\0Copyright (C) 1996-')):  # Embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos32a', 'i386'
-    else:
-      info['subformat'] = 'weird-reloc'
+      elif header[pe_ofs : pe_ofs + 8] == 'LE\0\0\0\0\0\0':
+        # First we checked for DOS extenders emitted by Watcom C compiler
+        # first (which would be LE with os=os2 below, but it's really
+        # os=dos).
+        parse_lxle(fread, info, fskip, pe_ofs, header)
 
 
 def parse_svg_dimen(data):
@@ -10025,6 +10124,9 @@ FORMAT_ITEMS = (
     ('pe-nonexec',),  # From 'exe'.
     ('coff',),  # From 'exe'.
     ('hxs',),  # From 'exe'.
+    ('vxd',),  # From 'exe'.
+    ('os2exe',),  # From 'exe'.
+    ('os2dll',),  # From 'exe'.
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
     ('com32r', (0, '\xb8\xfeL\xcd!')),  # .c32
     # https://github.com/pts/pts-xcom

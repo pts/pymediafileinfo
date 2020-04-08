@@ -1406,7 +1406,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_exe(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, 'MZ\xff\1' + '?' * 28),
-                     {'format': 'dosexe', 'detected_format': 'exe', 'subformat': 'weird-reloc', 'arch': '8086', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
+                     {'format': 'dosexe', 'detected_format': 'exe', 'subformat': 'dos-weird-reloc', 'arch': '8086', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
     data1 = ''.join(('MZ\xff\1', '?' * 20, '\x3f\0', '?' * 6))
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, data1),
                      {'format': 'dosexe', 'detected_format': 'exe', 'subformat': 'dos', 'arch': '8086', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
@@ -1472,6 +1472,22 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'pe-nonexec', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64', 'endian': 'little'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?PE\0\0\x64\x86\1\0', '?' * 12, '\x18\0\0\0\x0b\1', '?' * 22, '.its\0\0\0\0\x50\0\0\0\x52\0\0\0', '?' * 24, '-' * 9, self.HXS_HEADER))),
                      {'format': 'hxs', 'subformat': 'pe32', 'detected_format': 'exe', 'arch': 'amd64'})
+    data3 = ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LX\0\0\0\0\0\0\2\0\1\0????\0\0\0\0'))
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, data3),
+                     {'format': 'os2exe', 'subformat': 'lx', 'detected_format': 'exe', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'os2'})
+    self.assertEqual(mediafileinfo_detect.count_is_exe(data3), 1326)
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LX\0\0\0\0\0\0\1\0\1\0????\0\x80\0\0'))),
+                     {'format': 'os2dll', 'subformat': 'lx', 'detected_format': 'exe', 'arch': '80286', 'binary_type': 'shlib', 'endian': 'little', 'os': 'os2'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LX\0\0\0\0\0\0\1\0\1\0????\0\x80\1\0'))),
+                     {'format': 'exe', 'subformat': 'lx', 'arch': '80286', 'binary_type': 'pmlib', 'endian': 'little', 'os': 'os2'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LE\0\0\0\0\0\0\2\0\4\0????\0\x80\0\0'))),
+                     {'format': 'vxd', 'subformat': 'le', 'detected_format': 'exe', 'arch': 'i386', 'binary_type': 'shlib', 'endian': 'little', 'os': 'windows'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LE\0\0\0\0\0\0\2\0\4\0????\0\x80\0\0', '?' * 44, '\x64\0\0\0\2\0\0\0', '?' * 28, '\0' * 24, '\0' * 24))),
+                     {'format': 'vxd', 'subformat': 'le', 'detected_format': 'exe', 'arch': 'none', 'binary_type': 'shlib', 'endian': 'little', 'os': 'windows'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LE\0\0\0\0\0\0\2\0\4\0????\0\x80\0\0', '?' * 44, '\x64\0\0\0\2\0\0\0', '?' * 28, '?' * 8, '\4\0\0\0', '?' * 12, '\0' * 24, '\0' * 24))),
+                     {'format': 'vxd', 'subformat': 'le', 'detected_format': 'exe', 'arch': '8086', 'binary_type': 'shlib', 'endian': 'little', 'os': 'windows'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ?\0', '?' * 56, 'A\0\0\0?', 'LE\0\0\0\0\0\0\2\0\4\0????\0\x80\0\0', '?' * 44, '\x64\0\0\0\2\0\0\0', '?' * 28, '?' * 8, '\4 \0\0', '?' * 12, '?' * 8, '\4\0\0\0', '?' * 12))),
+                     {'format': 'vxd', 'subformat': 'le', 'detected_format': 'exe', 'arch': '8086,i386', 'binary_type': 'shlib', 'endian': 'little', 'os': 'windows'})
 
   def test_analyze_macho(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xce\xfa\xed\xfe\7\0\0\0\3\0\0\0\2\0\0\0'),
