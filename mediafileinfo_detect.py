@@ -5457,6 +5457,7 @@ def analyze_exe(fread, info, fskip):
     elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
       comment_ofs = reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
       is_comment64 = False
+      header_size = header_size16 << 4
       if reloc_count == 0 and reloc_ofs == 0 and len(header) >= 64 and not header[22 : 64].rstrip('\0'):
         comment_ofs, is_comment64 = 64, True
       if comment_ofs <= 640 and len(header) < 640:
@@ -5475,10 +5476,10 @@ def analyze_exe(fread, info, fskip):
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'watcom', 'i386'
       elif is_hx():
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'hx', 'i386'
-      elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and header_size16 in (2, 4) and 'PMODE/W v1.' in header[(header_size16 << 4) + 20 : (header_size16 << 4) + 32]:
+      elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and header_size in (32, 64) and 'PMODE/W v1.' in header[header_size + 20 : header_size + 32]:
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodew', 'i386'
-      elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and header_size16 in (2, 4) and header[(header_size16 << 4) : (header_size16 << 4) + 16] == '\xfa\x16\x1f\x26\xa1\x02\x00\x83\xe8\x40\x8e\xd0\xfb\x06\x16\x07':
-        # There is also 'CWC...CauseWay' at header[(header_size << 4) + 0x490], but that's too much to read.
+      elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and header_size in (32, 64) and header[header_size : header_size + 16] == '\xfa\x16\x1f\x26\xa1\x02\x00\x83\xe8\x40\x8e\xd0\xfb\x06\x16\x07':
+        # There is also 'CWC...CauseWay' at header[header_size + 0x490], but that's too much to read.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'causeway', 'i386'
     else:
       info['subformat'] = 'weird-reloc'
