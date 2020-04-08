@@ -1433,6 +1433,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'causeway', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\3\0', '\0' * 38, '\n\rFatal error, DPMI host does not support 32 bit applications$\n\r'))),
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'x32vm', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * 22, 'STUB/32A\0Copyright (C) 1996-'))),
+                     {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'dos32a', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * 22, 'ID32', '?' * 24, 'STUB/32C\0Copyright (C) 1996-'))),
+                     {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'dos32a', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * 22, 'ID32', '?' * 24, 'DOS/32A\0Copyright (C) 1996-'))),
+                     {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'dos32a', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
     data2 = ''.join(('MZ\xff\1', '?' * 56, 'A\0\0\0?PE\0\0', '?' * 20))
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, data2),
                      {'format': 'pe-coff', 'detected_format': 'exe', 'subformat': 'pe', 'arch': '0x3f3f', 'endian': 'little'})

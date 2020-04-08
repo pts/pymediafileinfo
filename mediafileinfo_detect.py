@@ -5451,7 +5451,6 @@ def analyze_exe(fread, info, fskip):
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'wdosx', 'i386'
     elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':  # Embedded.
       # https://en.wikipedia.org/wiki/PMODE
-      # TODO(pts): Add DOS/32 for Watcom C++ compiler (https://en.wikipedia.org/wiki/DOS/32) == DOS/32A (https://dos32a.narechk.net/index_en.html).
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodedj', 'i386'
     elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
       comment_ofs = reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
@@ -5484,6 +5483,11 @@ def analyze_exe(fread, info, fskip):
         # https://digitalmars.com/ctg/dos32.html
         # https://github.com/Olde-Skuul/KitchenSink/tree/master/sdks/dos/x32
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'x32vm', 'i386'
+      elif 28 <= comment_ofs <= header_size and 32 <= header_size <= 128 and header[26 : 32] == '\0\0\0\0\0\0' and (
+          (header[header_size : header_size + 28] == 'STUB/32A\0Copyright (C) 1996-') or  # Not embedded.
+          (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 56] == 'STUB/32C\0Copyright (C) 1996-') or  # Not embedded.
+          (header[header_size : header_size + 4] == 'ID32' and header[header_size + 28 : header_size + 55] == 'DOS/32A\0Copyright (C) 1996-')):  # Embedded.
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos32a', 'i386'
     else:
       info['subformat'] = 'weird-reloc'
 
