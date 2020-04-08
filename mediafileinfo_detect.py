@@ -5451,7 +5451,6 @@ def analyze_exe(fread, info, fskip):
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'wdosx', 'i386'
     elif reloc_ofs >= 80 and header[28 : 51] == 'PMODSTUB.EXE generated ':  # Embedded.
       # https://en.wikipedia.org/wiki/PMODE
-      # TODO(pts): Add X32VM with Digial Mars compiler (dmc -mx) (https://github.com/Olde-Skuul/KitchenSink/tree/master/sdks/dos/x32).
       # TODO(pts): Add DOS/32 for Watcom C++ compiler (https://en.wikipedia.org/wiki/DOS/32) == DOS/32A (https://dos32a.narechk.net/index_en.html).
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodedj', 'i386'
     elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
@@ -5481,6 +5480,10 @@ def analyze_exe(fread, info, fskip):
       elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and header_size in (32, 64) and header[header_size : header_size + 16] == '\xfa\x16\x1f\x26\xa1\x02\x00\x83\xe8\x40\x8e\xd0\xfb\x06\x16\x07':
         # There is also 'CWC...CauseWay' at header[header_size + 0x490], but that's too much to read.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'causeway', 'i386'
+      elif 28 <= comment_ofs <= header_size and header_size == 48 and header[header_size : header_size + 64] == '\n\rFatal error, DPMI host does not support 32 bit applications$\n\r':
+        # https://digitalmars.com/ctg/dos32.html
+        # https://github.com/Olde-Skuul/KitchenSink/tree/master/sdks/dos/x32
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'x32vm', 'i386'
     else:
       info['subformat'] = 'weird-reloc'
 
