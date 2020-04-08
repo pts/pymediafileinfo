@@ -5331,8 +5331,15 @@ def analyze_exe(fread, info, fskip):
     raise ValueError('Bad exe header_size16.')
   size = (size_lo or 512) + (size_hi << 9) - 512
   # 8166 is mostly arbitrary. Typically pe_ofs is 64 or 96.
+  # Some dual DOS + Windows programs (e.g. vmm32.vxd) are detected as DOS
+  # only, because pe_ofs is too large for hem.
   if 64 <= pe_ofs < 8166 and len(header) < pe_ofs + 55:
     header += fread(pe_ofs + 55 - len(header))
+  def is_hx_suffix(header, size):
+    header = header[size - 48 : size]  # Matches dpmist32.bin in https://www.japheth.de/HX.html
+    return size >= 48 and 'PATH=' in header and 'cannot find loader DPMILD32.EXE$' in header
+  def is_hx():
+    return reloc_count == 0 and reloc_ofs == 0x40 and header[26 : 32] == '\0\0\0\0\0\0' and size == 512 and is_hx_suffix(header, size)
   if (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 40 and
       header[pe_ofs : pe_ofs + 2] == 'NE' and
       header[pe_ofs + 2 : pe_ofs + 3] in '\1\2\3\4\5\6\7\8'):
@@ -5392,18 +5399,20 @@ def analyze_exe(fread, info, fskip):
       rva_count, = struct.unpack('<L', header[rva_ofs : rva_ofs + 4])
       if rva_count > ((opthd_size - opthd12_size) >> 2):
         raise ValueError('pe rva_count too large.')
-      vaddr = size = 0
+      vaddr = vsize = 0
       if rva_count > 14:  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR.
-        vaddr, size = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
+        vaddr, vsize = struct.unpack('<LL', header[rva_ofs + 116 : rva_ofs + 124])
       # https://stackoverflow.com/q/36569710
       # https://reverseengineering.stackexchange.com/q/1614
-      if vaddr > 0 and size > 0:  # Typically vaddr == 8292, size == 72.
+      if vaddr > 0 and vsize > 0:  # Typically vaddr == 8292, vsize == 72.
         info['format'], info['os'] = 'dotnet' + suffix, 'dotnet'  # 'dotnetexe'  # .NET executable assembly.
       elif header[pe_ofs + 92 : pe_ofs + 94] in ('\x0a\0', '\x0b\0', '\x0c\0', '\x0d\0'):
         # Above: check the subsystem field for UEFI.
         info['format'], info['os'] = 'efi' + suffix, 'efi'  # 'efiexe'.
       else:
         info['format'], info['os'] = 'win' + suffix, 'windows'  # 'winexe'.
+        if suffix == 'exe' and info['subformat'] == 'pe32' and is_hx():  # https://www.japheth.de/HX.html
+          info['subformat'] += '-hx'  # subformat=pe32-hx.
     else:  # Not executable.
       info['format'] = 'pe-nonexec'  # TODO(pts): Windows (non-Wine) .vxd?
       data = header[pe_ofs + 24 + opthd_size:]
@@ -5446,7 +5455,6 @@ def analyze_exe(fread, info, fskip):
       # TODO(pts): Add PMODE.
       # TODO(pts): Add X32VM with Digial Mars compiler (dmc -mx) (https://github.com/Olde-Skuul/KitchenSink/tree/master/sdks/dos/x32).
       # TODO(pts): Add DOS/32 (https://en.wikipedia.org/wiki/DOS/32) == DOS/32A (https://dos32a.narechk.net/index_en.html).
-      # TODO(pts): Add DOS/4G and DOS/4GW.
       info['format'], info['subformat'], info['arch'] = 'dosxexe', 'pmodedj', 'i386'
     elif reloc_count == 0 or 28 <= reloc_ofs <= 512:
       comment_ofs = reloc_end_ofs = (reloc_count and reloc_ofs + (reloc_count << 2)) or 28
@@ -5456,7 +5464,7 @@ def analyze_exe(fread, info, fskip):
       if comment_ofs <= 640 and len(header) < 640:
         header += fread(640 - len(header))
       def is_watcom_suffix(header, size):
-        header = header[size - 72 : size]
+        header = size >= 72 and header[size - 72 : size]
         return 'Can\'t run DOS/4G(W)' in header and 'DOS4GPATH' in header and 'DOS4GW.EXE\0' in header and 'DOS4G.EXE\0' in header
       if not is_comment64 and comment_ofs <= 200 and header[comment_ofs : comment_ofs + 14] == '\0\0\0\0\r\nCWSDPMI ':  # Embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'cwsdpmi', 'i386'
@@ -5467,6 +5475,8 @@ def analyze_exe(fread, info, fskip):
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'dos4gw', 'i386'
       elif comment_ofs == 28 and header[26 : 32] == '\0\0\0\0\0\0' and size in (0x200, 0x220, 0x280) and is_watcom_suffix(header, size):  # Not embedded.
         info['format'], info['subformat'], info['arch'] = 'dosxexe', 'watcom', 'i386'
+      elif is_hx():
+        info['format'], info['subformat'], info['arch'] = 'dosxexe', 'hx', 'i386'
     else:
       info['subformat'] = 'weird-reloc'
 
