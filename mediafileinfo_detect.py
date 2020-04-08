@@ -5445,12 +5445,12 @@ def analyze_exe(fread, info, fskip):
       info['os'], info['arch'] = NE_OS_ARCHS[osx]
     else:
       info['os'] = str(osx)
-    if flags & 0x8000:
-      info['format'], info['binary_type'] = 'dll', 'shlib'
-    else:
-      info['format'], info['binary_type'] = 'exe', 'executable'
+    is_shlib = bool(flags & 0x8000)
+    info['binary_type'] = ('executable', 'shlib')[is_shlib]
     if osx in (2, 4):
-      info['format'] = 'win' + info['format']
+      info['format'] = 'win' + ('exe', 'dll')[is_shlib]
+    elif osx == 1:  # OS/2 1.x.
+      info['format'] = 'os2' + ('exe', 'dll')[is_shlib]
   elif header[pe_ofs : pe_ofs + 8] == 'LX\0\0\0\0\0\0' and size_hi > 0:
     parse_lxle(fread, info, fskip, pe_ofs, header)
   elif (64 <= pe_ofs <= 8166 and len(header) >= pe_ofs + 24 and
