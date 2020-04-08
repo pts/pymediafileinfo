@@ -10110,7 +10110,7 @@ FORMAT_ITEMS = (
     # Filename extension: .mfo
     # Example: output of pymediafileinfo and media_scan.py.
     ('fileinfo', (0, 'format=')),
-    ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
+    ('unixscript', (0, '#!', 4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 110))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
