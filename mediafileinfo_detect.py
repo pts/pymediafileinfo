@@ -5403,7 +5403,10 @@ def parse_lxle(fread, info, fskip, pe_ofs, header):
     info['format'] = ('os2exe', 'os2dll')[info['binary_type'] == 'shlib']  # OS/2 2.x.
 
 
-def analyze_exe(fread, info, fskip):
+def analyze_exe(fread, info, fskip, format='exe',
+                # 408 is arbitrary, but since cups-raster has it, we can also that much.
+                spec=(0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
+                extra_formats=('dosexe', 'dosxexe', 'dotnetexe', 'dotnetdll', 'pe', 'pe-coff', 'pe-nonexec', 'winexe', 'windll', 'efiexe', 'efidll', 'vxd', 'os2exe', 'os2dll', 'hxs')):
   header = fread(64)
   if len(header) < 32:
     raise ValueError('Too short for exe.')
@@ -10110,24 +10113,6 @@ FORMAT_ITEMS = (
     ('unixscript', (4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 350))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
-    # 408 is arbitrary, but since cups-raster has it, we can also that much.
-    ('exe', (0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header)))),
-    ('dosexe',),  # From 'exe'.
-    ('dosxexe',),  # From 'exe'.
-    ('dotnetexe',),  # From 'exe'.
-    ('pe-coff',),  # From 'exe'.
-    ('winexe',),  # From 'exe'.
-    ('efiexe',),  # From 'exe'.
-    ('dotnetdll',),  # From 'exe'.
-    ('windll',),  # From 'exe'.
-    ('efidll',),  # From 'exe'.
-    ('pe',),  # From 'exe'.
-    ('pe-nonexec',),  # From 'exe'.
-    ('coff',),  # From 'exe'.
-    ('hxs',),  # From 'exe'.
-    ('vxd',),  # From 'exe'.
-    ('os2exe',),  # From 'exe'.
-    ('os2dll',),  # From 'exe'.
     # https://wiki.syslinux.org/wiki/index.php?title=Doc/comboot#COM32R_file_format
     ('com32r', (0, '\xb8\xfeL\xcd!')),  # .c32
     # https://github.com/pts/pts-xcom
@@ -10295,7 +10280,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'rdi': analyze_rdi,
     'flic': analyze_flic,
     'mng': analyze_mng,
-    'exe': analyze_exe,
     'xml': analyze_xml,
     'xml-comment': analyze_xml,
     'html': analyze_xml,
