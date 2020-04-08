@@ -1427,6 +1427,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'watcom', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\4\0', '\0' * 14, '@\0', '\0' * (6 + 32), '?' * (512 - 64 - 48), 'PATH=\r\ncannot find loader DPMILD32.EXE$\0\0\0\0\0\0\0\0\0'))),
                      {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'hx', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, ''.join(('MZ\0\0\1\0\0\0\2\0', '\0' * 22, '?' * 20, 'PMODE/W v1.'))),
+                     {'format': 'dosxexe', 'detected_format': 'exe', 'subformat': 'pmodew', 'arch': 'i386', 'binary_type': 'executable', 'endian': 'little', 'os': 'dos'})
     data2 = ''.join(('MZ\xff\1', '?' * 56, 'A\0\0\0?PE\0\0', '?' * 20))
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_exe, data2),
                      {'format': 'pe-coff', 'detected_format': 'exe', 'subformat': 'pe', 'arch': '0x3f3f', 'endian': 'little'})
