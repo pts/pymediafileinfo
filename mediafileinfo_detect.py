@@ -1364,7 +1364,7 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_brunsli)
   elif header.startswith('WMPHOTO\0') or header.startswith('II\xbc\x01'):
     return get_track_info_from_analyze_func(header, analyze_jpegxr)
-  elif header.startswith('\211PNG\r\n\032\n\0\0\0'):
+  elif header.startswith('\x89PNG\r\n\x1a\n\0\0\0'):
     return get_track_info_from_analyze_func(header, analyze_png)
   elif header.startswith('GIF87a') or header.startswith('GIF89a'):
     return get_track_info_from_analyze_func(header, analyze_gif)
@@ -5972,7 +5972,7 @@ def analyze_mng(fread, info, fskip):
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for mng.')
-  if not header.startswith('\212MNG\r\n\032\n\0\0\0'):
+  if not header.startswith('\x8aMNG\r\n\x1a\n\0\0\0'):
     raise ValueError('mng signature not found.')
   info['format'] = 'mng'
   info['tracks'] = [{'codec': 'jpeg+png'}]
@@ -5987,7 +5987,7 @@ def analyze_png(fread, info, fskip):
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for png.')
-  if not header.startswith('\211PNG\r\n\032\n\0\0\0'):
+  if not header.startswith('\x89PNG\r\n\x1a\n\0\0\0'):
     raise ValueError('png signature not found.')
   info['format'], info['codec'] = 'png', 'flate'
   if header[12 : 16] == 'IHDR':
@@ -6012,7 +6012,7 @@ def analyze_jng(fread, info, fskip):
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for jng.')
-  if not header.startswith('\213JNG\r\n\032\n\0\0\0'):
+  if not header.startswith('\x8bJNG\r\n\x1a\n\0\0\0'):
     raise ValueError('jng signature not found.')
   info['format'] = 'jng'
   info['codec'] = 'jpeg'
@@ -6918,7 +6918,7 @@ def quick_detect_image_format(header):
   # TODO(pts): Add more image file formats.
   if header.startswith('\0\0\0\x0cjP  ') or header.startswith('\xff\x4f\xff\x51\0'):
     return 'jpeg2000'
-  elif header.startswith('\211PNG\r\n\032\n'):
+  elif header.startswith('\x89PNG\r\n\x1a\n'):
     return 'png'
   elif header.startswith('GIF87a') or header.startswith('GIF89a'):
     return 'gif'
@@ -8085,7 +8085,7 @@ def parse_ico_or_cur(fread, info, fskip, format):
     if len(data) == 20:
       # https://github.com/ImageMagick/ImageMagick/blob/2059f96eeae8c2d26e8683aa17fd65f78f42ad30/coders/icon.c#L276-L277
       # 'IHDR' conflicts with BITMAPINFOHEADER.color_plane_count and .bits_per_pixel.
-      if data.startswith('\211PNG') or data[12 : 16] == 'IHDR':
+      if data.startswith('\x89PNG') or data[12 : 16] == 'IHDR':
         info['subformat'], info['codec'] = 'png', 'flate'
       else:
         codec, = struct.unpack('<L', data[16 : 20])
@@ -9727,7 +9727,7 @@ FORMAT_ITEMS = (
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
     ('realvideo', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
-    ('mng', (0, '\212MNG\r\n\032\n')),
+    ('mng', (0, '\x8aMNG\r\n\x1a\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
@@ -9740,9 +9740,9 @@ FORMAT_ITEMS = (
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
     ('agif',),  # From 'gif'.
-    ('png', (0, '\211PNG\r\n\032\n\0\0\0')),
+    ('png', (0, '\x89PNG\r\n\x1a\n\0\0\0')),
     ('apng',),  # From 'png'.
-    ('jng', (0, '\213JNG\r\n\032\n\0\0\0')),
+    ('jng', (0, '\x8bJNG\r\n\x1a\n\0\0\0')),
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
