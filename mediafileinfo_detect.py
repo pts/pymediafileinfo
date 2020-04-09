@@ -1376,6 +1376,8 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_tiff)
   elif header.startswith('\0\0\1\0'):  # Apparently this doesn't conflict with codecs below.
     return get_track_info_from_analyze_func(header, analyze_ico)
+  elif header.startswith('\0\0\2\0'):
+    return get_track_info_from_analyze_func(header, analyze_cur)
   elif header.startswith('#define'):
     return get_track_info_from_analyze_func(header, analyze_xbm)
   elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # This doesn't conflict with the codecs below.
@@ -6894,6 +6896,8 @@ def analyze_by_format(fread, info, fskip, format, data_size):
     analyze_func = analyze_jpegxl
   elif format == 'ico':
     analyze_func = analyze_ico
+  elif format == 'cur':
+    analyze_func = analyze_cur
   elif format == 'xbm':
     analyze_func = analyze_xbm
   elif format == 'pict':
@@ -8036,39 +8040,57 @@ def analyze_fuji_raf(fread, info, fskip):
   info['format'], info['codec'] = 'fuji-raf', 'raw'
 
 
-def analyze_ico(fread, info, fskip):
+def parse_ico_or_cur(fread, info, format):
   # https://en.wikipedia.org/wiki/ICO_(file_format)#Outline
   header = fread(6)
   if len(header) < 6:
-    raise ValueError('Too short for ico.')
-  signature, image_count = struct.unpack('<4sH', header)
-  if not (signature == '\0\0\1\0' and 1 <= image_count <= 12):
-    raise ValueError('ico signature not found.')
-  info['format'] = 'ico'
-  best = (0,)
+    raise ValueError('Too short for %s.' % format)
+  if not header.startswith(('\0\0\2\0', '\0\0\1\0')[format == 'ico']):
+    raise ValueError('%s signature not found.' % format)
+  info['format'] = format
+  image_count, = struct.unpack('<H', header[4 : 6])
+  if not 1 <= image_count <= 64:
+    raise ValueError('Bad %s image_count: %d' % (format, image_count))
+  best = ()
   min_image_offset = 6 + 16 * image_count
   for _ in xrange(image_count):
     data = fread(16)
     if len(data) < 16:
-      raise ValueError('EOF in ico image entry.')
+      raise ValueError('EOF in %s image entry.' % format)
     width, height, color_count, reserved, color_plane_count, bits_per_pixel, image_size, image_offset = struct.unpack(
         '<BBBBHHLL', data)
-    if reserved not in (0, 1):
-      raise ValueError('Bad ico reserved byte: %d' % reserved)
-    if color_plane_count > 4:
-      raise ValueError('Bad ico color_plane_count: %d' % color_plane_count)
-    if bits_per_pixel not in (0, 1, 2, 4, 8, 16, 24, 32):
-      raise ValueError('Bad ico bits_per_pixel: %d' % bits_per_pixel)
-    if not image_size:
-      raise ValueError('Bad ico image size.')
-    if image_offset < min_image_offset:
-      raise ValueError('Bad ico image_offset.')
+    if reserved not in (0, 1, 255):
+      raise ValueError('Bad %s reserved byte: %d' % (format, reserved))
     width += (width == 0) << 8
     height += (height == 0) << 8
+    if format == 'ico':
+      if color_plane_count > 4:
+        raise ValueError('Bad %s color_plane_count: %d' % (format, color_plane_count))
+      if bits_per_pixel not in (0, 1, 2, 4, 8, 16, 24, 32):
+        raise ValueError('Bad %s bits_per_pixel: %d' % (format, bits_per_pixel))
+    else:
+      hotspot_x, hotspot_y = color_plane_count, bits_per_pixel
+      if not 0 <= hotspot_x < width:
+        raise ValueError('Bad cur hotspot_x: %d' % hotspot_x)
+      if not 0 <= hotspot_y < height:
+        raise ValueError('Bad cur hotspot_x: %d' % hotspot_y)
+    if not image_size:
+      raise ValueError('Bad %s image size.' % format)
+    if image_offset < min_image_offset:
+      raise ValueError('Bad %s image_offset.' % format)
     best = max(best, (width * height, width, height))
     # TODO(pts): Detect .png compression at image_offset.
-  assert best[0], 'Best width * height not found.'
   _, info['width'], info['height'] = best  # Largest icon.
+
+
+def analyze_ico(fread, info, fskip, format='ico',
+                spec=(0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')):
+  parse_ico_or_cur(fread, info, 'ico')
+
+
+def analyze_cur(fread, info, fskip, format='cur',
+                spec=(0, '\0\0\2\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 11, '\0', 13, '\0')):
+  parse_ico_or_cur(fread, info, 'cur')
 
 
 def analyze_gif(fread, info, fskip):
@@ -9754,8 +9776,6 @@ FORMAT_ITEMS = (
     ('gem', (0, GEM_XIMG_HEADERS, 16, 'XIMG\0\0')),
     # By PCPaint >=2.0 and Pictor.
     ('pcpaint-pic', (0, '\x34\x12', 6, '\0\0\0\0', 11, tuple('\xff123'), 13, tuple('\0\1\2\3\4'))),
-    # TODO(pts): Also support .cur (Windows cursor) files.
-    ('ico', (0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 13)), 5, '\0', 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')),
     ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
@@ -10213,7 +10233,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'jbig2': analyze_jbig2,
     'djvu': analyze_djvu,
     'art': analyze_art,
-    'ico': analyze_ico,
     'webp': analyze_webp,
     'jpegxr': analyze_jpegxr,
     'flif': analyze_flif,

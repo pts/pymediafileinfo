@@ -365,6 +365,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
                      {'format': 'ico', 'height': 49, 'width': 48})
 
+  def test_analyze_cur(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cur, '\0\0\2\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
+                     {'format': 'cur', 'height': 49, 'width': 48})
+
   def test_analyze_webp(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_webp, '524946466876000057454250565038205c760000d2be019d012a26027001'.decode('hex')),
                      {'codec': 'vp8', 'format': 'webp', 'height': 368, 'width': 550})
