@@ -364,6 +364,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_ico(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
                      {'format': 'ico', 'height': 49, 'width': 48})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x17\0\0\0-????????????????\3\0\0\0'),
+                     {'format': 'ico', 'subformat': 'bmp', 'codec': 'bitfields', 'height': 49, 'width': 48})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x18\0\0\0--\211PNG????????????????'),
+                     {'format': 'ico', 'subformat': 'png', 'codec': 'flate', 'height': 49, 'width': 48})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_ico, '\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x18\0\0\0--????????????IHDR????'),
+                     {'format': 'ico', 'subformat': 'png', 'codec': 'flate', 'height': 49, 'width': 48})
 
   def test_analyze_cur(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_cur, '\0\0\2\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),

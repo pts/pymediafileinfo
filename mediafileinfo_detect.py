@@ -8039,7 +8039,7 @@ def analyze_fuji_raf(fread, info, fskip):
   info['format'], info['codec'] = 'fuji-raf', 'raw'
 
 
-def parse_ico_or_cur(fread, info, format):
+def parse_ico_or_cur(fread, info, fskip, format):
   # https://en.wikipedia.org/wiki/ICO_(file_format)#Outline
   header = fread(6)
   if len(header) < 6:
@@ -8077,19 +8077,29 @@ def parse_ico_or_cur(fread, info, format):
       raise ValueError('Bad %s image size.' % format)
     if image_offset < min_image_offset:
       raise ValueError('Bad %s image_offset.' % format)
-    best = max(best, (width * height, width, height))
-    # TODO(pts): Detect .png compression at image_offset.
-  _, info['width'], info['height'] = best  # Largest icon.
+    best = max(best, (width * height, width, height, image_offset))
+  _, info['width'], info['height'], image_offset = best  # Largest icon.
+  # Detect .png compression at image_offset.
+  if format == 'ico' and fskip(image_offset - min_image_offset):
+    data = fread(20)
+    if len(data) == 20:
+      # https://github.com/ImageMagick/ImageMagick/blob/2059f96eeae8c2d26e8683aa17fd65f78f42ad30/coders/icon.c#L276-L277
+      # 'IHDR' conflicts with BITMAPINFOHEADER.color_plane_count and .bits_per_pixel.
+      if data.startswith('\211PNG') or data[12 : 16] == 'IHDR':
+        info['subformat'], info['codec'] = 'png', 'flate'
+      else:
+        codec, = struct.unpack('<L', data[16 : 20])
+        info['subformat'], info['codec'] = 'bmp', DIB_CODECS.get(codec, str(codec))
 
 
 def analyze_ico(fread, info, fskip, format='ico',
                 spec=(0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')):
-  parse_ico_or_cur(fread, info, 'ico')
+  parse_ico_or_cur(fread, info, fskip, 'ico')
 
 
 def analyze_cur(fread, info, fskip, format='cur',
                 spec=(0, '\0\0\2\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 11, '\0', 13, '\0')):
-  parse_ico_or_cur(fread, info, 'cur')
+  parse_ico_or_cur(fread, info, fskip, 'cur')
 
 
 def analyze_gif(fread, info, fskip):
