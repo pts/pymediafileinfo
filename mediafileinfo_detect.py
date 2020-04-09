@@ -5981,7 +5981,8 @@ def analyze_mng(fread, info, fskip):
     set_video_dimens(info['tracks'][0], width, height)
 
 
-def analyze_png(fread, info, fskip):
+def analyze_png(fread, info, fskip, format='png', extra_formats=('apng',),
+                spec=(0, '\x89PNG\r\n\x1a\n\0\0\0', 12, 'IHDR')):
   # https://tools.ietf.org/html/rfc2083
   # https://wiki.mozilla.org/APNG_Specification
   header = fread(24)
@@ -9740,8 +9741,6 @@ FORMAT_ITEMS = (
 
     ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
     ('agif',),  # From 'gif'.
-    ('png', (0, '\x89PNG\r\n\x1a\n\0\0\0')),
-    ('apng',),  # From 'png'.
     ('jng', (0, '\x8bJNG\r\n\x1a\n\0\0\0')),
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
@@ -10222,7 +10221,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'realvideo': analyze_realvideo,
     'wav': analyze_wav,
     'gif': analyze_gif,
-    'png': analyze_png,
     'jng': analyze_jng,
     'lbm': analyze_lbm,
     'deep': analyze_deep,
