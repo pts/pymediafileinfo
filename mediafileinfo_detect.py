@@ -5891,7 +5891,6 @@ DIB_CODECS = {
 def populate_dib(info, data, format):
   # Should be preceded by: data = fread(34).
   if len(data) < 22:
-    print len(data)
     raise ValueError('Too short for %s dib.' % format)
   if not data.startswith('BM'):
     raise ValueError('%s dib signature not found.' % format)
