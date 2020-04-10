@@ -9570,6 +9570,56 @@ def count_is_rtf(header):
   return i * 100
 
 
+PYC_VERSION_MAGICS = dict((m, v) for v, ms in (
+    ('1.5', (20121,)),
+    ('1.6', (50428,)),
+    ('2.0', (50823, 50824)),
+    ('2.1', (60202, 60203)),
+    ('2.2', (60717, 60718)),
+    ('2.3', (62011, 62012, 62021, 62022)),
+    ('2.4', (62051, 62052, 62061, 62062)),
+    ('2.5', (62071, 62072, 62081, 62082, 62091, 62092, 62101, 62102, 62111, 62112, 62121, 62122, 62131, 62132)),
+    ('2.6', (62151, 62152, 62161, 62162)),
+    ('2.7', (62171, 62172, 62181, 62182, 62191, 62192, 62201, 62202, 62211, 62212)),
+    ('3.0', (3000, 3001, 3010, 3011, 3020, 3021, 3030, 3031, 3040, 3041, 3050, 3051, 3060, 3061, 3071, 3081, 3091, 3101, 3103, 3111, 3131)),
+    ('3.1', (3141, 3151)),
+    ('3.2', (3160, 3170, 3180)),
+    ('3.3', (3190, 3200, 3210, 3220, 3230)),
+    ('3.4', (3250, 3260, 3270, 3280, 3290, 3300, 3310)),
+    ('3.5', (3320, 3330, 3340, 3350, 3351)),
+    ('3.6', (3360, 3361, 3370, 3371, 3372, 3373, 3375, 3376, 3377, 3378, 3379)),
+    ('3.7', (3390, 3391, 3392, 3393, 3394)),
+    ('3.8', (3401, 3410, 3411, 3412, 3413)),
+    ) for m in ms)
+
+
+def analyze_python_pyc(fread, info, fskip, format='python-pyc',
+                       spec=((0, ('\x99N', '\xfc\xc4', '\x87\xc6', '\x88\xc6', '*\xeb', '+\xeb', '-\xed', '.\xed'), 2, '\r\n', 8, 'c\0\0\0\0'),
+                             (0, (';\xf2', '<\xf2', 'E\xf2', 'F\xf2', 'c\xf2', 'd\xf2', 'm\xf2', 'n\xf2', 'w\xf2', 'x\xf2', '\x81\xf2', '\x82\xf2', '\x8b\xf2', '\x8c\xf2', '\x95\xf2', '\x96\xf2', '\x9f\xf2', '\xa0\xf2', '\xa9\xf2', '\xaa\xf2', '\xb3\xf2', '\xb4\xf2', '\xc7\xf2', '\xc8\xf2', '\xd1\xf2', '\xd2\xf2', '\xdb\xf2', '\xdc\xf2', '\xe5\xf2', '\xe6\xf2', '\xef\xf2', '\xf0\xf2', '\xf9\xf2', '\xfa\xf2', '\x03\xf3', '\x04\xf3'), 2, '\r\n', 8, 'c\0\0\0\0\0\0\0\0'),
+                             (0, ('\xb8\x0b', '\xb9\x0b', '\xc2\x0b', '\xc3\x0b', '\xcc\x0b', '\xcd\x0b', '\xd6\x0b', '\xd7\x0b', '\xe0\x0b', '\xe1\x0b', '\xea\x0b', '\xeb\x0b', '\xf4\x0b', '\xf5\x0b', '\xff\x0b', '\t\x0c', '\x13\x0c', '\x1d\x0c', '\x1f\x0c', "'\x0c", ';\x0c', 'E\x0c', 'O\x0c', 'X\x0c', 'b\x0c', 'l\x0c'), 2, '\r\n', 8, 'c\0\0\0\0\0\0\0\0'),
+                             (0, ('v\x0c', '\x80\x0c', '\x8a\x0c', '\x94\x0c', '\x9e\x0c'), 2, '\r\n', 12, 'c\0\0\0\0\0\0\0\0'),
+                             (0, ('\xb2\x0c', '\xbc\x0c', '\xc6\x0c', '\xd0\x0c', '\xda\x0c', '\xe4\x0c', '\xee\x0c', '\xf8\x0c', '\x02\r', '\x0c\r', '\x16\r', '\x17\r', ' \r', '!\r', '*\r', '+\r', ',\r', '-\r', '/\r', '0\r', '1\r', '2\r', '3\r'), 2, '\r\n', 12, ('c', '\xe3'), 13, '\0\0\0\0\0\0\0\0'),
+                             (0, ('>\r', '?\r', '@\r', 'A\r', 'B\r', 'I\r', 'R\r', 'S\r', 'T\r', 'U\r'), 2, '\r\n', 4, ('\0', '\1', '\3'), 5, '\0\0\0', 16, ('c', '\xe3'), 17, '\0\0\0\0\0\0\0\0'),
+                             (1, ('\x0d', '\x0e', '\x0f', '\x10'), 2, lambda header: (len(header) >= 2 and 3414 <= struct.unpack('<H', header[:2])[0] <= 4181, 3), 2, '\r\n', 4, ('\0', '\1', '\3'), 5, '\0\0\0', 16, ('c', '\xe3'), 17, '\0\0\0\0\0\0\0\0'))):
+  header = fread(25)
+  if len(header) < 25:
+    raise ValueError('Too short for python-pyc.')
+  magic, magic2 = struct.unpack('<H2s', header[:4])
+  if 3414 <= magic <= 4181:  # 4181 is arbirary, looking 2 * 256 into the future.
+    version = '3.8+'
+  else:
+    version = PYC_VERSION_MAGICS.get(magic)
+  if version is None or magic2 != '\r\n':
+    raise ValueError('python-pyc magic no found.')
+  if ((version < '2.3' and header[8 : 13] != 'c\0\0\0\0') or   # header[4 : 8] is mtime.
+      ('2.3' <= version < '3.3' and header[8 : 17] != 'c\0\0\0\0\0\0\0\0') or  # header[4 : 8] is mtime.
+      (version == '3.3' and header[12 : 21] != 'c\0\0\0\0\0\0\0\0') or  # header[4 : 8] is mtime, header[8 : 12] is source_size.
+      ('3.4' <= version < '3.7' and not (header[12] in 'c\xe3' and header[13 : 21] == '\0\0\0\0\0\0\0\0')) or  # header[4 : 8] is mtime, header[8 : 12] is source_size.
+      ('3.7' <= version and not (header[4] in '\0\1\3' and header[5 : 8] == '\0\0\0' and header[16] in 'c\xe3' and header[17 : 25] == '\0\0\0\0\0\0\0\0'))):
+    raise ValueError('Bad python-pyc code for version %s.' % version)
+  info['format'], info['subformat'] = 'python-pyc', version
+
+
 def count_is_troff(header):
   i = 0
   if header.startswith('.\\" '):

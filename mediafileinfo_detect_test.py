@@ -1517,6 +1517,50 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macho, '\xbe\xba\xfe\xca\2\0\0\0\7\0\0\1????????????????\7\0\0\0????????????????'),  # Maybe no such endian.
                      {'format': 'macho', 'subformat': 'universal', 'binary_type': 'executable', 'arch': 'amd64,i386', 'endian': 'little'})
 
+  def test_analyze_python_pyc(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\x99N\r\n????c\0\0\0\0????????????'),
+                     {'format': 'python-pyc', 'subformat': '1.5'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\xfc\xc4\r\n????c\0\0\0\0????????????'),
+                     {'format': 'python-pyc', 'subformat': '1.6'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\x88\xc6\r\n????c\0\0\0\0????????????'),
+                     {'format': 'python-pyc', 'subformat': '2.0'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '*\xeb\r\n????c\0\0\0\0????????????'),
+                     {'format': 'python-pyc', 'subformat': '2.1'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '.\xed\r\n????c\0\0\0\0????????????'),
+                     {'format': 'python-pyc', 'subformat': '2.2'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, ';\xf2\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.3'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'm\xf2\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.4'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\xb3\xf2\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.5'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\xd1\xf2\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.6'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\3\xf3\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.7'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\3\xf3\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '2.7'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\xb8\x0b\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '3.0'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'O\x0c\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '3.1'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'l\x0c\r\n????c\0\0\0\0\0\0\0\0????????'),
+                     {'format': 'python-pyc', 'subformat': '3.2'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\x9e\x0c\r\n????????c\0\0\0\0\0\0\0\0????'),
+                     {'format': 'python-pyc', 'subformat': '3.3'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\xee\x0c\r\n????????\xe3\0\0\0\0\0\0\0\0????'),
+                     {'format': 'python-pyc', 'subformat': '3.4'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '\x17\r\r\n????????\xe3\0\0\0\0\0\0\0\0????'),
+                     {'format': 'python-pyc', 'subformat': '3.5'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, '3\r\r\n????????\xe3\0\0\0\0\0\0\0\0????'),
+                     {'format': 'python-pyc', 'subformat': '3.6'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'B\r\r\n\3\0\0\0????????\xe3\0\0\0\0\0\0\0\0'),
+                     {'format': 'python-pyc', 'subformat': '3.7'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'U\r\r\n\3\0\0\0????????\xe3\0\0\0\0\0\0\0\0'),
+                     {'format': 'python-pyc', 'subformat': '3.8'})
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'V\r\r\n\3\0\0\0????????\xe3\0\0\0\0\0\0\0\0'),
+                     {'format': 'python-pyc', 'subformat': '3.8+'})
+
   def test_analyze_pef(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pef, 'Joy!peffpwpc\0\0\0\1????????????????\0\3\0\2'),
                      {'format': 'pef', 'binary_type': 'executable', 'arch': 'powerpc', 'endian': 'big'})
