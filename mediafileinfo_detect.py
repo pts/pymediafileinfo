@@ -10228,6 +10228,19 @@ FORMAT_ITEMS = (
     ('ucsd-pcode',),
     # https://github.com/graphitemaster/gmqcc/blob/94c2936bfad224529cf326d539a5cdac0a286183/code.cpp#L309-L313
     ('quakec-lnof', (0, 'LNOF\1\0\0\0')),
+    # Ethereum EVM bytecode doesn't contain a header.
+    # https://ethervm.io/
+    # TODO(pts): Trying to match more on the dispatcher code:
+    # https://patrickventuzelo.com/wp-content/uploads/2018/11/devcon4_reversing_ethereum_smart_contract_full.pdf
+    ('ethereum-evm', (0, ('\x60\x80\x60\x40\x52\x60\x04\x36\x10', '\x60\x80\x60\x40\x52\x34\x80\x15\x61'))),
+    # https://en.wikipedia.org/wiki/Solidity
+    # TODO(pts): Add comments etc.
+    ('solidity', (0, 'pragma solidity ')),
+    ('solidity', (0, 'contract ')),
+    # https://nekovm.org/
+    # https://github.com/HaxeFoundation/neko/blob/1df580cb95e6f93d71d553391a92eda2fab283dd/src/neko/Bytecode.nml#L275
+    # Languages which target this bytecode: Neko, NekoML, Haxe.
+    ('nekovm-bytecode', (0, 'NEKO', 7, '\0', 11, '\0')),
     # https://en.wikipedia.org/wiki/Scratch_(programming_language)#File_formats
     ('scratch', (0, ('ScratchV01', 'ScratchV02'))),
     # OLE compound file == composite document file, including Thumbs.db and
