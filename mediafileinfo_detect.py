@@ -10128,6 +10128,12 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/BEAM
     ('erlang-beam', (0, 'FOR1', 8, 'BEAM')),
     ('erlang-beam', (0, '\x7fBEAM!')),
+    # http://docs.parrot.org/parrot/devel/html/docs/parrotbyte.pod.html
+    ('parrot-pbc', (0, '\xfePBC\r\n\x1a\n')),
+    # https://ruby-doc.org/core-2.6/RubyVM/InstructionSequence.html
+    ('ruby-yarv', (0, 'YARB', 4, ('\1', '\2', '\3', '\4'), 5, '\0\0\0')),  # RubyVM::InstructionSequence.compile('p 6 * 7').to_binary[0, 100]; '\2' is the Ruby major version number (2.x).
+    ('ruby-yarv', (0, '["YARVInstructionSequence/SimpleDataFormat", ', 45, ('1', '2', '3', '4'))),  # RubyVM::InstructionSequence.compile('p 6 * 7').to_a.inspect
+    ('ruby-yarv', (0, '"\4\x08[\x13\"-YARVInstructionSequence/SimpleDataFormati', 48, ('\6', '\7', '\x08', '\x09'))),  # Marshal::dump(RubyVM::InstructionSequence.compile('p 6 * 7').to_a)
     # OLE compound file == composite document file, including Thumbs.db and
     # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
     ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
