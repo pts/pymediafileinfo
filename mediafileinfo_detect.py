@@ -10074,6 +10074,10 @@ FORMAT_ITEMS = (
     # Also used for Linux .a files (containing ELF .o files) and archives
     # containing Go object files.
     ('ar', (0, '!<arch>\n')),
+    # http://fileformats.archiveteam.org/wiki/Cpio
+    # https://www.systutorials.com/docs/linux/man/5-cpio/
+    ('cpio', (0, ('070707', '070701', '070702'))),
+    ('cpio', (0, ('\x71\xc7', '\xc7\x71'))),
     # http://fileformats.archiveteam.org/wiki/Cabinet
     ('cab', (0, 'MSCF\0\0\0\0')),
     # https://doomwiki.org/wiki/WAD#Compression
