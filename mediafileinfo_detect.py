@@ -10187,6 +10187,27 @@ FORMAT_ITEMS = (
     # pspbrwse.jbf
     # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
     ('jbf', (0, 'JASC BROWS FILE\0')),
+    # .o object files created by Go.
+    # See printObjHeader in go/src/cmd/compile/internal/gc/obj.go
+    # TODO(pts): Read XCOFF in go/src/cmd/link/internal/ld/lib.go
+    # NOTE: There are *three* independent implementations of this object file format in the Go source tree:
+    #       cmd/internal/goobj/read.go (used by cmd/addr2line, cmd/nm, cmd/objdump, cmd/pprof)
+    #       cmd/internal/obj/objfile.go (used by cmd/asm and cmd/compile)
+    #       cmd/link/internal/objfile.go (used by cmd/link)
+    # The Plan 9 version of the assembler
+    # (https://github.com/0intro/plan9/blob/master/sys/src/cmd/8a/lex.c)
+    # doesn't seem to print any specific header in the assemble(...)
+    # function. The corresponding lex.c in Go prints "go object ".
+    ('go-object', (0, 'go object ')),
+    # This header seems to come right after 'go object ...\n!\n', so it
+    # isn't at the beginning of the file.
+    # .o object files created by newer (1.14) Go.
+    # See Magic in in go/src/cmd/internal/goobj/objfile.go
+    # See Magic in in go/src/cmd/internal/goobj2/objfile.go
+    # See WriteObjFile in go/src/cmd/internal/obj/objfile.go
+    # See startmagic in go/src/cmd/link/internal/objfile/objfile.go
+    # In Go 1.10 go/src/cmd/internal/obj/read.go also has it.
+    # ('go-object', (0, ('\x00\x00go13ld', '\x00\x00go17ld', '\x00\x00go19ld', '\x00go112ld', '\x00go114ld', '\x00go114LD'))),
     # Doing the major_version >= 30 check to distinguish from format=macho subformat=universal.
     ('java-class', (0, '\xca\xfe\xba\xbe', 6, '\0', 8, lambda header: (len(header) >= 8 and ord(header[7]) >= 30, 1))),
     # http://fileformats.archiveteam.org/wiki/BEAM
