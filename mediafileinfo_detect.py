@@ -10226,6 +10226,8 @@ FORMAT_ITEMS = (
     # for the description of the segment header in the first 512 bytes
     # (block0).
     ('ucsd-pcode',),
+    # https://github.com/graphitemaster/gmqcc/blob/94c2936bfad224529cf326d539a5cdac0a286183/code.cpp#L309-L313
+    ('quakec-lnof', (0, 'LNOF\1\0\0\0')),
     # OLE compound file == composite document file, including Thumbs.db and
     # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
     ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
