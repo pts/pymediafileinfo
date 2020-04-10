@@ -10134,6 +10134,13 @@ FORMAT_ITEMS = (
     ('ruby-yarv', (0, 'YARB', 4, ('\1', '\2', '\3', '\4'), 5, '\0\0\0')),  # RubyVM::InstructionSequence.compile('p 6 * 7').to_binary[0, 100]; '\2' is the Ruby major version number (2.x).
     ('ruby-yarv', (0, '["YARVInstructionSequence/SimpleDataFormat", ', 45, ('1', '2', '3', '4'))),  # RubyVM::InstructionSequence.compile('p 6 * 7').to_a.inspect
     ('ruby-yarv', (0, '"\4\x08[\x13\"-YARVInstructionSequence/SimpleDataFormati', 48, ('\6', '\7', '\x08', '\x09'))),  # Marshal::dump(RubyVM::InstructionSequence.compile('p 6 * 7').to_a)
+    # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
+    # The UCSD Pascal P-code codefile file format is hard to detect, so we
+    # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
+    # examples. See also ucsd-psystem-xc-0.13/lib/codefile/file/i_5.{h,cc}
+    # for the description of the segment header in the first 512 bytes
+    # (block0).
+    ('ucsd-pcode',),
     # OLE compound file == composite document file, including Thumbs.db and
     # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
     ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
