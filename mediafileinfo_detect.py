@@ -10071,6 +10071,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/RPM
     ('rpm', (0, '\xed\xab\xee\xdb')),
     # http://fileformats.archiveteam.org/wiki/AR
+    # Also used for Linux .a files (containing ELF .o files) and archives
+    # containing Go object files.
     ('ar', (0, '!<arch>\n')),
     # http://fileformats.archiveteam.org/wiki/Cabinet
     ('cab', (0, 'MSCF\0\0\0\0')),
