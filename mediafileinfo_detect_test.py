@@ -1608,6 +1608,15 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(FORMAT_DB.detect(data1)[0], 'info')
     self.assertEqual(mediafileinfo_detect.count_is_info(data1), 5255)
 
+  def test_analyze_stuffit(self):
+    data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00SIT5????\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macbinary, data_macbinary1),
+                     {'format': 'stuffit', 'detected_format': 'macbinary', 'subformat': 'macbinary'})
+    self.assertEqual(FORMAT_DB.detect('SIT!??????rLau')[0], 'stuffit')
+    self.assertEqual(FORMAT_DB.detect('StuffIt (c)1997')[0], 'stuffit')
+    self.assertEqual(FORMAT_DB.detect('StuffIt?')[0], 'stuffitx')
+
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

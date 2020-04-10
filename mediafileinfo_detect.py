@@ -6832,6 +6832,10 @@ MAC_TYPE_MAP = {
     'kpcd': ('photocd', 'photocd'),
     'jp2': ('jpeg2000', None),
     'jp': ('jpeg2000', None),
+    'sit!': ('stuffit', False),
+    'sitd': ('stuffit', False),
+    'sit2': ('stuffit', False),
+    'sit5': ('stuffit', False),
     # TODO(pts): Add more, from types.lst.
 }
 
@@ -7095,10 +7099,12 @@ def analyze_pict(fread, info, fskip, header=''):
       codec_tag = codec_tag.strip().strip('.').lower()
       if codec_tag in MAC_TYPE_MAP:
         format, codec = MAC_TYPE_MAP[codec_tag]
-        info['sampled_format'] = format
-        if codec:
-          info['codec'] = codec
+        if codec is False:
+          pass
+        elif codec:
+          info['sampled_format'], info['codec'] = format, codec
         else:
+          info['sampled_format'] = format
           subformat = info.pop('subformat')
           try:
             analyze_by_format(fread, info, fskip, format, data_size)
@@ -9288,7 +9294,7 @@ def analyze_lzma(fread, info, fskip):
   info['format'] = info['codec'] = 'lzma'
 
 
-MACBINARY_TYPES = ('PICT', 'PNTG')
+MACBINARY_TYPES = ('PICT', 'PNTG', 'SIT!', 'SITD', 'SIT2', 'SIT5')
 
 
 def is_macbinary(header):
@@ -9311,6 +9317,8 @@ def analyze_macbinary(fread, info, fskip):
   assert codec_tag in MAC_TYPE_MAP
   info['format'] = format = MAC_TYPE_MAP[codec_tag][0]
   info['subformat'] = 'macbinary'
+  if 'format' == 'stuffit':
+    return
   try:
     analyze_by_format(fread, info, fskip, format, None)
   except ValueError, e:
@@ -10087,7 +10095,7 @@ FORMAT_ITEMS = (
     ('ain', (0, '!', 1, ('\x11', '\x12'), 2, '\0\0\0\0\0\0')),
     # http://fileformats.archiveteam.org/wiki/StuffIt
     # `apt-get install unar' can extract it ('SIT!') on Linux.
-    # Some of the files have a MacBinary header, which we don't detect.
+    # format=macbinary can also detect it.
     ('stuffit', (0, 'SIT!', 10, 'rLau')),
     ('stuffit', (0, 'StuffIt (c)1997')),
     # http://fileformats.archiveteam.org/wiki/StuffIt_X#Identification
