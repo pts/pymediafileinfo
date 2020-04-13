@@ -10222,6 +10222,8 @@ FORMAT_ITEMS = (
     # https://github.com/micropython/micropython/blob/5716c5cf65e9b2cb46c2906f40302401bdd27517/tools/mpy-tool.py
     ('micropython-mpy', (0, 'M', 1, ('\0', '\1', '\2', '\3'), 2, ('\0', '\1', '\2', '\3'), 3, ('\x1e', '\x1f', '\x2f', '\x3e', '\x3f'))),
     ('micropython-mpy', (0, 'M', 1, tuple(chr(c) for c in xrange(4, 30)), 2, tuple(chr(c) for c in xrange(128)), 3, ('\x1e', '\x1f', '\x2f', '\x3e', '\x3f'), 4, ' ')),
+    # This covers Emacs >=19.34b (1996-09-06) and XEmacs >= 21.1.6 (1999-05-12).
+    ('emacs-elc', (0, ';ELC', 4, ('\x12', '\x13', '\x14', '\x17'), 5, '\0\0\0\n')),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
