@@ -10232,6 +10232,9 @@ FORMAT_ITEMS = (
     # https://github.com/file/file/blob/79f3070d4ea165196fa072281f6a2c2c3d19f756/magic/Magdir/lisp#L64-L65
     ('clisp-bytecode', (0, '(SYSTEM::VERSION ')),
     ('clisp-bytecode', (0, '(|SYSTEM|::|VERSION| ')),
+    # https://source.android.com/devices/tech/dalvik/dex-format
+    # Version 039 is used in Android 9--11.
+    ('dalvik-dex', (0, 'dex\n0', 5, ('45', '44', '43', '42', '41', '40', '39', '38', '37', '35', '13', '09'), 7, '\0')),  # classes.dex.
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
