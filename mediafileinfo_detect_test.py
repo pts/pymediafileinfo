@@ -1584,6 +1584,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_java_class(self):
     self.assertEqual(FORMAT_DB.detect('\xca\xfe\xba\xbe\0\3\0\x2d')[0], 'java-class')
 
+  def test_detect_lua_luac(self):
+    self.assertEqual(FORMAT_DB.detect('\x1bLua\x52\0\1\4\4\4\x08\0\x19\x93\r\n\x1a\n')[0], 'lua-luac')
+
   def test_detect_hxs(self):
     self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
 

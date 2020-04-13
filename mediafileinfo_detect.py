@@ -10247,6 +10247,17 @@ FORMAT_ITEMS = (
     # (typically 0x2df), at the beginning of the CODE section.
     ('ocaml-bytecode', (0, '\x54\0\0\0', 6, '\0\0')),
     ('ocaml-bytecode', (0, '\0\0\0\x54\0\0')),
+    # http://files.catwell.info/misc/mirror/lua-5.2-bytecode-vm-dirk-laurie/lua52vm.html
+    # Also in Lua sources: src/lundump.h and src/lundump.c in https://www.lua.org/ftp/
+    ('lua-luac', (0, '\x1bLua', 4, ('\x24', '\x25'), 5, '\2\4', 7, ('\4', '\x08'), 8, ('\x12\x34', '\x34\x12'))),  # .luac
+    ('lua-luac', (0, '\x1bLua', 4, ('\x31',), 5, ('l', 'f', 'd', '?'), 6, ('\4', '\x08'))),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x32',), 5, ('\0', '\4', '\x08'))),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x40',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ' \6\x09')),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x50',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, '\6\x08\x09\x09', 13, ('\4', '\x08'))),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x51',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1'))),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x52',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1'), 12, '\x19\x93\r\n\x1a\n')),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x53',), 5, '\0', 6, '\x19\x93\r\n\x1a\n', 12, ('\4', '\x08'), 13, ('\4', '\x08'), 14, ('\4', '\x08'), 15, ('\4', '\x08'), 16, ('\4', '\x08'), 17, ('\0\0\x56\x78', '\x78\x56\0\0', '\0\0\0\0'))),
+    ('lua-luac', (0, '\x1bLua', 4, ('\x54', '\x55', '\x56', '\x57', '\x58', '\x59'), 5, ('\0', '\1'))),  # Prediction of future Lua bytecode versions.
     # Opportunistic, there can be comments etc., not everything is a
     # function.
     ('common-lisp', (0, '(defun ')),
