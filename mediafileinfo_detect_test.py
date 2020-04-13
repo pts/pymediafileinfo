@@ -570,6 +570,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data4), {'format': 'xhtml', 'detected_format': 'xml-comment'})
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, data5), {'format': 'xhtml', 'detected_format': 'html'})
 
+  def test_analyze_texmacs_xml(self):
+    self.assertEqual(analyze_string(mediafileinfo_detect.analyze_xml, '<?xml version="1.0"?>\n\n<TeXmacs version="1.99.9">'), {'format': 'texmacs', 'detected_format': 'xml', 'subformat': 'xml'})
+
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen
     self.assertRaises(ValueError, f, '')

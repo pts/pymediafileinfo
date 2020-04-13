@@ -5856,6 +5856,11 @@ def analyze_xml(fread, info, fskip):
         elif tag_name == 'html':
           # We don't check for xmlns="..." here, <?xml above was enough.
           info['format'] = 'xhtml'
+        elif tag_name == 'TeXmacs':
+          info['format'], info['subformat'] = 'texmacs', 'xml'
+          attrs = parse_attrs(buffer(data, j, i - j - 1))
+          if (attrs.get('version', '') + 'xx')[:2] not in ('1.', '2.', '3.'):
+            raise ValueError('Bad texmacs version: %r' % attrs.get('version'))
         break
       else:
         raise ValueError('xml tag expected.')
