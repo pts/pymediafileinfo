@@ -10051,6 +10051,9 @@ FORMAT_ITEMS = (
     # https://github.com/corbamico/tbcload/blob/master/parser.go
     # https://github.com/ActiveState/teapot/blob/master/lib/tbcload/tests/tbc10/catch.tbc
     ('tclpro-bytecode', (0, 'TclPro ByteCode ')),
+    # https://wiki.tcl-lang.org/page/getbytecode
+    # https://github.com/SAOImageDS9/SAOImageDS9/blob/39579a905d2396471f23b49d6a6b8f110df7e290/tcl8.6/generic/tclDisassemble.c#L1229
+    ('tcl-bytecode', (0, 'literals {')),
     # https://ftp.lip6.fr/pub/lyx/stable/2.3.x/lyx-2.3.4.3.tar.xz
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('lyx', (0, '#LyX ', 408, lambda header: (header[header.find('\n') + 1:].startswith('\\lyxformat '), 1100))),
