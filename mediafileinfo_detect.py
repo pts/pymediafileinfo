@@ -10229,6 +10229,9 @@ FORMAT_ITEMS = (
     # https://github.com/emacs-mirror/emacs/blob/188bd80a903d34ef6a85b09e99890433e7adceb7/src/pdumper.c#L136-L140
     # FYI The `(dump-emacs ...)' call crates a native executable, no magic number to detect.
     ('emacs-pdump', (0, 'DUMPEDGNUEMACS\0\0')),
+    # https://github.com/file/file/blob/79f3070d4ea165196fa072281f6a2c2c3d19f756/magic/Magdir/lisp#L64-L65
+    ('clisp-bytecode', (0, '(SYSTEM::VERSION ')),
+    ('clisp-bytecode', (0, '(|SYSTEM|::|VERSION| ')),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
