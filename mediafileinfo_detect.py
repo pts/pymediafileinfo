@@ -10035,6 +10035,8 @@ FORMAT_ITEMS = (
     ('texinfo', (0, '@ignore', 7, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@comment', 8, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@ifnottex', 9, ('\r', '\n', ' ', '\t'))),
+    # https://www.texmacs.org/tmweb/manual/webman-format.en.html
+    ('texmacs', (0, '<TeXmacs|', 9, ('1', '2', '3'), 10, '0')),
     ('info', (0, 'This is ', 170, lambda header: adjust_confidence(800, count_is_info(header)))),
     # http://fileformats.archiveteam.org/wiki/HLP_(WinHelp)
     # http://www.oocities.org/mwinterhoff/helpfile.htm
