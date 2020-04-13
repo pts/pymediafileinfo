@@ -10235,6 +10235,9 @@ FORMAT_ITEMS = (
     # https://source.android.com/devices/tech/dalvik/dex-format
     # Version 039 is used in Android 9--11.
     ('dalvik-dex', (0, 'dex\n0', 5, ('45', '44', '43', '42', '41', '40', '39', '38', '37', '35', '13', '09'), 7, '\0')),  # classes.dex.
+    # https://github.com/ocaml/ocaml/blob/trunk/runtime/startup_byt.c
+    # File ends with 'Caml1999X027', no header.
+    ('ocaml-bytecode',),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
