@@ -10250,6 +10250,9 @@ FORMAT_ITEMS = (
     # Opportunistic, there can be comments etc., not everything is a
     # function.
     ('common-lisp', (0, '(defun ')),
+    # Opportunistic, there can be comments etc., not everything is a
+    # function. Also matches PreScheme (bytecode?) by Scheme 48.
+    ('scheme', (0, '(define (')),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
