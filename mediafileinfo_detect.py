@@ -367,7 +367,7 @@ MKV_CODEC_IDS = {
 }
 
 
-def analyze_mkv(fread, info, fskip, format='mkv', extra_formats=('webm',), tags=('media',),
+def analyze_mkv(fread, info, fskip, format='mkv', extra_formats=('webm',), fclass='media',
                 spec=(0, '\x1a\x45\xdf\xa3')):
   # Can also be .webm as a subformat.
   # https://matroska.org/technical/specs/index.html
@@ -771,7 +771,7 @@ def parse_isobmff_infe_box(version, flags, data):
 
 
 def analyze_mov(
-    fread, info, fskip, header='', format='mov', tags=('media',),
+    fread, info, fskip, header='', format='mov', fclass='media',
     extra_formats=('mp4', 'jp2', 'isobmff-image', 'f4v'),
     spec=(
         # TODO(pts): Add support for ftyp=mis1 (image sequence) or ftyp=hevc, ftyp=hevx.
@@ -3971,7 +3971,7 @@ def get_jpeg_dimensions(fread, header='', is_first_eof_ok=False):
   raise AssertionError('Internal JPEG parser error.')
 
 
-def analyze_jpeg(fread, info, fskip, format='jpeg', tags=('image',),
+def analyze_jpeg(fread, info, fskip, format='jpeg', fclass='image',
                  spec=(0, '\xff\xd8\xff')):
   header = fread(4)
   if len(header) < 3:
@@ -5405,7 +5405,7 @@ def parse_lxle(fread, info, fskip, pe_ofs, header):
     info['format'] = ('os2exe', 'os2dll')[info['binary_type'] == 'shlib']  # OS/2 2.x.
 
 
-def analyze_exe(fread, info, fskip, format='exe',
+def analyze_exe(fread, info, fskip, format='exe', fclass='code',
                 # 408 is arbitrary, but since cups-raster has it, we can also that much.
                 spec=(0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
                 extra_formats=('dosexe', 'dosxexe', 'dotnetexe', 'dotnetdll', 'pe', 'pe-coff', 'pe-nonexec', 'winexe', 'windll', 'efiexe', 'efidll', 'vxd', 'os2exe', 'os2dll', 'hxs')):
@@ -5981,7 +5981,7 @@ def analyze_mng(fread, info, fskip):
     set_video_dimens(info['tracks'][0], width, height)
 
 
-def analyze_png(fread, info, fskip, format='png', extra_formats=('apng',),
+def analyze_png(fread, info, fskip, format='png', extra_formats=('apng',), fclass='image',
                 spec=(0, '\x89PNG\r\n\x1a\n\0\0\0', 12, 'IHDR')):
   # https://tools.ietf.org/html/rfc2083
   # https://wiki.mozilla.org/APNG_Specification
@@ -8098,12 +8098,12 @@ def parse_ico_or_cur(fread, info, fskip, format):
         info['subformat'], info['codec'] = 'bmp', DIB_CODECS.get(codec, str(codec))
 
 
-def analyze_ico(fread, info, fskip, format='ico',
+def analyze_ico(fread, info, fskip, format='ico', fclass='image',
                 spec=(0, '\0\0\1\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 10, ('\0', '\1', '\2', '\3', '\4'), 11, '\0', 12, ('\0', '\1', '\2', '\4', '\x08', '\x10', '\x18', '\x20'), 13, '\0')):
   parse_ico_or_cur(fread, info, fskip, 'ico')
 
 
-def analyze_cur(fread, info, fskip, format='cur',
+def analyze_cur(fread, info, fskip, format='cur', fclass='image',
                 spec=(0, '\0\0\2\0', 4, tuple(chr(c) for c in xrange(1, 65)), 5, '\0', 9, ('\0', '\1', '\xff'), 11, '\0', 13, '\0')):
   parse_ico_or_cur(fread, info, fskip, 'cur')
 
@@ -9273,7 +9273,7 @@ def analyze_gz(fread, info, fskip):
   info['format'], info['codec'] = 'gz', 'flate'
 
 
-def analyze_xz(fread, info, fskip, format='xz',
+def analyze_xz(fread, info, fskip, format='xz', fclass='other',
                spec=(0, '\xfd7zXZ\0')):
   # http://fileformats.archiveteam.org/wiki/XZ
   header = fread(6)
@@ -9366,7 +9366,7 @@ MACHO_ARCHS = {
 }
 
 
-def analyze_macho(fread, info, fskip, format='macho',
+def analyze_macho(fread, info, fskip, format='macho', fclass='code',
                   spec=((0, ('\xce\xfa\xed\xfe', '\xcf\xfa\xed\xfe'), 4, tuple(chr(c) for c in xrange(1, 23)), 5, '\0\0', 7, ('\0', '\1'), 12, tuple(chr(c) for c in xrange(1, 16)), 13, '\0\0\0'),
                         (0, ('\xfe\xed\xfa\xce', '\xfe\xed\xfa\xcf'), 4, ('\0', '\1'), 5, '\0\0', 7, tuple(chr(c) for c in xrange(1, 23)), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 16))),
                         (0, '\xbe\xba\xfe\xca', 4, tuple(chr(c) for c in xrange(1, 31)), 5, '\0\0\0'),
@@ -9418,7 +9418,7 @@ def analyze_macho(fread, info, fskip, format='macho',
   info['arch'] = MACHO_ARCHS.get(arch, str(arch))
 
 
-def analyze_pef(fread, info, fskip, format='pef',
+def analyze_pef(fread, info, fskip, format='pef', fclass='code',
                 spec=(0, 'Joy!peff', 8, ('pwpc', 'm68k'), 12, '\0\0\0\1', 32, '\0', 33, tuple(chr(c) for c in xrange(1, 33)), 34, '\0', 35, tuple(chr(c) for c in xrange(1, 33)))):
   # https://en.wikipedia.org/wiki/Preferred_Executable_Format
   # https://developer.apple.com/library/archive/documentation/mac/pdf/MacOS_RT_Architectures.pdf
@@ -9506,7 +9506,7 @@ ELF_ARCHS = {
 }
 
 
-def analyze_elf(fread, info, fskip, format='elf',
+def analyze_elf(fread, info, fskip, format='elf', fclass='code',
                 spec=((0, '\x7fELF', 4, ('\1', '\2'), 5, '\1', 6, '\1', 7, tuple(chr(c) for c in xrange(32)), 19, '\0', 20, '\1\0\0\0'),
                       (0, '\x7fELF', 4, ('\1', '\2'), 5, '\2', 6, '\1', 7, tuple(chr(c) for c in xrange(32)), 18, '\0', 20, '\0\0\0\1'))):
   # https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
@@ -9544,7 +9544,7 @@ def analyze_elf(fread, info, fskip, format='elf',
     raise ValueError('Bad elf arch, must not be 0.')
 
 
-def analyze_wasm(fread, info, fskip, format='wasm',
+def analyze_wasm(fread, info, fskip, format='wasm', fclass='code',
                  spec=((0, '\0asm\1\0\0\0'),
                        (0, '(module', 7, WHITESPACE))):
   header = fread(8)
@@ -9601,7 +9601,7 @@ PYC_VERSION_MAGICS = dict((m, v) for v, ms in (
     ) for m in ms)
 
 
-def analyze_python_pyc(fread, info, fskip, format='python-pyc',
+def analyze_python_pyc(fread, info, fskip, format='python-pyc', fclass='code',
                        spec=((0, ('\x99N', '\xfc\xc4', '\x87\xc6', '\x88\xc6', '*\xeb', '+\xeb', '-\xed', '.\xed'), 2, '\r\n', 8, 'c\0\0\0\0'),
                              (0, (';\xf2', '<\xf2', 'E\xf2', 'F\xf2', 'c\xf2', 'd\xf2', 'm\xf2', 'n\xf2', 'w\xf2', 'x\xf2', '\x81\xf2', '\x82\xf2', '\x8b\xf2', '\x8c\xf2', '\x95\xf2', '\x96\xf2', '\x9f\xf2', '\xa0\xf2', '\xa9\xf2', '\xaa\xf2', '\xb3\xf2', '\xb4\xf2', '\xc7\xf2', '\xc8\xf2', '\xd1\xf2', '\xd2\xf2', '\xdb\xf2', '\xdc\xf2', '\xe5\xf2', '\xe6\xf2', '\xef\xf2', '\xf0\xf2', '\xf9\xf2', '\xfa\xf2', '\x03\xf3', '\x04\xf3'), 2, '\r\n', 8, 'c\0\0\0\0\0\0\0\0'),
                              (0, ('\xb8\x0b', '\xb9\x0b', '\xc2\x0b', '\xc3\x0b', '\xcc\x0b', '\xcd\x0b', '\xd6\x0b', '\xd7\x0b', '\xe0\x0b', '\xe1\x0b', '\xea\x0b', '\xeb\x0b', '\xf4\x0b', '\xf5\x0b', '\xff\x0b', '\t\x0c', '\x13\x0c', '\x1d\x0c', '\x1f\x0c', "'\x0c", ';\x0c', 'E\x0c', 'O\x0c', 'X\x0c', 'b\x0c', 'l\x0c'), 2, '\r\n', 8, 'c\0\0\0\0\0\0\0\0'),
