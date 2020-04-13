@@ -3563,7 +3563,8 @@ def analyze_mpeg_video(fread, info, fskip):
 # --- Multiplexed MPEG.
 
 
-def analyze_mpeg_ps(fread, info, fskip, format='mpeg-ps'):
+def analyze_mpeg_ps(fread, info, fskip, format='mpeg-ps', fclass='media',
+                    spec=(0, '\0\0\1\xba')):
   # Based on: https://en.wikipedia.org/wiki/MPEG_program_stream
   # Also based on: Use http://www.hampa.ch/mpegdemux/
   #   http://www.hampa.ch/mpegdemux/mpegdemux-0.1.4.tar.gz
@@ -9752,7 +9753,6 @@ FORMAT_ITEMS = (
     ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
-    ('mpeg-ps', (0, '\0\0\1\xba')),
     # is_mpeg_ts indeed needs 392 bytes.
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
@@ -10372,7 +10372,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'avi': analyze_avi,
     'rmmp': analyze_rmmp,
     'ani': analyze_ani,
-    'mpeg-ps': analyze_mpeg_ps,
     'mpeg-cdxa': analyze_mpeg_cdxa,
     'mpeg-ts': analyze_mpeg_ts,
     'mpeg-video': analyze_mpeg_video,
