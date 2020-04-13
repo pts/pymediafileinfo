@@ -10047,6 +10047,10 @@ FORMAT_ITEMS = (
     ('texmacs', (0, '(document (TeXmacs')),
     ('texmacs', (0, 'TeXmacs')),
     ('texmacs', (0, '\\(\\)(TeXmacs')),
+    # https://wiki.tcl-lang.org/page/tbcload
+    # https://github.com/corbamico/tbcload/blob/master/parser.go
+    # https://github.com/ActiveState/teapot/blob/master/lib/tbcload/tests/tbc10/catch.tbc
+    ('tclpro-bytecode', (0, 'TclPro ByteCode ')),
     # https://ftp.lip6.fr/pub/lyx/stable/2.3.x/lyx-2.3.4.3.tar.xz
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('lyx', (0, '#LyX ', 408, lambda header: (header[header.find('\n') + 1:].startswith('\\lyxformat '), 1100))),
