@@ -10237,9 +10237,16 @@ FORMAT_ITEMS = (
     # https://source.android.com/devices/tech/dalvik/dex-format
     # Version 039 is used in Android 9--11.
     ('dalvik-dex', (0, 'dex\n0', 5, ('45', '44', '43', '42', '41', '40', '39', '38', '37', '35', '13', '09'), 7, '\0')),  # classes.dex.
-    # https://github.com/ocaml/ocaml/blob/trunk/runtime/startup_byt.c
-    # File ends with 'Caml1999X027', no header.
-    ('ocaml-bytecode',),
+    # Bytecode file format explained here: https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/caml/exec.h#L23-L38
+    # Bytecode file ends with 'Caml1999X027', no header.
+    # Usually the file starts with section "CODE", which contains 32-bit
+    # opcodes in either byte order:
+    # https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/interp.c#L214
+    # Description of opcodes: http://cadmium.x9c.fr/distrib/caml-instructions.pdf
+    # Below we opportunistically match a BRANCH opcode with a 16-bit offset
+    # (typically 0x2df), at the beginning of the CODE section.
+    ('ocaml-bytecode', (0, '\x54\0\0\0', 6, '\0\0')),
+    ('ocaml-bytecode', (0, '\0\0\0\x54\0\0')),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
