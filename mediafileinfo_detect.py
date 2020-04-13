@@ -10029,6 +10029,8 @@ FORMAT_ITEMS = (
     ('latex-209', (0, '\\documentstyle', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
     # http://fileformats.archiveteam.org/wiki/Texinfo
     # https://www.gnu.org/software/texinfo/
+    # TODO(pts): Add @node and section with args.
+    # TODO(pts): Ignore a few \n in the beginning.
     ('texinfo', (0, '\\input texinfo', 14, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@ignore', 7, ('\r', '\n', ' ', '\t'))),
     ('texinfo', (0, '@comment', 8, ('\r', '\n', ' ', '\t'))),
