@@ -10247,6 +10247,9 @@ FORMAT_ITEMS = (
     # (typically 0x2df), at the beginning of the CODE section.
     ('ocaml-bytecode', (0, '\x54\0\0\0', 6, '\0\0')),
     ('ocaml-bytecode', (0, '\0\0\0\x54\0\0')),
+    # Opportunistic, there can be comments etc., not everything is a
+    # function.
+    ('common-lisp', (0, '(defun ')),
     # http://pascal.hansotten.com/ucsd-p-system/ucsd-files/
     # The UCSD Pascal P-code codefile file format is hard to detect, so we
     # don't do it. header[64 : 72] == ' ' can be useful, see pcode_*.cod for
