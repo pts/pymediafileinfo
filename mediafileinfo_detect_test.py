@@ -1618,6 +1618,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(FORMAT_DB.detect(data1)[0], 'info')
     self.assertEqual(mediafileinfo_detect.count_is_info(data1), 5255)
 
+  def test_detect_lyx(self):
+    self.assertEqual(FORMAT_DB.detect('#LyX file created by tex2lyx ?.?\n\\lyxformat 544\n')[0], 'lyx')
+    self.assertEqual(FORMAT_DB.detect('#LyX 2.3 created this file. For more info see http://www.lyx.org/\n\\lyxformat 544\n')[0], 'lyx')
+
   def test_analyze_stuffit(self):
     data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00SIT5????\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_macbinary, data_macbinary1),

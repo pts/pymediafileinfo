@@ -10047,6 +10047,9 @@ FORMAT_ITEMS = (
     ('texmacs', (0, '(document (TeXmacs')),
     ('texmacs', (0, 'TeXmacs')),
     ('texmacs', (0, '\\(\\)(TeXmacs')),
+    # https://ftp.lip6.fr/pub/lyx/stable/2.3.x/lyx-2.3.4.3.tar.xz
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('lyx', (0, '#LyX ', 408, lambda header: (header[header.find('\n') + 1:].startswith('\\lyxformat '), 1100))),
     ('info', (0, 'This is ', 170, lambda header: adjust_confidence(800, count_is_info(header)))),
     # http://fileformats.archiveteam.org/wiki/HLP_(WinHelp)
     # http://www.oocities.org/mwinterhoff/helpfile.htm
