@@ -997,5 +997,60 @@ elements. Some elements are truncated.
   71: flags3 output_clr_fmt=7 output_bitdepth=1
   009f: width=(0x9f+1)=160
   0077: height=(0x77+1)=120
+* format=micropython-mpy
+  'M\0' + chr(flags & 3) + chr(sib) + varint(data_size) + ...
+  'M\1' + chr(flags & 3) + chr(sib) + varint(data_size) + ...
+  'M\2' + chr(flags & 3) + chr(sib) + varint(data_size) + ...
+  'M\3' + chr(flags & 3) + chr(sib) + varint(data_size) + ...
+  'M\4' + chr(flags & 3 | arch << 2) + chr(sib) + varint(qws) + varint(kind & 3) | data_size << 2) + ...
+  'M\5' + chr(flags & 3 | arch << 2) + chr(sib) + varint(qws) + varint(kind & 3) | data_size << 2) + ...
+
+  arch: we will accept anything <= 31; in version=5:
+      MP_NATIVE_ARCH_NONE = 0,
+      MP_NATIVE_ARCH_X86 = 1,
+      MP_NATIVE_ARCH_X64 = 2,
+      MP_NATIVE_ARCH_ARMV6 = 3,
+      MP_NATIVE_ARCH_ARMV6M = 4,
+      MP_NATIVE_ARCH_ARMV7M = 5,
+      MP_NATIVE_ARCH_ARMV7EM = 6,
+      MP_NATIVE_ARCH_ARMV7EMSP = 7,
+      MP_NATIVE_ARCH_ARMV7EMDP = 8,
+      MP_NATIVE_ARCH_XTENSA = 9,
+      MP_NATIVE_ARCH_XTENSAWIN = 10,
+  sib: small_int_bits, typically 31; values: 30, 31, 47, 62, 63
+  qws: qstr_window_size, typically 32
+  kind: e.g. MP_CODE_BYTECODE, MP_CODE_NATIVE_PY, MP_CODE_NATIVE_VIPER
+
+  #include <stdio.h>
+  #define MICROPY_OBJ_REPR_A 'A'
+  #define MICROPY_OBJ_REPR_B 'B'
+  #define MICROPY_OBJ_REPR_D 'D'
+  #define MP_SMALL_INT_MIN ((MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_A) ? ((mp_int_t)(((mp_int_t)(((mp_uint_t)1) << ((sizeof(mp_uint_t)) * 8 - 1))) >> 1)) : (MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_B) ? ((mp_int_t)(((mp_int_t)(((mp_uint_t)1) << ((sizeof(mp_uint_t)) * 8 - 1))) >> 2)) : ((mp_int_t)(((mp_int_t)0xffff800000000000) >> 1)))
+  #define MP_SMALL_INT_MAX ((mp_int_t)(~(MP_SMALL_INT_MIN)))
+  #define mp_small_int_bits() ({ mp_int_t i = MP_SMALL_INT_MAX; int n = 1; while (i != 0) { /* printf("(%lld)\n", (long long)i); */ i >>= 1; ++n; } n; })
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+  #define MICROPY_OBJ_REPR MICROPY_OBJ_REPR_D
+  #define mp_int_t long long
+  #define mp_uint_t unsigned long long
+    printf("%d\n", mp_small_int_bits());
+  #define MICROPY_OBJ_REPR MICROPY_OBJ_REPR_A
+  #define mp_int_t long long
+  #define mp_uint_t unsigned long long
+    printf("%d\n", mp_small_int_bits());
+  #define MICROPY_OBJ_REPR MICROPY_OBJ_REPR_B
+  #define mp_int_t long long
+  #define mp_uint_t unsigned long long
+    printf("%d\n", mp_small_int_bits());
+  #define MICROPY_OBJ_REPR MICROPY_OBJ_REPR_A
+  #define mp_int_t int
+  #define mp_uint_t unsigned int
+    printf("%d\n", mp_small_int_bits());
+  #define MICROPY_OBJ_REPR MICROPY_OBJ_REPR_B
+  #define mp_int_t int
+  #define mp_uint_t unsigned int
+    printf("%d\n", mp_small_int_bits());
+    return 0;
+  }
 
 __END__

@@ -1561,6 +1561,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_python_pyc, 'V\r\r\n\3\0\0\0????????\xe3\0\0\0\0\0\0\0\0'),
                      {'format': 'python-pyc', 'subformat': '3.8+'})
 
+  def test_detect_micropython_mpy(self):
+    self.assertEqual(FORMAT_DB.detect('M\0\2\x1f')[0], 'micropython-mpy')
+    self.assertEqual(FORMAT_DB.detect('M\5\x7f\x2f ')[0], 'micropython-mpy')
+
   def test_analyze_pef(self):
     self.assertEqual(analyze_string(mediafileinfo_detect.analyze_pef, 'Joy!peffpwpc\0\0\0\1????????????????\0\3\0\2'),
                      {'format': 'pef', 'binary_type': 'executable', 'arch': 'powerpc', 'endian': 'big'})
