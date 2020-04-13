@@ -10258,6 +10258,7 @@ FORMAT_ITEMS = (
     ('ethereum-evm', (0, '\x60\x04\x36\x10\x15\x61\x00\x0d\x57\x61', 12, '\x56\x5b\x60\x00\x35')),  # Runtime bytecode compiled by Vyper (also contains regular bytecode compiled by Viper).
     ('ethereum-evm', (0, '\x60\x04\x36\x10\x15\x61\x00\x0d\x57\x62', 13, '\x56\x5b\x60\x00\x35')),  # Runtime bytecode compiled by Vyper (also contains regular bytecode compiled by Viper), PUSH2 before JUMPI, then PUSH3.
     ('ethereum-evm', (0, '\x60\x04\x36\x10\x15\x62\x00\x00\x0d\x57\x62', 14, '\x56\x5b\x60\x00\x35')),  # Runtime bytecode compiled by Vyper (also contains regular bytecode compiled by Viper), PUSH3 before JUMPI.
+    ('ethereum-bzzhash', (0, '\x62\x7a\x7a\x72\x30\x58\x20')), # bzzhash (Swarm Hash) compiled by Solidity.
     # https://en.wikipedia.org/wiki/Solidity
     # TODO(pts): Add comments etc.
     ('solidity', (0, 'pragma solidity ')),
