@@ -35,21 +35,24 @@ def analyze_string(data, expect_error=False, analyze_func=None):
     analyze_func = analyze_func2
   elif analyze_func is not analyze_func2:
     info['detected_analyze'] = analyze_func2
-  fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
-  if expect_error:
-    try:
-      analyze_func(fread, info, fskip)
-      raise AssertionError('ValueError expected but not raised.')
-    except ValueError, e:
-      info['error'] = str(e)
+  if analyze_func is None:
+    info['format'] = detected_format
   else:
-    analyze_func(fread, info, fskip)
-    if info.get('format') is None:
-      raise AssertionError('Format not populated in info.')
-  if info.get('format') is not None and info.get('format') not in FORMAT_DB.formats:
-    raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
-  if detected_format != info.get('format'):
-    info['detected_format'] = detected_format
+    fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
+    if expect_error:
+      try:
+        analyze_func(fread, info, fskip)
+        raise AssertionError('ValueError expected but not raised.')
+      except ValueError, e:
+        info['error'] = str(e)
+    else:
+      analyze_func(fread, info, fskip)
+      if info.get('format') is None:
+        raise AssertionError('Format not populated in info.')
+    if info.get('format') is not None and info.get('format') not in FORMAT_DB.formats:
+      raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
+    if detected_format != info.get('format'):
+      info['detected_format'] = detected_format
   return info
 
 
@@ -93,6 +96,9 @@ class FormatDbTest(unittest.TestCase):
                      {'format': 'vorbis', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
                       'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
     self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO('\xff\xd8\xff\xe0'), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT), {'format': 'jpeg', 'codec': 'jpeg'})
+
+  def test_detect_unknown(self):
+    self.assertEqual(FORMAT_DB.detect('Unknown'), ('?', 'Unknown'))
 
 
 class MediaFileInfoDetectTest(unittest.TestCase):
@@ -158,7 +164,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.do_test_specs(try_match_spec, 'error: Too short for testformat.', 'error: testformat signature not found.')
 
   def test_format_db(self):
-    """DoubleCheck that match_spec behaves the same way as FormatDb."""
+    """Double check that match_spec behaves the same way as FormatDb."""
 
     def try_format_db(spec, header, _cache=[(), ()]):
       format = 'testformat'
@@ -946,12 +952,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'cmuwm', 'codec': 'uncompressed', 'height': 513, 'width': 515})
 
   def test_detect_unixscript(self):
-    self.assertEqual(FORMAT_DB.detect('#! /usr/bin/perl')[0], 'unixscript')
-    self.assertEqual(FORMAT_DB.detect('#!/usr/bin/perl')[0], 'unixscript')
+    self.assertEqual(analyze_string('#! /usr/bin/perl'), {'format': 'unixscript'})
+    self.assertEqual(analyze_string('#!/usr/bin/perl'), {'format': 'unixscript'})
 
   def test_detect_windows_cmd(self):
-    self.assertEqual(FORMAT_DB.detect('@echo off\r\n')[0], 'windows-cmd')
-    self.assertEqual(FORMAT_DB.detect('@ECho oFF\r\n')[0], 'windows-cmd')
+    self.assertEqual(analyze_string('@echo off\r\n'), {'format': 'windows-cmd'})
+    self.assertEqual(analyze_string('@ECho oFF\r\n'), {'format': 'windows-cmd'})
 
   def test_analyze_xwd(self):
     data1 = '\0\0\0\x65\0\0\0\7\0\0\0\2\0\0\0\x08\0\0\1\xd3\0\0\0\x3c\0\0\0\0'
@@ -1049,20 +1055,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'utah-rle', 'codec': 'rle', 'height': 50, 'width': 62})
 
   def test_detect_fig(self):
-    self.assertEqual(FORMAT_DB.detect('#FIG 3.2\n')[0], 'fig')
+    self.assertEqual(analyze_string('#FIG 3.2\n'), {'format': 'fig'})
 
   def test_detect_zoo(self):
-    self.assertEqual(FORMAT_DB.detect('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
-    self.assertEqual(FORMAT_DB.detect('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd')[0], 'zoo')
+    self.assertEqual(analyze_string('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd'), {'format': 'zoo'})
+    self.assertEqual(analyze_string('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd'), {'format': 'zoo'})
 
   def test_detect_arj(self):
-    self.assertEqual(FORMAT_DB.detect('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2')[0], 'arj')
+    self.assertEqual(analyze_string('\x60\xea\xe0\4\x1e\6\1\0\x10\0\2'), {'format': 'arj'})
 
   def test_detect_lha(self):
-    self.assertEqual(FORMAT_DB.detect('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1')[0], 'lha')
-
-  def test_detect_unknown(self):
-    self.assertEqual(FORMAT_DB.detect('Unknown'), ('?', 'Unknown'))
+    self.assertEqual(analyze_string('*9-lh5-\xa1\5\0\0\xb8\7\0\0\x36\x7d\x6b\x50\2\1'), {'format': 'lha'})
 
   def test_analyze_mpeg_ps(self):
     data1 = '000001ba4400040004010189c3f8000001bb001280c4e104e17fb9e0e8b8c020bde03abfe002000001e0007681c10d310001b8611100019c411e60e8000001b32c0240231755e38110111112121213131313141414141415151515151516161616161616171717171717171718181819181818191a1a1a1a191b1b1b1b1b1c1c1c1c1e1e1e1f1f21000001b5148200010000000001b52305050508721200000001b8'.decode('hex')
@@ -1151,9 +1154,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_midi(self):
     data1 = 'MThd\0\0\0\6\0\0\0\1'
     data2 = 'MThd\0\0\0\6\0\2\3'
-    self.assertEqual(FORMAT_DB.detect(data1)[0], 'midi')
-    self.assertEqual(FORMAT_DB.detect(data2)[0], 'midi')
-    self.assertEqual(FORMAT_DB.detect('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2)[0], 'midi-rmid')
+    self.assertEqual(analyze_string(data1), {'format': 'midi'})
+    self.assertEqual(analyze_string(data2), {'format': 'midi'})
+    self.assertEqual(analyze_string('RIFF\x1a\x69\x08\0RMIDdata\x76\0\0\0' + data2), {'format': 'midi-rmid'})
 
   def test_analyze_wav(self):
     data_riff = 'RIFF\x44\xc2\1\0WAVE'
@@ -1403,12 +1406,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_detect_xar(self):
     data1 = 'XARA\xa3\xa3\r\n\2\0\0\0\x25\0\0\0CXN????\0\0\0\0'
-    self.assertEqual(FORMAT_DB.detect(data1)[0], 'xara')
+    self.assertEqual(analyze_string(data1), {'format': 'xara'})
 
   def test_detect_cdr(self):
     data1 = 'RIFF????CDR9vrsn\2\0\0\0DISP'
-    self.assertEqual(FORMAT_DB.detect(data1)[0], 'cdr')
-    self.assertEqual(FORMAT_DB.detect(data1[:20])[0], 'cdr')
+    self.assertEqual(analyze_string(data1), {'format': 'cdr'})
+    self.assertEqual(analyze_string(data1[:20]), {'format': 'cdr'})
 
   def test_analyze_amv(self):
     data1 = 'RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'
@@ -1630,8 +1633,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'python-pyc', 'subformat': '3.8+'})
 
   def test_detect_micropython_mpy(self):
-    self.assertEqual(FORMAT_DB.detect('M\0\2\x1f')[0], 'micropython-mpy')
-    self.assertEqual(FORMAT_DB.detect('M\5\x7f\x2f ')[0], 'micropython-mpy')
+    self.assertEqual(analyze_string('M\0\2\x1f'), {'format': 'micropython-mpy'})
+    self.assertEqual(analyze_string('M\5\x7f\x2f '), {'format': 'micropython-mpy'})
 
   def test_analyze_pef(self):
     self.assertEqual(analyze_string('Joy!peffpwpc\0\0\0\1????????????????\0\3\0\2'),
@@ -1650,7 +1653,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'wasm', 'subformat': 'ascii'})
 
   def test_detect_java_class(self):
-    self.assertEqual(FORMAT_DB.detect('\xca\xfe\xba\xbe\0\3\0\x2d')[0], 'java-class')
+    self.assertEqual(analyze_string('\xca\xfe\xba\xbe\0\3\0\x2d'), {'format': 'java-class'})
 
   def test_analyze_ocaml_bytecode(self):
     self.assertEqual(analyze_string('\x54\0\0\0\xdf\2\0\0'),
@@ -1659,13 +1662,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'ocaml-bytecode'})
 
   def test_detect_lua_luac(self):
-    self.assertEqual(FORMAT_DB.detect('\x1bLua\x52\0\1\4\4\4\x08\0\x19\x93\r\n\x1a\n')[0], 'lua-luac')
+    self.assertEqual(analyze_string('\x1bLua\x52\0\1\4\4\4\x08\0\x19\x93\r\n\x1a\n'), {'format': 'lua-luac'})
 
   def test_detect_hxs(self):
-    self.assertEqual(FORMAT_DB.detect(self.HXS_HEADER)[0], 'hxs')
+    self.assertEqual(analyze_string(self.HXS_HEADER), {'format': 'hxs'})
 
   def test_detect_rtf(self):
-    self.assertEqual(FORMAT_DB.detect(r'{\rtf1')[0], 'rtf')
+    self.assertEqual(analyze_string(r'{\rtf1'), {'format': 'rtf'})
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1'), 600)
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info\title '), 1200)
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1{\info \title '), 1300)
@@ -1677,30 +1680,29 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(mediafileinfo_detect.count_is_rtf(r'{\rtf1\foo'), 600)
 
   def test_detect_troff(self):
-    self.assertEqual(FORMAT_DB.detect('.\\" DO NOT MODIFY THIS FILE!  \n.TH x')[0], 'troff')
-    self.assertEqual(FORMAT_DB.detect('.TH LS "1"')[0], 'troff')
-    self.assertEqual(FORMAT_DB.detect('.SH NAME')[0], 'troff')
-    self.assertEqual(FORMAT_DB.detect('.de xy')[0], 'troff')
-    self.assertEqual(FORMAT_DB.detect('.EF \'hi\'')[0], 'troff')
+    self.assertEqual(analyze_string('.\\" DO NOT MODIFY THIS FILE!  \n.TH x'), {'format': 'troff'})
+    self.assertEqual(analyze_string('.TH LS "1"'), {'format': 'troff'})
+    self.assertEqual(analyze_string('.SH NAME'), {'format': 'troff'})
+    self.assertEqual(analyze_string('.de xy'), {'format': 'troff'})
+    self.assertEqual(analyze_string('.EF \'hi\''), {'format': 'troff'})
 
   def test_detect_info(self):
-    self.assertEqual(FORMAT_DB.detect('This is grep.info-t, produced by t\n')[0], 'info')
+    self.assertEqual(analyze_string('This is grep.info-t, produced by t\n'), {'format': 'info'})
     data1 = 'This is grep.info-t, produced by makeinfo version 6.3 from grep.texi.\n'
-    self.assertEqual(FORMAT_DB.detect(data1)[0], 'info')
+    self.assertEqual(analyze_string(data1), {'format': 'info'})
     self.assertEqual(mediafileinfo_detect.count_is_info(data1), 5255)
 
   def test_detect_lyx(self):
-    self.assertEqual(FORMAT_DB.detect('#LyX file created by tex2lyx ?.?\n\\lyxformat 544\n')[0], 'lyx')
-    self.assertEqual(FORMAT_DB.detect('#LyX 2.3 created this file. For more info see http://www.lyx.org/\n\\lyxformat 544\n')[0], 'lyx')
+    self.assertEqual(analyze_string('#LyX file created by tex2lyx ?.?\n\\lyxformat 544\n'), {'format': 'lyx'})
+    self.assertEqual(analyze_string('#LyX 2.3 created this file. For more info see http://www.lyx.org/\n\\lyxformat 544\n'), {'format': 'lyx'})
 
   def test_analyze_stuffit(self):
     data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00SIT5????\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
     self.assertEqual(analyze_string(data_macbinary1),
                      {'format': 'stuffit', 'detected_format': 'macbinary', 'subformat': 'macbinary'})
-    self.assertEqual(FORMAT_DB.detect('SIT!??????rLau')[0], 'stuffit')
-    self.assertEqual(FORMAT_DB.detect('StuffIt (c)1997')[0], 'stuffit')
-    self.assertEqual(FORMAT_DB.detect('StuffIt?')[0], 'stuffitx')
-
+    self.assertEqual(analyze_string('SIT!??????rLau'), {'format': 'stuffit'})
+    self.assertEqual(analyze_string('StuffIt (c)1997'), {'format': 'stuffit'})
+    self.assertEqual(analyze_string('StuffIt?'), {'format': 'stuffitx'})
 
 
 if __name__ == '__main__':
