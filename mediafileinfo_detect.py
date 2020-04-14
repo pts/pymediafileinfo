@@ -9696,6 +9696,7 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'ras': analyze_ras,
     'gem': analyze_gem,
     'pcpaint-pic': analyze_pcpaint_pic,
+    'pict': analyze_pict,
     'ivf': analyze_ivf,
     'amv': analyze_amv,
     '4xm': analyze_4xm,
