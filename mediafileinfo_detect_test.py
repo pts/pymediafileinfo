@@ -1661,8 +1661,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\0\0\0\x54\0\0\2\xdf'),
                      {'format': 'ocaml-bytecode'})
 
-  def test_detect_lua_luac(self):
-    self.assertEqual(analyze_string('\x1bLua\x52\0\1\4\4\4\x08\0\x19\x93\r\n\x1a\n'), {'format': 'lua-luac'})
+  def test_analyze_lua_luac(self):
+    self.assertEqual(analyze_string('\x1bLua\x24\2\4\x08\x34\x12'), {'format': 'lua-luac', 'subformat': '2.4'})
+    self.assertEqual(analyze_string('\x1bLua\x25\2\4\x08\x34\x12'), {'format': 'lua-luac', 'subformat': '2.5'})
+    self.assertEqual(analyze_string('\x1bLua\x31l\4'), {'format': 'lua-luac', 'subformat': '3.1'})
+    self.assertEqual(analyze_string('\x1bLua\x32\4'), {'format': 'lua-luac', 'subformat': '3.2'})
+    self.assertEqual(analyze_string('\x1bLua\x40\1\4\4\4 \6\x09'), {'format': 'lua-luac', 'subformat': '4.0'})
+    self.assertEqual(analyze_string('\x1bLua\x50\1\4\4\4\6\x08\x09\x09\4'), {'format': 'lua-luac', 'subformat': '5.0'})
+    self.assertEqual(analyze_string('\x1bLua\x51\0\1\4\4\4\4\0'), {'format': 'lua-luac', 'subformat': '5.1'})
+    self.assertEqual(analyze_string('\x1bLua\x52\0\1\4\4\4\x08\0\x19\x93\r\n\x1a\n'), {'format': 'lua-luac', 'subformat': '5.2'})  # Observed in the wild.
+    self.assertEqual(analyze_string('\x1bLua\x53\0\x19\x93\r\n\x1a\n\4\4\4\4\4\0\0\0\0'), {'format': 'lua-luac', 'subformat': '5.3'})
+    self.assertEqual(analyze_string('\x1bLua\x54\0'), {'format': 'lua-luac', 'subformat': '5.4'})
 
   def test_detect_hxs(self):
     self.assertEqual(analyze_string(self.HXS_HEADER), {'format': 'hxs'})

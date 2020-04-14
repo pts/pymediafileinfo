@@ -9698,6 +9698,22 @@ def analyze_ocaml_bytecode(fread, info, fskip, format='ocaml-bytecode', fclass='
   match_spec(spec, fread, info, format)
 
 
+def analyze_lua_luac(fread, info, fskip, format='lua-luac', fclass='code', ext='.luac',
+                     spec=((0, '\x1bLua', 4, ('\x24', '\x25'), 5, '\2\4', 7, ('\4', '\x08'), 8, ('\x12\x34', '\x34\x12')),
+                           (0, '\x1bLua', 4, ('\x31',), 5, ('l', 'f', 'd', '?'), 6, ('\4', '\x08')),
+                           (0, '\x1bLua', 4, ('\x32',), 5, ('\0', '\4', '\x08')),
+                           (0, '\x1bLua', 4, ('\x40',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ' \6\x09'),
+                           (0, '\x1bLua', 4, ('\x50',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, '\6\x08\x09\x09', 13, ('\4', '\x08')),
+                           (0, '\x1bLua', 4, ('\x51',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1')),
+                           (0, '\x1bLua', 4, ('\x52',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1'), 12, '\x19\x93\r\n\x1a\n'),
+                           (0, '\x1bLua', 4, ('\x53',), 5, '\0', 6, '\x19\x93\r\n\x1a\n', 12, ('\4', '\x08'), 13, ('\4', '\x08'), 14, ('\4', '\x08'), 15, ('\4', '\x08'), 16, ('\4', '\x08'), 17, ('\0\0\x56\x78', '\x78\x56\0\0', '\0\0\0\0')),
+                           (0, '\x1bLua', 4, ('\x54', '\x55', '\x56', '\x57', '\x58', '\x59'), 5, '\0'))):  # Prediction of future Lua bytecode versions.
+  # http://files.catwell.info/misc/mirror/lua-5.2-bytecode-vm-dirk-laurie/lua52vm.html
+  # Also in Lua sources: src/lundump.h and src/lundump.c in https://www.lua.org/ftp/
+  header = match_spec(spec, fread, info, format)
+  info['subformat'] = '%d.%d' % (ord(header[4]) >> 4, ord(header[4]) & 15)
+
+
 def count_is_troff(header):
   i = 0
   if header.startswith('.\\" ') or header.startswith('.\\"*'):
@@ -10325,17 +10341,6 @@ FORMAT_ITEMS = (
     # https://source.android.com/devices/tech/dalvik/dex-format
     # Version 039 is used in Android 9--11.
     ('dalvik-dex', (0, 'dex\n0', 5, ('45', '44', '43', '42', '41', '40', '39', '38', '37', '35', '13', '09'), 7, '\0')),  # classes.dex.
-    # http://files.catwell.info/misc/mirror/lua-5.2-bytecode-vm-dirk-laurie/lua52vm.html
-    # Also in Lua sources: src/lundump.h and src/lundump.c in https://www.lua.org/ftp/
-    ('lua-luac', (0, '\x1bLua', 4, ('\x24', '\x25'), 5, '\2\4', 7, ('\4', '\x08'), 8, ('\x12\x34', '\x34\x12'))),  # .luac
-    ('lua-luac', (0, '\x1bLua', 4, ('\x31',), 5, ('l', 'f', 'd', '?'), 6, ('\4', '\x08'))),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x32',), 5, ('\0', '\4', '\x08'))),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x40',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ' \6\x09')),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x50',), 5, ('\0', '\1'), 6, ('\4', '\x08'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, '\6\x08\x09\x09', 13, ('\4', '\x08'))),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x51',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1'))),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x52',), 5, '\0', 6, ('\0', '\1'), 7, ('\4', '\x08'), 8, ('\4', '\x08'), 9, ('\4', '\x08'), 10, ('\4', '\x08'), 11, ('\0', '\1'), 12, '\x19\x93\r\n\x1a\n')),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x53',), 5, '\0', 6, '\x19\x93\r\n\x1a\n', 12, ('\4', '\x08'), 13, ('\4', '\x08'), 14, ('\4', '\x08'), 15, ('\4', '\x08'), 16, ('\4', '\x08'), 17, ('\0\0\x56\x78', '\x78\x56\0\0', '\0\0\0\0'))),
-    ('lua-luac', (0, '\x1bLua', 4, ('\x54', '\x55', '\x56', '\x57', '\x58', '\x59'), 5, ('\0', '\1'))),  # Prediction of future Lua bytecode versions.
     # Opportunistic, there can be comments etc., not everything is a
     # function.
     ('common-lisp', (0, '(defun ')),
