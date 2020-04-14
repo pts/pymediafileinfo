@@ -9684,6 +9684,20 @@ def analyze_python_pyc(fread, info, fskip, format='python-pyc', fclass='code',
   info['format'], info['subformat'] = 'python-pyc', version
 
 
+def analyze_ocaml_bytecode(fread, info, fskip, format='ocaml-bytecode', fclass='code',
+                           spec=((0, '\x54\0\0\0', 6, '\0\0'),
+                                 (0, '\0\0\0\x54\0\0'))):
+  # Bytecode file format explained here: https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/caml/exec.h#L23-L38
+  # Bytecode file ends with 'Caml1999X027', no header.
+  # Usually the file starts with section "CODE", which contains 32-bit
+  # opcodes in either byte order:
+  # https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/interp.c#L214
+  # Description of opcodes: http://cadmium.x9c.fr/distrib/caml-instructions.pdf
+  # Below we opportunistically match a BRANCH opcode with a 16-bit offset
+  # (typically 0x2df), at the beginning of the CODE section.
+  match_spec(spec, fread, info, format)
+
+
 def count_is_troff(header):
   i = 0
   if header.startswith('.\\" '):
@@ -10309,16 +10323,6 @@ FORMAT_ITEMS = (
     # https://source.android.com/devices/tech/dalvik/dex-format
     # Version 039 is used in Android 9--11.
     ('dalvik-dex', (0, 'dex\n0', 5, ('45', '44', '43', '42', '41', '40', '39', '38', '37', '35', '13', '09'), 7, '\0')),  # classes.dex.
-    # Bytecode file format explained here: https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/caml/exec.h#L23-L38
-    # Bytecode file ends with 'Caml1999X027', no header.
-    # Usually the file starts with section "CODE", which contains 32-bit
-    # opcodes in either byte order:
-    # https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/interp.c#L214
-    # Description of opcodes: http://cadmium.x9c.fr/distrib/caml-instructions.pdf
-    # Below we opportunistically match a BRANCH opcode with a 16-bit offset
-    # (typically 0x2df), at the beginning of the CODE section.
-    ('ocaml-bytecode', (0, '\x54\0\0\0', 6, '\0\0')),
-    ('ocaml-bytecode', (0, '\0\0\0\x54\0\0')),
     # http://files.catwell.info/misc/mirror/lua-5.2-bytecode-vm-dirk-laurie/lua52vm.html
     # Also in Lua sources: src/lundump.h and src/lundump.c in https://www.lua.org/ftp/
     ('lua-luac', (0, '\x1bLua', 4, ('\x24', '\x25'), 5, '\2\4', 7, ('\4', '\x08'), 8, ('\x12\x34', '\x34\x12'))),  # .luac
