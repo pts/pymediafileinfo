@@ -1681,6 +1681,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_detect_troff(self):
     self.assertEqual(analyze_string('.\\" DO NOT MODIFY THIS FILE!  \n.TH x'), {'format': 'troff'})
+    self.assertEqual(analyze_string('.\\"****hello\n.\\"*'), {'format': 'troff'})
     self.assertEqual(analyze_string('.TH LS "1"'), {'format': 'troff'})
     self.assertEqual(analyze_string('.SH NAME'), {'format': 'troff'})
     self.assertEqual(analyze_string('.de xy'), {'format': 'troff'})

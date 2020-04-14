@@ -9700,7 +9700,7 @@ def analyze_ocaml_bytecode(fread, info, fskip, format='ocaml-bytecode', fclass='
 
 def count_is_troff(header):
   i = 0
-  if header.startswith('.\\" '):
+  if header.startswith('.\\" ') or header.startswith('.\\"*'):
     i = header.find('\n') + 1
     if i <= 0:
       return 400
@@ -9709,6 +9709,8 @@ def count_is_troff(header):
     return (i + 4) * 100 + 24
   if cmd == '.EF ' and header[i + 4 : i + 5] == "'":
     return (i + 5) * 100
+  if cmd in ('.\\" ', '.\\"*'):
+    return (i + 4) * 100 - 13
   return 0
 
 
@@ -10091,7 +10093,7 @@ FORMAT_ITEMS = (
     ('perl-pod', (0, '=pod', 4, (' ', '\n'))),
     ('perl-pod', (0, ('=head1 ', '=begin '))),
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
-    ('troff', (0, ('.TH', '.SH', '.\\\"', '.de', '.EF'), 3, ' ', 408, lambda header: adjust_confidence(400, count_is_troff(header)))),
+    ('troff', (0, ('.TH ', '.SH ' , '.\\\" ', '.\\\"*', '.de ', '.EF '), 408, lambda header: adjust_confidence(400, count_is_troff(header)))),
     # TODO(pts): Also match whitespace and (short) comments in the beginning. Most .tex documents have it.
     ('latex', (0, '\\documentclass', 14, lambda header: (len(header) <= 14 or not header[14].isalpha(), 6))),
     # Older than 'latex', now obsolete.
