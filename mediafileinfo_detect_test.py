@@ -115,6 +115,64 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual('7ffe8001fc3c7dc277000d3a0000', ''.join(f((8191, 10240, 2032, 15485, 12445, 12288, 13544, 0))).encode('hex'))
     self.assertEqual('7ffe8001fc3c7dc277000d3a0003', ''.join(f((8191, 10240, 2032, 15485, 12445, 12288, 13544, 3))).encode('hex'))
 
+  def do_test_specs(self, try_match, too_short_msg, no_sig_msg):
+    spec = (0, 'foo', 4, ('bar', 'baz'), 8, lambda header: (header[3] in ',+', 87))
+    self.assertEqual(try_match(spec, 'foo,barBAZ'), 'foo,barB')
+    self.assertEqual(try_match(spec, 'foo,barC'), 'foo,barC')
+    self.assertEqual(try_match(spec, 'foo+barC'), 'foo+barC')
+    self.assertEqual(try_match(spec, 'foo+bar'), 'foo+bar')
+    self.assertEqual(try_match(spec, 'foo,ba'), too_short_msg)
+    self.assertEqual(try_match(spec, 'foo,baRC'), no_sig_msg)  # 'bar' doesn't match.
+    self.assertEqual(try_match(spec, 'Foo,barC'), no_sig_msg)  # 'foo' doesn't match.
+    self.assertEqual(try_match(spec, 'foo;barC'), no_sig_msg)  # lambda doesn't match.
+
+    spec = ((0, 'foo'), (1, 'bar'))
+    self.assertEqual(try_match(spec, 'fo'), too_short_msg)
+    self.assertEqual(try_match(spec, 'foo'), 'foo')
+    self.assertEqual(try_match(spec, 'foo!'), 'foo!')
+    self.assertEqual(try_match(spec, 'bar'), no_sig_msg)
+    self.assertEqual(try_match(spec, 'bar!'), no_sig_msg)
+    self.assertEqual(try_match(spec, '!bar'), '!bar')
+    self.assertEqual(try_match(spec, '!baz'), no_sig_msg)
+
+    spec = ((0, 'fo'), (1, 'oo'))
+    self.assertEqual(try_match(spec, 'foo'), 'foo')  # Both alternatives match.
+
+  def test_match_spec(self):
+    def try_match_spec(spec, header):
+      fread, unused_fskip = mediafileinfo_detect.get_string_fread_fskip(header)
+      format, info = 'testformat', {}
+      try:
+        header2 = mediafileinfo_detect.match_spec(spec, fread, info, format)
+        if info.get('format') != format:
+          raise ValueError('Unexpected format: %r' % (info.get('format'),))
+      except ValueError, e:
+        return 'error: %s' % e
+      return header2
+
+    self.do_test_specs(try_match_spec, 'error: Too short for testformat.', 'error: testformat signature not found.')
+
+  def test_format_db(self):
+    """DoubleCheck that match_spec behaves the same way as FormatDb."""
+
+    def try_format_db(spec, header, _cache=[(), ()]):
+      format = 'testformat'
+      if spec is _cache[0]:
+        format_db = _cache[1]
+      else:
+        specs = spec
+        if not isinstance(specs[0], tuple):
+          specs = (specs,)
+        format_db = mediafileinfo_formatdb.FormatDb(
+            tuple((format, spec1) for spec1 in specs))
+        _cache[0], _cache[1] = spec, format_db
+      format2, header2 = format_db.detect(header)
+      if format2 != format:
+        return '?'
+      return header2
+
+    self.do_test_specs(try_format_db, '?', '?')
+
   def test_get_mpeg_video_track_info(self):
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_video_track_info('000001b31600f01502d020a4000001b8'.decode('hex')),

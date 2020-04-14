@@ -2,8 +2,8 @@
 
 import struct
 
-# --- File format detection for many file formats and getting media
-# parameters for some.
+# --- Helpers for file format detection for many file formats and getting
+# media parameters for some.
 
 
 def adjust_confidence(base_confidence, confidence):
@@ -16,6 +16,56 @@ XML_WHITESPACE_TAGEND = ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '>')
 WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
 
 MAX_CONFIDENCE = 100000
+
+# ---
+
+
+def match_spec(spec, fread, info, format):
+  """Check whether the beginning of the file matches the Spec.
+
+  See FormatDb for the details of the domain-specific language Spec.
+
+  Returns:
+    str containing the first few bytes (header) read with fread.
+    Also sets info['format'] to format iff there is a match.
+  Raises:
+    ValueError: If the header doesn't match the Spec spec.
+  """
+  specs = spec
+  if not isinstance(specs[0], tuple):
+    specs = (specs,)
+  min_ofs = max_ofs = 0
+  for spec in specs:
+    ofs1 = ofs2 = 0
+    for i in xrange(0, len(spec), 2):
+      ofs, pattern = spec[i], spec[i + 1]
+      if isinstance(pattern, str):
+        ofs1 = ofs = ofs + len(pattern)
+      elif isinstance(pattern, tuple):
+        ofs1 = ofs = ofs + len(pattern[0])
+    min_ofs, max_ofs = min(min_ofs or ofs1, ofs1), max(max_ofs, ofs)
+  header = fread(max_ofs)
+  if len(header) < min_ofs:
+    raise ValueError('Too short for %s.' % format)
+  for spec in specs:
+    ofs = ofs2 = 0
+    for i in xrange(0, len(spec), 2):
+      ofs, pattern = spec[i], spec[i + 1]
+      if isinstance(pattern, str):
+        if header[ofs : ofs + len(pattern)] != pattern:
+          break
+      elif isinstance(pattern, tuple):
+        if header[ofs : ofs + len(pattern[0])] not in pattern:
+          break
+      elif not pattern(header)[0]:
+        break
+    else:
+      break
+  else:
+    raise ValueError('%s signature not found.' % format)
+  info['format'] = format
+  return header
+
 
 # ---
 
