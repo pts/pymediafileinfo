@@ -916,7 +916,7 @@ PERCENT_HEX_RE = re.compile(r'%([0-9a-fA-F]{2})')
 def add_old_files(line_source, old_files):
   _percent_hex_re = PERCENT_HEX_RE
   for line in line_source:
-    line = line.rstrip('\r\n')
+    line = line.rstrip('\n')  # Don't remove '\r', it's binary.
     i = line.find(' f=')
     if i < 0:
       raise ValueError('f= not found: %d' % line_source.tell())
@@ -1088,6 +1088,14 @@ def process(filename, outf, get_file_info_func, skip_recent_sec):
 # ---
 
 
+def set_fd_binary(fd):
+  """Make sure that os.write(fd, ...) doesn't write extra \r bytes etc."""
+  if sys.platform.startswith('win'):
+    import os
+    import msvcrt
+    msvcrt.setmode(fd, os.O_BINARY)
+
+
 def main(argv):
   outf = None
   old_files = {}  # Maps paths to (size, mtime) pairs.
@@ -1111,13 +1119,13 @@ def main(argv):
       break
     if arg.startswith('--old='):
       old_filename = arg.split('=', 1)[1]
-      f = open(old_filename)
+      f = open(old_filename, 'rb')
       try:
         add_old_files(f, old_files)
       finally:
         f.close()
       # TODO(pts): Explicit close.
-      outf = open(old_filename, 'a', 0)
+      outf = open(old_filename, 'ab', 0)
     elif arg in ('--scan', '--mode=scan'):
       mode = 'scan'
     elif arg in ('--info', '--mode=info'):
@@ -1151,7 +1159,8 @@ def main(argv):
       sys.exit('Unknown flag: %s' % arg)
   if outf is None:
     # For unbuffered appending.
-    outf = os.fdopen(os.dup(sys.stdout.fileno()), 'a', 0)
+    outf = os.fdopen(os.dup(sys.stdout.fileno()), 'ab', 0)
+    set_fd_binary(outf.fileno())
   tags_impl = None
   if do_tags:
     tags_impl = lambda filename, getxattr=xattr_detect()()['getxattr']: (

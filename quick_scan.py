@@ -147,6 +147,14 @@ def process(filename, outf, get_file_info_func):
 # ---
 
 
+def set_fd_binary(fd):
+  """Make sure that os.write(fd, ...) doesn't write extra \r bytes etc."""
+  if sys.platform.startswith('win'):
+    import os
+    import msvcrt
+    msvcrt.setmode(fd, os.O_BINARY)
+
+
 def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
     print >>sys.stderr, (
@@ -174,6 +182,7 @@ def main(argv):
       sys.exit('Unknown flag: %s' % arg)
 
   outf = sys.stdout
+  set_fd_binary(outf.fileno())
   prefix = '.' + os.sep
   had_error = False
   get_file_info_func = get_quick_info
