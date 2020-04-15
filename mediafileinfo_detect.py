@@ -2112,7 +2112,9 @@ def analyze_avi(fread, info, fskip, format='avi', fclass='media',
 
 # --- rmmp
 
-def analyze_rmmp(fread, info, fskip):
+
+def analyze_rmmp(fread, info, fskip, format='rmmp', fclass='media', ext='.mmm',
+                 spec=(0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')):
   # http://fileformats.archiveteam.org/wiki/RIFF_Multimedia_Movie
   # https://www.aelius.com/njh/wavemetatools/doc/riffmci.pdf
   # Samples (in the .iso file): https://archive.org/download/Microsoft_Works_-_Gateway_2000_Edition_Microsoft_1991
@@ -9835,7 +9837,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
@@ -10449,7 +10450,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'rmmp': analyze_rmmp,
     'ani': analyze_ani,
     'mpeg-cdxa': analyze_mpeg_cdxa,
     'mpeg-ts': analyze_mpeg_ts,
