@@ -1950,7 +1950,8 @@ WINDOWS_GUID_AUDIO_FORMATS = {
 # --- avi
 
 
-def analyze_avi(fread, info, fskip):
+def analyze_avi(fread, info, fskip, format='avi', fclass='media',
+                spec=(0, 'RIFF', 8, 'AVI ')):
   # Documented here: https://msdn.microsoft.com/en-us/library/ms779636.aspx
   #
   # OpenDML (ODML, for >2GB AVI) documented here:
@@ -1975,11 +1976,15 @@ def analyze_avi(fread, info, fskip):
       what = 'top-level'
     else:
       what = 'in-%s' % parent_id
+    list_idx = -1
     while ofs_limit is None or ofs_limit > 0 and not do_stop_ary:
+      list_idx += 1
       if ofs_limit is not None and ofs_limit < 8:
         raise ValueError('No room for avi %s chunk.' % what)
       data = fread(8)
       if len(data) < 8:
+        if not data and not list_idx and parent_id == 'RIFF':
+          break
         raise ValueError('EOF in avi %s chunk header.' % what)
       chunk_id, size = struct.unpack('<4sL', data)
       size += size & 1
@@ -9830,7 +9835,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    ('avi', (0, 'RIFF', 8, 'AVI ')),
     ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
     # Video CD (VCD).
@@ -10445,7 +10449,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'avi': analyze_avi,
     'rmmp': analyze_rmmp,
     'ani': analyze_ani,
     'mpeg-cdxa': analyze_mpeg_cdxa,
