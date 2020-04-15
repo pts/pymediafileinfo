@@ -7480,7 +7480,8 @@ DIRAC_VIDEO_DIMENSIONS = (
 )
 
 
-def analyze_dirac(fread, info, fskip):
+def analyze_dirac(fread, info, fskip, format='dirac', fclass='video',
+                  spec=(0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))):
   # https://web.archive.org/web/20150503015104im_/http://diracvideo.org/download/specification/dirac-spec-latest.pdf
   # https://en.wikipedia.org/wiki/Dirac_(video_compression_format)
   header = fread(14)
@@ -9876,7 +9877,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
@@ -10452,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'dirac': analyze_dirac,
     'theora': analyze_theora,
     'daala': analyze_daala,
     'yuv4mpeg2': analyze_yuv4mpeg2,
