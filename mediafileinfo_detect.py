@@ -10526,6 +10526,13 @@ FORMAT_ITEMS = (
     ('bdf', (0, 'STARTFONT 2.', 12, ('1', '2'))),  # .bdf
     # https://fontforge.org/docs/techref/pcf-format.html
     ('pcf', (0, '\x01fcp', 4, tuple('\1\2\3\4\5\6\7\x08\x09'), 5, '\0\0\0', 8, ('\1\0', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0', '\0\1'), 10, '\0\0')),  # .pcf
+    # Server Normal Format font for X11. Big endian.
+    # https://en.wikipedia.org/wiki/Server_Normal_Format
+    # https://github.com/TurboVNC/tightvnc/blob/master/vnc_unixsrc/Xvnc/lib/font/bitmap/snfstr.h
+    # http://www.tug.org/tetex/html/fontfaq/cf_94.html
+    # https://stuff.mit.edu/afs/athena.mit.edu/system/x11r4/rtlib/X11/fonts/misc/
+    # https://github.com/shattered/dmd-730Xhost/blob/master/Xmtg/src/mtg/fonts/bdftosnf/showsnf.c
+    ('snf', (0, '\0\0\0\4', 4, '\0\0\0', 7, ('\0', '\1'), 8, '\0\0\0', 11, ('\0', '\1'), 12, '\0\0\0', 15, ('\0', '\1'), 16, '\0\0\0', 19, ('\0', '\1'), 20, '\0\0\0', 23, ('\0', '\1'), 28, '\0\0\0', 32, '\0\0\0', 36, '\0\0\0', 40, '\0\0\0', 44, '\0\0\0')),  # .snf
 )
 
 
