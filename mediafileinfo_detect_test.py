@@ -665,6 +665,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                       'tracks': [{'channel_count': 2, 'codec': 'cook', 'sample_rate': 44100, 'sample_size': 16, 'subformat': 'ra5', 'type': 'audio'},
                                  {'codec': 'h264-rv30', 'height': 240, 'type': 'video', 'width': 320}]})
 
+  def test_analyze_flic(self):
+    self.assertEqual(analyze_string('????\x11\xaf??\3\2\1\2\x08\0\3\0'),
+                     {'format': 'flic', 'subformat': 'fli',
+                      'tracks': [{'codec': 'rle', 'height': 513, 'type': 'video', 'width': 515}]}),
+    self.assertEqual(analyze_string('????\x12\xaf??\3\2\1\2\x08\0\0\0'),
+                     {'format': 'flic', 'subformat': 'flc',
+                      'tracks': [{'codec': 'rle', 'height': 513, 'type': 'video', 'width': 515}]}),
+
   def test_analyze_xml(self):
     data1 = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
     data2 = '<?xml\t\fencoding="UTF-8" standalone="no"?>'

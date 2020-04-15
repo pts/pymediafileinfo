@@ -6029,12 +6029,15 @@ def analyze_rdi(fread, info, fskip):
     populate_dib(info, header, 'rdi')
 
 
-def analyze_flic(fread, info, fskip):
+def analyze_flic(fread, info, fskip, format='flic', fclass='video',
+                 spec=(4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))):
+  # Autodesk Animator FLI or Autodesk Animator Pro flc.
+  # http://www.drdobbs.com/windows/the-flic-file-format/184408954
   header = fread(16)
   if len(header) < 16:
     raise ValueError('Too short for flic.')
   cc = header[4 : 6]
-  if cc == '\x12\zaf':
+  if cc == '\x12\xaf':
     subformat = 'flc'
   elif cc == '\x11\xaf':
     subformat = 'fli'
@@ -9882,10 +9885,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    # Autodesk Animator FLI or Autodesk Animator Pro flc.
-    # http://www.drdobbs.com/windows/the-flic-file-format/184408954
-    ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
-
     # fclass='image': Image. Can be animated.
     #
     # TODO(pts): Add detection and analyzing of OpenEXR, DNG, CR2.
@@ -10535,7 +10534,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'jpc': analyze_jpc,
     'bmp': analyze_bmp,
     'rdi': analyze_rdi,
-    'flic': analyze_flic,
     'mng': analyze_mng,
     'xml': analyze_xml,
     'xml-comment': analyze_xml,
