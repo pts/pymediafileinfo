@@ -10511,6 +10511,9 @@ FORMAT_ITEMS = (
         # 270 possible manufacturer values: http://www.color.org/signatureRegistry/index.xalter
         #48, ('\0\0\0\0', 'ADBE', 'CANO', 'EPSO', 'HP  ', 'IBM ', 'IEC ', 'KODA', 'QMS ', 'TEKT', 'argl', 'none'),
     )),
+    # PostScript Type 1 font, ASCII.
+    # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
+    ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
 )
 
 
