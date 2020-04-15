@@ -10391,7 +10391,7 @@ FORMAT_ITEMS = (
     ('deadjoe', (0, '\n*** ', 5, ('These modified', 'JOE was aborte', 'Modified files'))),
     # Filename extension: .mfo
     # Example: output of pymediafileinfo and media_scan.py.
-    ('fileinfo', (0, 'format=')),
+    ('mediafileinfo', (0, 'format=')),
     ('unixscript', (0, '#!', 4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 110))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
