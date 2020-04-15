@@ -10524,6 +10524,8 @@ FORMAT_ITEMS = (
     ('afm', (0, 'StartFontMetrics ', 17, ('1', '2', '3', '4'), 18, '.')),  # .afm
     # https://en.wikipedia.org/wiki/Glyph_Bitmap_Distribution_Format
     ('bdf', (0, 'STARTFONT 2.', 12, ('1', '2'))),  # .bdf
+    # https://fontforge.org/docs/techref/pcf-format.html
+    ('pcf', (0, '\x01fcp', 4, tuple('\1\2\3\4\5\6\7\x08\x09'), 5, '\0\0\0', 8, ('\1\0', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0', '\0\1'), 10, '\0\0')),  # .pcf
 )
 
 
