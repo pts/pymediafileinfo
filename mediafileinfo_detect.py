@@ -3153,7 +3153,10 @@ def get_mpeg_adts_track_info(header, expect_aac=None):
   return track_info
 
 
-def analyze_mpeg_adts(fread, info, fskip, header=''):
+def analyze_mpeg_adts(fread, info, fskip, format='mpeg-adts', extra_formats=('mp3',), fclass='audio',
+                      spec=(0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff', '\xf0', '\xf1', '\xf8', '\xf9'), 3, lambda header: (is_mpeg_adts(header), 30)),
+                      header=''):
+  # MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
   if len(header) < 4:
     header += fread(4 - len(header))
   info['tracks'] = [get_mpeg_adts_track_info(header)]
@@ -10039,9 +10042,6 @@ FORMAT_ITEMS = (
     # ID3v1 is at the end of the file, so we don't care.
     # ID3v2 is at the start of the file, before the mpeg-adts frames.
     ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
-    # Also MPEG audio elementary stream. https://en.wikipedia.org/wiki/Elementary_stream
-    ('mpeg-adts', (0, '\xff', 1, ('\xe2', '\xe3', '\xf2', '\xf3', '\xf4', '\xf5', '\xf6', '\xf7', '\xfa', '\xfb', '\xfc', '\xfd', '\xfe', '\xff', '\xf0', '\xf1', '\xf8', '\xf9'), 3, lambda header: (is_mpeg_adts(header), 30))),
-    ('mp3',),  # From 'mpeg-adts'.
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
@@ -10455,7 +10455,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'mpeg-adts': analyze_mpeg_adts,
     'mp3-id3v2': analyze_id3v2,
     'h264': analyze_h264,
     'h265': analyze_h265,

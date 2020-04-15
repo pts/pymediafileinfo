@@ -572,6 +572,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\x8aMNG\r\n\x1a\n\0\0\0\rMHDR\0\0\5\1\0\0\3\2'),
                      {'format': 'mng', 'tracks': [{'codec': 'jpeg+png', 'width': 1281, 'height': 770}]})
 
+  def test_analyze_mpeg_adts(self):
+    self.assertEqual(analyze_string('\xff\xfb\x90\xc4'),
+                     {'format': 'mp3', 'detected_format': 'mpeg-adts',
+                      'tracks': [{'channel_count': 1, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
+    self.assertEqual(analyze_string('\xff\xfd\xb4\0'),
+                     {'format': 'mpeg-adts',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp2', 'sample_rate': 48000, 'type': 'audio'}]})
+    self.assertEqual(analyze_string('\xff\xf9\x2c\x40'),
+                     {'format': 'mpeg-adts',
+                      'tracks': [{'channel_count': 1, 'sample_size': 16, 'subformat': 'mpeg-4', 'codec': 'aac', 'sample_rate': 8000, 'type': 'audio'}]})
+
   def test_analyze_dirac(self):
     self.assertEqual(analyze_string('BBCD\0\0\0\0\x12\0\0\0\0\x6c\x1c\x1a'),
                      {'format': 'dirac', 'tracks': [{'type': 'video', 'codec': 'dirac', 'width': 720, 'height': 576}]})
