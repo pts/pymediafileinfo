@@ -1800,6 +1800,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('#LyX file created by tex2lyx ?.?\n\\lyxformat 544\n'), {'format': 'lyx'})
     self.assertEqual(analyze_string('#LyX 2.3 created this file. For more info see http://www.lyx.org/\n\\lyxformat 544\n'), {'format': 'lyx'})
 
+  def test_detect_opentype(self):
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0'), {'format': 'opentype'})
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0glyf' + '\0' * 124), {'format': 'truetype', 'detected_format': 'opentype', 'glyph_format': 'truetype'})
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0GSUB' + '\0' * 124), {'format': 'opentype'})
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0GSUB????????????glyf' + '\0' * 108), {'format': 'opentype', 'glyph_format': 'truetype'})
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0GSUB????????????CFF ' + '\0' * 108), {'format': 'opentype', 'glyph_format': 'cff'})
+    self.assertEqual(analyze_string('\0\1\0\0\0\x08\0\x80\0\3\0\0GSUB????????????glyf????????????CFF ' + '\0' * 92), {'format': 'opentype'})
+
   def test_analyze_stuffit(self):
     data_macbinary1 = '\0\x11Name of this file\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x00SIT5????\1\0\0\0\0\0\0\0\x80\0\0\0\x82\0\0\0\0\0\x99\xd4\x89\0\x99\xd4\x89\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
     self.assertEqual(analyze_string(data_macbinary1),

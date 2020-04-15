@@ -9426,6 +9426,70 @@ def analyze_macbinary(fread, info, fskip):
       raise
 
 
+def parse_opentype_header(header):
+  if len(header) < 12:
+    raise ValueError('Too short for opentype.')
+  if not (header.startswith('\0\1\0\0') or header.startswith('OTTO')):
+    raise ValueError('opentype signature not found.')
+  table_count, sr, es, rs = struct.unpack('>HHHH', header[4 : 12])
+  # TODO(pts): What is the minimum number of tables? More than 1.
+  if not 1 <= table_count <= 64:  # Maximum 32 in the wild.
+    raise ValueError('Bad opentype table_count: %d' % table_count)
+  e = 1
+  while table_count >> e:
+    e += 1
+  e -= 1
+  if sr != (16 << e):
+    raise ValueError('Bad opentype search_range: %d' % sr)
+  if es != e:
+    raise ValueError('Bad opentype entry_selector: %d' % es)
+  if rs != (table_count << 4) - sr:
+    raise ValueError('Bad opentype range_shift: %d' % rs)
+  is_truetype = header.startswith('\0')
+  return 388 + 125 + 600, table_count, is_truetype
+
+
+def count_is_opentype(header):
+  try:
+    return parse_opentype_header(header)[0]
+  except ValueError:  # TODO(pts): Generalize this pattern.
+    return 0
+
+
+# Exclude LTSH and VDMX tables from here, they are part of Windows 95 *.ttf.
+OPENTYPE_ONLY_TABLES = ('BASE', 'CBDT', 'CBLC', 'CFF ', 'CFF2', 'COLR', 'CPAL', 'DSIG', 'EBDT', 'EBLC', 'GDEF', 'GPOS', 'GSUB', 'HVAR', 'JSTF', 'MATH', 'MERG', 'MVAR', 'PCLT', 'STAT', 'SVG ', 'VORG', 'VVAR')
+
+
+def analyze_opentype(fread, info, fksip, format='opentype', ext=('.otf', '.ttf'), extra_formats=('truetype',),
+                     spec=(0, ('\0\1\0\0', 'OTTO'), 12, lambda header: adjust_confidence(388, count_is_opentype(header)))):
+  # OpenType, tables: https://docs.microsoft.com/en-us/typography/opentype/spec/otff
+  # TrueType, tables: https://developer.apple.com/fonts/TrueType-Reference-Manual/
+  header = fread(12)
+  _, table_count, is_truetype = parse_opentype_header(header)
+  info['format'] = 'opentype'
+  oots = set(OPENTYPE_ONLY_TABLES)
+  glyph_format = 0
+  for i in xrange(table_count):
+    data = fread(16)
+    if len(data) < 16:
+      if not (data or i):
+        break
+      raise ValueError('EOF in opentype table.')
+    name = data[:4]
+    if name == 'glyf':
+      glyph_format |= 1
+    elif name == 'CFF ':
+      glyph_format |= 2
+    if name in oots:
+      is_truetype = False
+  if glyph_format == 2:
+    info['glyph_format'] = 'cff'  # Type 2. (Or Type 1?)
+  elif glyph_format == 1:
+    info['glyph_format'] = 'truetype'  # Type 42.
+  if glyph_format == 1 and is_truetype:
+    info['format'] = 'truetype'
+
+
 MACHO_BINARY_TYPES = {
     1: 'object',
     2: 'executable',
