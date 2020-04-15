@@ -1498,14 +1498,13 @@ def get_ogg_es_track_info(header):
     return None
 
 
-def analyze_ogg(fread, info, fskip):
+def analyze_ogg(fread, info, fskip, format='ogg', fclass='media',
+                spec=(0, 'OggS\0\2', 18, '\0\0\0\0', 26, '\1')):
   # https://xiph.org/ogg/
   # https://xiph.org/ogg/doc/oggstream.html
   # https://en.wikipedia.org/wiki/Ogg#File_format
   packets = {}
   page_sequences = {}
-  # It seems that all the elementary stream headers are in the beginning of
-  # the ogg file, with flag == 2.
   while 1:
     header = fread(27)  # Read ogg page header.
     if len(header) < 27:
@@ -1545,6 +1544,8 @@ def analyze_ogg(fread, info, fskip):
     page_sequences[stream_id] = 1 + page_sequences.get(stream_id, 0)
   info['tracks'] = []
   for _, header in sorted(packets.iteritems()):
+    # It seems that all the elementary stream headers are in the beginning of
+    # the ogg file, with flag == 2.
     track_info = get_ogg_es_track_info(header)
     if track_info is not None:
       info['tracks'].append(track_info)
@@ -9829,7 +9830,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    ('ogg', (0, 'OggS\0')),
     ('avi', (0, 'RIFF', 8, 'AVI ')),
     ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
@@ -10539,7 +10539,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'lzma': analyze_lzma,
     'olecf': analyze_olecf,
     'swf': analyze_swf,
-    'ogg': analyze_ogg,
     'realmedia': analyze_realmedia,
     'pnot': analyze_pnot,
     'ac3': analyze_ac3,
