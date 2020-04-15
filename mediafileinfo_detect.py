@@ -4776,9 +4776,11 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
 
   if len(header) < 13:
     header += fread(13 - len(header))
-  if len(header) < 13 or not (
+  if len(header) < 10 or not (
       header.startswith('GIF87a') or header.startswith('GIF89a')):
     raise ValueError('Not a GIF file.')
+  if len(header) <= 10:
+    return False
   pb = ord(header[10])
   if pb & 128:  # Global Color Table present.
     read_all(6 << (pb & 7))  # Skip the Global Color Table.
@@ -4798,7 +4800,7 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
   # GIF is still not animated unless it has more than 1 frame.
   while 1:
     b = ord(read_all(1))
-    if b == 0x3B:  # End of file.
+    if b == 0x3b:  # End of file.
       break
     elif b == 0x21:  # Extension introducer.
       b = ord(read_all(1))
@@ -4828,7 +4830,7 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
         while data_size:
           read_all(data_size)
           data_size = ord(read_all(1))
-    elif b == 0x2C:  # Image Descriptor.
+    elif b == 0x2c:  # Image Descriptor.
       frame_count += 1
       if frame_count > 1 and not do_read_entire_file:
         return True
@@ -4846,6 +4848,22 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
   if frame_count <= 0:
     raise ValueError('No frames in GIF file.')
   return frame_count > 1
+
+
+def analyze_gif(fread, info, fskip, format='gif', extra_formats=('agif',), fclass='image',
+                spec=(0, 'GIF8', 4, ('7a', '9a'))):
+  # Still short enough for is_animated_gif.
+  header = fread(10)
+  if len(header) < 6:
+    raise ValueError('Too short for gif.')
+  if not header.startswith('GIF87a') and not header.startswith('GIF89a'):
+    raise ValueError('gif signature not found.')
+  info['format'] = 'gif'
+  info['codec'] = 'lzw'
+  if len(header) >= 10:
+    info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
+    if is_animated_gif(fread, header):  # This may read the entire input.
+      info['format'] = 'agif'
 
 
 def analyze_brunsli(fread, info, fskip):
@@ -8204,20 +8222,6 @@ def analyze_cur(fread, info, fskip, format='cur', fclass='image',
   parse_ico_or_cur(fread, info, fskip, 'cur')
 
 
-def analyze_gif(fread, info, fskip):
-  # Still short enough for is_animated_gif.
-  header = fread(10)
-  if len(header) < 10:
-    raise ValueError('Too short for gif.')
-  if not header.startswith('GIF87a') and not header.startswith('GIF89a'):
-    raise ValueError('gif signature not found.')
-  info['format'] = 'gif'
-  info['codec'] = 'lzw'
-  info['width'], info['height'] = struct.unpack('<HH', header[6 : 10])
-  if is_animated_gif(fread, header):  # This may read the entire input.
-    info['format'] = 'agif'
-
-
 def analyze_minolta_raw(fread, info, fskip):
   # http://www.dalibor.cz/software/minolta-raw-mrw-file-format
   # Old: http://www.dalibor.cz/minolta/raw_file_format.htm
@@ -9893,8 +9897,6 @@ FORMAT_ITEMS = (
     # XnView MP supports even more: https://www.xnview.com/en/xnviewmp/#formats
     # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
-    ('gif', (0, 'GIF8', 4, ('7a', '9a'))),
-    ('agif',),  # From 'gif'.
     ('jng', (0, '\x8bJNG\r\n\x1a\n\0\0\0')),
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
@@ -10450,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'gif': analyze_gif,
     'jng': analyze_jng,
     'lbm': analyze_lbm,
     'deep': analyze_deep,

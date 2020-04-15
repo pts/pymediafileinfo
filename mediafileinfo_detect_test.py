@@ -1477,6 +1477,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(data1),
                      {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
 
+  def test_analyze_gif(self):
+    self.assertEqual(analyze_string('GIF89a'),
+                     {'format': 'gif', 'codec': 'lzw'})
+    self.assertEqual(analyze_string('GIF89a\3\2\1\2'),
+                     {'format': 'gif', 'codec': 'lzw', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string('GIF87a\3\2\1\2\0??\x2c\0\0\0\0\0\0\0\0\0\0\0\x2c'),
+                     {'format': 'agif', 'detected_format': 'gif', 'codec': 'lzw', 'height': 513, 'width': 515})
+
   def test_analyze_ani(self):
     data1 = 'RIFF????ACONLIST\x2e\0\0\0INFOINAM\x14\0\0\0Disappearing Cheese\0IART\6\0\0\0lynne\0anih' + '24000000240000001800000019000000000000000000000000000000000000000a0000000300000072617465640000000a0000000a0000000a0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000003c0000000a0000000a0000000a0000000a0000000a000000320000000a0000000a0000000a0000002800000005000000640000007365712064000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f0000000e00000010000000110000001200000013000000140000001500000016000000170000004c495354944800006672616d69636f6efe0200000000020001002120000000000000e802000016000000'.decode('hex')
     self.assertEqual(analyze_string(data1[:16]),
