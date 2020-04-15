@@ -7536,7 +7536,8 @@ def analyze_dirac(fread, info, fskip, format='dirac', fclass='video',
   set_video_dimens(info['tracks'][0], width, height)
 
 
-def analyze_theora(fread, info, fskip):
+def analyze_theora(fread, info, fskip, format='theora', fclass='video',
+                   spec=(0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))):
   # https://theora.org/doc/Theora.pdf
   # https://web.archive.org/web/20040928224506/http://www.theora.org/doc/Theora_I_spec.pdf
   header = fread(20)
@@ -9877,7 +9878,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
@@ -10452,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'theora': analyze_theora,
     'daala': analyze_daala,
     'yuv4mpeg2': analyze_yuv4mpeg2,
     'realvideo': analyze_realvideo,
