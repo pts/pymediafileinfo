@@ -3384,7 +3384,7 @@ def parse_mpeg_video_header(header, expect_mpeg4=None):
     # https://en.wikipedia.org/wiki/MPEG-4_Part_2
     # Also known as: MPEG-4 Part 2, MPEG-4 Visual, MPEG ASP, extension of
     # H.263, DivX, mp42.
-    track_info = {'type': 'video', 'codec': 'mpeg-4', }
+    track_info = {'type': 'video', 'codec': 'mpeg-4'}
     if header.startswith('\0\0\1\xb0'):
       # '\0\0\1\xb0' is the profile header (visual_object_sequence_start),
       # with a single-byte value.
@@ -3605,7 +3605,8 @@ class MpegVideoHeaderFinder(object):
           self._buf = buf[-3 + len(data):] + data  # Not found.
 
 
-def analyze_mpeg_video(fread, info, fskip):
+def analyze_mpeg_video(fread, info, fskip, format='mpeg-video', fclass='video',
+                       spec=(0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 1))):
   info['format'] = 'mpeg-video'
   # 145 bytes is enough unless the mpeg-4 headers contain long user_data.
   # TODO(pts): Get rid of the 145 limit here and above.
@@ -9864,7 +9865,6 @@ FORMAT_ITEMS = (
 
     # fclass='video': Video (single elementary stream, no audio).
 
-    ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
     ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))),
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
@@ -10455,7 +10455,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'mpeg-video': analyze_mpeg_video,
     'mpeg-adts': analyze_mpeg_adts,
     'mp3-id3v2': analyze_id3v2,
     'h264': analyze_h264,

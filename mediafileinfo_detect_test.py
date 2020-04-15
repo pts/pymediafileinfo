@@ -248,6 +248,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
         mediafileinfo_detect.get_mpeg_video_track_info('000001b0f3000001b509000001010000012002044007a85820f0a21f'.decode('hex'), expect_mpeg4=True),
         {'codec': 'mpeg-4', 'height': 240, 'profile_level': 243, 'type': 'video', 'width': 352})
 
+  def test_analyze_mpeg_video(self):
+    self.assertEqual(analyze_string('000001b31600f01502d020a4000001b8'.decode('hex')),
+                     {'format': 'mpeg-video',
+                      'tracks': [{'codec': 'mpeg-1', 'height': 240, 'type': 'video', 'width': 352}]})
+    self.assertEqual(analyze_string('000001b32d01e0240a1e62f8000001b5'.decode('hex')),
+                     {'format': 'mpeg-video',
+                      'tracks': [{'width': 720, 'codec': 'mpeg-2', 'type': 'video', 'height': 480}]})
+    self.assertEqual(analyze_string('000001b0f3000001b509000001010000012002044007a85820f0a21f'.decode('hex')),
+                     {'format': 'mpeg-video',
+                      'tracks': [{'codec': 'mpeg-4', 'height': 240, 'profile_level': 243, 'type': 'video', 'width': 352}]})
+
   def test_get_mpeg_ts_es_track_info(self):
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_ts_es_track_info('\0\0\1\xb3\x16\x01\x20\x13\xff\xff\xe0\x18\0\0\1\xb8', 0x01),
