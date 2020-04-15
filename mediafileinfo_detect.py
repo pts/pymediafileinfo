@@ -102,13 +102,12 @@ def set_sample_size(audio_track_info, codec, sample_size):
 # --- flv
 
 
-def analyze_flv(fread, info, fskip):
+def analyze_flv(fread, info, fskip, format='flv', fclass='media',
+                spec=(0, 'FLV\1', 5, '\0\0\0\x09\0\0\0\0')):
   # by pts@fazekas.hu at Sun Sep 10 00:26:18 CEST 2017
   #
   # Documented here (starting on page 68, Annex E):
   # http://download.macromedia.com/f4v/video_file_format_spec_v10_1.pdf
-  #
-
   data = fread(13)
   if len(data) < 13:
     raise ValueError('Too short for flv.')
@@ -117,7 +116,7 @@ def analyze_flv(fread, info, fskip):
     raise ValueError('flv signature not found.')
   info['format'] = 'flv'
   if data[3] != '\1':
-    # Not found any files with other versions.
+    # Not found any files with other versions in 2017.
     raise ValueError('Only flv version 1 is supported.')
   if data[5 : 9] != '\0\0\0\x09':
     raise ValueError('Bad flv header size.')
@@ -9836,8 +9835,6 @@ FORMAT_ITEMS = (
     ('avi', (0, 'RIFF', 8, 'AVI ')),
     ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
-    # \1 is the version number, but there is no version later than 1 in 2017.
-    ('flv', (0, 'FLV\1', 5, '\0\0\0\x09')),
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
     # is_mpeg_ts indeed needs 392 bytes.
@@ -10450,7 +10447,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'flv': analyze_flv,
     'asf': analyze_asf,
     'avi': analyze_avi,
     'rmmp': analyze_rmmp,

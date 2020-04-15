@@ -1171,6 +1171,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(''.join((data1, data_cftc_ver, data_cftc_dib, data_ver, data_dib))),
                      {'format': 'rmmp', 'tracks': [{'codec': 'rle', 'height': 480, 'type': 'video', 'width': 640}]})
 
+  def test_analyze_flv(self):
+    self.assertEqual(analyze_string('FLV\1\0\0\0\0\x09\0\0\0\0'), {'format': 'flv', 'tracks': []}),
+    # TODO(pts): Add tests with audio and video tracks.
+
   def test_detect_midi(self):
     data1 = 'MThd\0\0\0\6\0\0\0\1'
     data2 = 'MThd\0\0\0\6\0\2\3'
