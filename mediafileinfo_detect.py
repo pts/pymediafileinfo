@@ -2919,7 +2919,8 @@ def parse_h264_sps(data, expected_sps_id=0):
     raise ValueError('EOF in h264 avcc sps.')
 
 
-def analyze_h264(fread, info, fskip):
+def analyze_h264(fread, info, fskip, format='h264', fclass='video',
+                 spec=(0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))):
   # H.264 is also known as MPEG-4 AVC.
   #
   # https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-H.264-201610-S!!PDF-E&type=items
@@ -2931,7 +2932,7 @@ def analyze_h264(fread, info, fskip):
     raise ValueError('h264 signature not found.')
   assert i <= len(header), 'h264 preread header too short.'
   header = header[i:]
-  info['tracks'] = [{'type': 'video', 'codec': 'h264'}]
+  info['format'], info['tracks'] = 'h264', [{'type': 'video', 'codec': 'h264'}]
   if len(header) < 40:  # Maybe 32 bytes are also enough.
     header += fread(40 - len(header))
   if has_bad_emulation_prevention(header):
@@ -9870,9 +9871,9 @@ FORMAT_ITEMS = (
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
 
     # fclass='video': Video (single elementary stream, no audio).
-
+    #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
-    ('h264', (0, ('\0\0\0\1', '\0\0\1\x09', '\0\0\1\x27', '\0\0\1\x47', '\0\0\1\x67'), 128, lambda header: adjust_confidence(400, count_is_h264(header)))),
+
     ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('vp9', (0, ('\x80\x49\x83\x42', '\x81\x49\x83\x42', '\x82\x49\x83\x42', '\x83\x49\x83\x42', '\xa0\x49\x83\x42', '\xa1\x49\x83\x42', '\xa2\x49\x83\x42', '\xa3\x49\x83\x42', '\x90\x49\x83\x42', '\x91\x49\x83\x42', '\x92\x49\x83\x42', '\x93\x49\x83\x42', '\xb0\x24\xc1\xa1', '\xb0\xa4\xc1\xa1', '\xb1\x24\xc1\xa1', '\xb1\xa4\xc1\xa1'), 10, lambda header: (is_vp9(header), 20))),
@@ -10453,7 +10454,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'h264': analyze_h264,
     'h265': analyze_h265,
     'vp8': analyze_vp8,
     'vp9': analyze_vp9,
