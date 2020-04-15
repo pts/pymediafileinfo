@@ -7257,11 +7257,11 @@ def get_vp8_track_info(header):
   return {'type': 'video', 'codec': 'vp8', 'width': width, 'height': height}
 
 
-def analyze_vp8(fread, info, fskip):
+def analyze_vp8(fread, info, fskip, format='vp8', fclass='video',
+                spec=(3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))):
   header = fread(10)
   track_info = get_vp8_track_info(header)
-  info['format'] = 'vp8'
-  info['tracks'] = [track_info]
+  info['format'], info['tracks'] = 'vp8', [track_info]
 
 
 def is_webp(header):
@@ -9875,7 +9875,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('vp9', (0, ('\x80\x49\x83\x42', '\x81\x49\x83\x42', '\x82\x49\x83\x42', '\x83\x49\x83\x42', '\xa0\x49\x83\x42', '\xa1\x49\x83\x42', '\xa2\x49\x83\x42', '\xa3\x49\x83\x42', '\x90\x49\x83\x42', '\x91\x49\x83\x42', '\x92\x49\x83\x42', '\x93\x49\x83\x42', '\xb0\x24\xc1\xa1', '\xb0\xa4\xc1\xa1', '\xb1\x24\xc1\xa1', '\xb1\xa4\xc1\xa1'), 10, lambda header: (is_vp9(header), 20))),
     ('av1', (0, '\x12\0\x0a', 3, tuple(chr(c) for c in xrange(4, 128)))),
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
@@ -10454,7 +10453,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'vp8': analyze_vp8,
     'vp9': analyze_vp9,
     'av1': analyze_av1,
     'dirac': analyze_dirac,
