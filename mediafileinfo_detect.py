@@ -3874,7 +3874,9 @@ def analyze_mpeg_ps(fread, info, fskip, format='mpeg-ps', fclass='media',
   info['hdr_skip_count'] = skip_count
 
 
-def analyze_mpeg_cdxa(fread, info, fskip):
+def analyze_mpeg_cdxa(fread, info, fskip, format='mpeg-cdxa', fclass='media',
+                      spec=(0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')):
+  # Video CD (VCD).
   # https://github.com/Kurento/gst-plugins-bad/blob/master/gst/cdxaparse/gstcdxaparse.c
   # https://en.wikipedia.org/wiki/Video_CD
   data = fread(21)
@@ -9838,8 +9840,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    # Video CD (VCD).
-    ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
     # is_mpeg_ts indeed needs 392 bytes.
     ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
@@ -10450,7 +10450,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'mpeg-cdxa': analyze_mpeg_cdxa,
     'mpeg-ts': analyze_mpeg_ts,
     'mpeg-video': analyze_mpeg_video,
     'mpeg-adts': analyze_mpeg_adts,
