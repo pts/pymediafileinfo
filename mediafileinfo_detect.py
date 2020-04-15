@@ -6050,15 +6050,15 @@ def analyze_flic(fread, info, fskip):
   set_video_dimens(video_track_info, width, height)
 
 
-def analyze_mng(fread, info, fskip):
+def analyze_mng(fread, info, fskip, format='mng', fclass='image',
+                spec=(0, '\x8aMNG\r\n\x1a\n')):
   # http://www.libpng.org/pub/mng/spec/
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for mng.')
   if not header.startswith('\x8aMNG\r\n\x1a\n\0\0\0'):
     raise ValueError('mng signature not found.')
-  info['format'] = 'mng'
-  info['tracks'] = [{'codec': 'jpeg+png'}]
+  info['format'], info['tracks'] = 'mng', [{'codec': 'jpeg+png'}]
   if header[12 : 16] == 'MHDR':
     width, height = struct.unpack('>LL', header[16 : 24])
     set_video_dimens(info['tracks'][0], width, height)
@@ -9882,7 +9882,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('mng', (0, '\x8aMNG\r\n\x1a\n')),
     # Autodesk Animator FLI or Autodesk Animator Pro flc.
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
