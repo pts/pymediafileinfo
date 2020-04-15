@@ -4451,7 +4451,9 @@ def is_mpeg_ts(header):
   return True
 
 
-def analyze_mpeg_ts(fread, info, fskip):
+def analyze_mpeg_ts(fread, info, fskip, format='mpeg-ts', fclass='media',
+                    # is_mpeg_ts indeed needs 392 bytes.
+                    spec=(0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))):
   prefix = fread(4)
   if len(prefix) < 4:
     raise ValueError('Too short for mpeg-ts.')
@@ -9845,8 +9847,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    # is_mpeg_ts indeed needs 392 bytes.
-    ('mpeg-ts', (0, ('\0', '\x47'), 392, lambda header: (is_mpeg_ts(header), 301))),
     ('realmedia', (0, '.RMF\0\0\0')),
     # .ifo and .bup files on a video DVD.
     # http://stnsoft.com/DVD/ifo.html
@@ -10455,7 +10455,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'mpeg-ts': analyze_mpeg_ts,
     'mpeg-video': analyze_mpeg_video,
     'mpeg-adts': analyze_mpeg_adts,
     'mp3-id3v2': analyze_id3v2,
