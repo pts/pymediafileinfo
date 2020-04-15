@@ -1183,7 +1183,7 @@ def analyze_jp2(fread, info, fskip):
   if not is_jp2(header):
     raise ValueError('jp2 signature not found.')
   info['format'] = 'jp2'  # analyze_mov also sets it from ftyp.
-  analyze_mov(fread, info, fskip, header)
+  analyze_mov(fread, info, fskip, header=header)
 
 
 def is_jpc(header):
@@ -1215,9 +1215,9 @@ def analyze_jpeg2000(fread, info, fskip):
     raise ValueError('Too short for jpeg2000.')
   if is_jp2(header):
     info['format'] = 'jp2'  # analyze_mov also sets it from ftyp.
-    analyze_mov(fread, info, fskip, header)
+    analyze_mov(fread, info, fskip, header=header)
   elif is_jpc(header):
-    analyze_jpc(fread, info, fskip, header)
+    analyze_jpc(fread, info, fskip, header=header)
   else:
     raise ValueError('jpeg2000 signature not found.')
 
@@ -4738,7 +4738,7 @@ def analyze_id3v2(fread, info, fskip):
   analyze_func = detect_id3v2_audio_format(header)
   if not analyze_func:
     raise ValueError('Unknown signature after id3v2 header.')
-  return analyze_func(fread, info, fskip, header)
+  return analyze_func(fread, info, fskip, header=header)
 
 
 # --- Image file formats.
@@ -7217,7 +7217,7 @@ def analyze_zeros32_64(fread, info, fskip):
   if len(header) == 32 and fskip(512 - 64):
     header = fread(16)  # At offset 512.
     if count_is_pict_at_512(header):
-      analyze_pict(fread, info, fskip, header)
+      analyze_pict(fread, info, fskip, header=header)
 
 
 def is_vp8(header):
