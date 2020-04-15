@@ -1567,7 +1567,8 @@ def is_mime_type(data):
   return True
 
 
-def analyze_realmedia(fread, info, fskip):
+def analyze_realmedia(fread, info, fskip, format='realmedia', fclass='media',
+                      spec=(0, '.RMF\0\0\0', 8, lambda header: (len(header) >= 8 and ord(header[7]) >= 8, 2))):
   # https://wiki.multimedia.cx/index.php/RealMedia
   # https://github.com/MediaArea/MediaInfoLib/blob/4c8a5a6ef8070b3635003eade494dcb8c74e946f/Source/MediaInfo/Multiple/File_Rm.cpp
   # http://samples.mplayerhq.hu/real/
@@ -9866,7 +9867,6 @@ FORMAT_ITEMS = (
 
     # fclass='media': Media container (with audio and/or video).
 
-    ('realmedia', (0, '.RMF\0\0\0')),
     # .ifo and .bup files on a video DVD.
     # http://stnsoft.com/DVD/ifo.html
     ('dvd-video-video-ts-ifo', (0, 'DVDVIDEO-VMG\0')),
@@ -10526,7 +10526,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'lzma': analyze_lzma,
     'olecf': analyze_olecf,
     'swf': analyze_swf,
-    'realmedia': analyze_realmedia,
     'pnot': analyze_pnot,
     'ac3': analyze_ac3,
     'dts': analyze_dts,
