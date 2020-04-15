@@ -86,19 +86,46 @@ class FormatDbTest(unittest.TestCase):
     self.assertEqual(('foobar/',) * 10, f((0, ('foo',) * 10, 3, 'bar', 6, '/', 7, ('a', 'a')), count_limit=10))
 
   def test_analyze(self):
-    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO('RIFF????AMV LIST????hdrlamvh8\0\0\0' + '\0' * 32 + '\3\2\0\0\1\2\0\0'), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT),
-                     {'format': 'amv', 'vcodec': 'mjpeg', 'width': 515, 'height': 513, 'acodec': 'adpcm',
+    def analyze_test1(fread, info, fskip):
+      header = fread(8)
+      if not header.startswith('prefix1'):
+        raise ValueError
+      info['format'], info['tracks'] = 'test1', []
+      if len(header) >= 8:
+        info['tracks'].append({'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513})
+        info['tracks'].append({'type': 'audio', 'codec': 'adpcm'})
+
+    def analyze_test2(fread, info, fskip):
+      header = fread(8)
+      if not header.startswith('prefix2'):
+        raise ValueError
+      info['format'], info['subformat'], info['tracks'] = 'test2', 'test2sub', []
+      if len(header) >= 8:
+        info['tracks'].append({'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16})
+
+    format_db = mediafileinfo_formatdb.FormatDb((
+        ('test1', (0, 'prefix1')),
+        ('test2', (0, 'prefix2')),
+    ))
+    analyze_funcs_by_format = {
+        'test1': analyze_test1,
+        'test2': analyze_test2,
+    }
+    self.assertEqual(format_db.analyze(cStringIO.StringIO('prefix1'), analyze_funcs_by_format=analyze_funcs_by_format),
+                     {'format': 'test1', 'tracks': []})
+    self.assertEqual(format_db.analyze(cStringIO.StringIO('prefix1+'), analyze_funcs_by_format=analyze_funcs_by_format),
+                     {'format': 'test1', 'vcodec': 'mjpeg', 'width': 515, 'height': 513, 'acodec': 'adpcm',
                       'tracks': [{'type': 'video', 'codec': 'mjpeg', 'width': 515, 'height': 513},
                                  {'type': 'audio', 'codec': 'adpcm'}]})
-    data_vorbis = '\x01vorbis\0\0\0\0\x01D\xac\0\0'
-    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO(data_vorbis)), {'format': 'vorbis'})
-    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO(data_vorbis), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT),
-                     {'format': 'vorbis', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
+    self.assertEqual(format_db.analyze(cStringIO.StringIO('prefix2'), analyze_funcs_by_format=analyze_funcs_by_format),
+                     {'format': 'test2', 'subformat': 'test2sub', 'tracks': []})
+    self.assertEqual(format_db.analyze(cStringIO.StringIO('prefix2+'), analyze_funcs_by_format=analyze_funcs_by_format),
+                     {'format': 'test2', 'subformat': 'test2sub', 'acodec': 'vorbis', 'anch': 1, 'arate': 44100, 'asbits': 16,
                       'tracks': [{'type': 'audio', 'codec': 'vorbis', 'channel_count': 1, 'sample_rate': 44100, 'sample_size': 16}]})
-    self.assertEqual(FORMAT_DB.analyze(cStringIO.StringIO('\xff\xd8\xff\xe0'), analyze_funcs_by_format=ANALYZE_FUNCS_BY_FORMAT), {'format': 'jpeg', 'codec': 'jpeg'})
 
   def test_detect_unknown(self):
-    self.assertEqual(FORMAT_DB.detect('Unknown'), ('?', 'Unknown'))
+    format_db = mediafileinfo_formatdb.FormatDb((('test0', (0, 'pre0')), ('test1', (1, 'prefix1'))))
+    self.assertEqual(format_db.detect('Unknown data'), ('?', 'Unknown '))  # Truncated to the longer spec size.
 
 
 class MediaFileInfoDetectTest(unittest.TestCase):
