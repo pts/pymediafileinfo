@@ -10514,6 +10514,10 @@ FORMAT_ITEMS = (
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
+    # PostScript Type 1 font, binary (Printer Font Binary).
+    # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
+    # '\x80\x01' is followed by little-endian 32-bit size of ASCII block.
+    ('pfb', (0, '\x80\x01', 3, tuple(chr(c) for c in xrange(64)), 4, '\0\0' '%!PS-AdobeFont-1.', 23, ('0', '1'), 24, ': ')),  # .pfb
 )
 
 
