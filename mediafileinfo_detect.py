@@ -4505,7 +4505,7 @@ def analyze_mpeg_ts(fread, info, fskip):
     if first_few_packets is not None and ts_packet_count <= ts_packet_first_limit:
       first_few_packets.append(data)
       if not is_mpeg_ts(''.join(first_few_packets)):
-        raise ValueError('Bad mpeg-ps header until packet %d.' % ts_packet_count)
+        raise ValueError('Bad mpeg-ts header until packet %d.' % ts_packet_count)
       if ts_packet_count == ts_packet_first_limit:
         first_few_packets = None  # Save memory.
         info['format'] = 'mpeg-ts'
@@ -4638,7 +4638,7 @@ def analyze_mpeg_ts(fread, info, fskip):
       break
   if (first_few_packets is not None and
       not is_mpeg_ts(''.join(first_few_packets))):
-    raise ValueError('Bad mpeg-ps header.')
+    raise ValueError('Bad mpeg-ts header.')
   info['hdr_ts_packet_count'] = ts_packet_count
   info['hdr_ts_payload_count'] = ts_payload_count
   info['hdr_ts_pusi_count'] = ts_pusi_count
