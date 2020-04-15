@@ -3057,7 +3057,8 @@ def parse_h265_sps(data):
     raise ValueError('EOF in h265 sequence_parameter_set.')
 
 
-def analyze_h265(fread, info, fskip):
+def analyze_h265(fread, info, fskip, format='h265', fclass='video',
+                 spec=(0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))):
   # H.265 is also known as MPEG-4 HEVC.
   #
   # https://www.itu.int/rec/dologin.asp?lang=e&id=T-REC-H.265-201504-S!!PDF-E&type=items
@@ -3067,7 +3068,7 @@ def analyze_h265(fread, info, fskip):
   if not i:
     raise ValueError('h265 signature not found.')
   assert i <= len(header), 'h265 preread header too short.'
-  info['tracks'] = [{'type': 'video', 'codec': 'h265'}]
+  info['format'], info['tracks'] = 'h265', [{'type': 'video', 'codec': 'h265'}]
   if len(header) - i < 165:
     header += fread(165 - (len(header) - i))
   if has_bad_emulation_prevention(header):
@@ -9874,7 +9875,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('h265', (0, ('\0\0\0\1\x46', '\0\0\0\1\x40', '\0\0\0\1\x42', '\0\0\1\x46\1', '\0\0\1\x40\1', '\0\0\1\x42\1'), 128, lambda header: adjust_confidence(500, count_is_h265(header)))),
     ('vp8', (3, '\x9d\x01\x2a', 10, lambda header: (is_vp8(header), 150))),
     ('vp9', (0, ('\x80\x49\x83\x42', '\x81\x49\x83\x42', '\x82\x49\x83\x42', '\x83\x49\x83\x42', '\xa0\x49\x83\x42', '\xa1\x49\x83\x42', '\xa2\x49\x83\x42', '\xa3\x49\x83\x42', '\x90\x49\x83\x42', '\x91\x49\x83\x42', '\x92\x49\x83\x42', '\x93\x49\x83\x42', '\xb0\x24\xc1\xa1', '\xb0\xa4\xc1\xa1', '\xb1\x24\xc1\xa1', '\xb1\xa4\xc1\xa1'), 10, lambda header: (is_vp9(header), 20))),
     ('av1', (0, '\x12\0\x0a', 3, tuple(chr(c) for c in xrange(4, 128)))),
@@ -10454,7 +10454,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'h265': analyze_h265,
     'vp8': analyze_vp8,
     'vp9': analyze_vp9,
     'av1': analyze_av1,

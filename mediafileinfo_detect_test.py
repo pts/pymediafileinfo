@@ -264,6 +264,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'h264',
                       'tracks': [{'width': 352, 'codec': 'h264', 'type': 'video', 'height': 288}]})
 
+  def test_analyze_h265(self):
+    self.assertEqual(analyze_string('000000014601500000000140010c01ffff01600000030090000003000003003c9598090000000142010101600000030090000003000003003ca00b08048596566924caf010100000030010000003019080'.decode('hex')),
+                     {'format': 'h265',
+                      'tracks': [{'width': 352, 'codec': 'h265', 'type': 'video', 'height': 288}]})
+
   def test_get_mpeg_ts_es_track_info(self):
     self.assertEqual(
         mediafileinfo_detect.get_mpeg_ts_es_track_info('\0\0\1\xb3\x16\x01\x20\x13\xff\xff\xe0\x18\0\0\1\xb8', 0x01),
