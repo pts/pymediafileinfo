@@ -2250,7 +2250,8 @@ ASF_Audio_Media = guid('f8699e40-5b4d-11cf-a8fd-00805f5c442b')
 ASF_Video_Media = guid('bc19efc0-5b4d-11cf-a8fd-00805f5c442b')
 
 
-def analyze_asf(fread, info, fskip):
+def analyze_asf(fread, info, fskip, format='asf', extra_formats=('wmv', 'wma'), fclass='media',
+                spec=(0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\0\xaa\x00b\xcel')):
   header = fread(30)
   if len(header) < 30:
     raise ValueError('Too short for asf.')
@@ -2259,7 +2260,7 @@ def analyze_asf(fread, info, fskip):
     raise ValueError('asf signature not found.')
   if reserved12 != 0x201:
     raise ValueError('Unexpected asf reserved12 value: 0x%x' % reserved12)
-  if size < 54:
+  if size < 30:
     raise ValueError('Too short for asf with header object.')
   ofs_limit = size - 30
   if ofs_limit > 500000:  # Typical maximum size is 5500 bytes.
@@ -9829,9 +9830,6 @@ FORMAT_ITEMS = (
     # Media container (with audio and/or video).
 
     ('ogg', (0, 'OggS\0')),
-    ('asf', (0, '0&\xb2u\x8ef\xcf\x11\xa6\xd9\x00\xaa\x00b\xcel')),
-    ('wmv',),  # From 'asf'.
-    ('wma',),  # From 'asf'.
     ('avi', (0, 'RIFF', 8, 'AVI ')),
     ('rmmp', (0, 'RIFF', 8, 'RMMPcftc', 20, '\0\0\0\0cftc', 32, '\0\0\0\0\x0c\0\0\0')),  # .mmm
     ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
@@ -10447,7 +10445,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'asf': analyze_asf,
     'avi': analyze_avi,
     'rmmp': analyze_rmmp,
     'ani': analyze_ani,

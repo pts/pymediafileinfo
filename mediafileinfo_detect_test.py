@@ -1175,6 +1175,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('FLV\1\0\0\0\0\x09\0\0\0\0'), {'format': 'flv', 'tracks': []}),
     # TODO(pts): Add tests with audio and video tracks.
 
+  def test_analyze_asf(self):
+    self.assertEqual(analyze_string('0&\xb2u\x8ef\xcf\x11\xa6\xd9\0\xaa\x00b\xcel' '\x1e\0\0\0\0\0\0\0' '\0\0\0\0' '\1\2'), {'format': 'asf', 'tracks': []}),
+    # TODO(pts): Add tests with audio and video tracks.
+
   def test_detect_midi(self):
     data1 = 'MThd\0\0\0\6\0\0\0\1'
     data2 = 'MThd\0\0\0\6\0\2\3'
