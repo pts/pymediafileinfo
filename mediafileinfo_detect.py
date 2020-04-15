@@ -7576,7 +7576,8 @@ def analyze_daala(fread, info, fskip, format='daala', fclass='video',
   set_video_dimens(info['tracks'][0], width, height)
 
 
-def analyze_yuv4mpeg2(fread, info, fskip):
+def analyze_yuv4mpeg2(fread, info, fskip, format='yuv4mpeg2', fclass='video',
+                      spec=(0, 'YUV4MPEG2 ')):
   # https://wiki.multimedia.cx/index.php/YUV4MPEG2
   # https://www.systutorials.com/docs/linux/man/5-yuv4mpeg/
   header = fread(10)
@@ -9879,7 +9880,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
     ('realvideo', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
     ('mng', (0, '\x8aMNG\r\n\x1a\n')),
@@ -10452,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'yuv4mpeg2': analyze_yuv4mpeg2,
     'realvideo': analyze_realvideo,
     'wav': analyze_wav,
     'gif': analyze_gif,
