@@ -281,6 +281,17 @@ A12. mediafileinfo.py sorts matching file formats by (approximate)
      which have only a few valid values, and mediafileinfo.py matches XWD
      only if these header values are valid.
 
+Q13. What is the output file format of mediafileinfo.py?
+
+     This file format is called ``mediafileinfo'', it's documented here:
+     https://github.com/pts/pymediafileinfo/blob/master/mediafileinfo_format.md
+
+     You can detect it by checking the magic number (signature), i.e.
+     whether the file startsw with the ASCII string 'format=' without
+     quotes.
+
+     Of course, mediafileinfo.py and related tools can detect this file format.
+
 * (end)
 
 __END__
