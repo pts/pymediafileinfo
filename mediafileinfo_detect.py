@@ -735,7 +735,7 @@ MP4_AUDIO_CODECS = {
 }
 
 JP2_CODECS = {
-    0: 'raw',
+    0: 'uncompressed',
     1: 'huffman2',
     2: 'read2',
     3: 'read3',
