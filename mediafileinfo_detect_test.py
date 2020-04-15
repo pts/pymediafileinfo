@@ -1350,6 +1350,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'wbmp', 'codec': 'uncompressed', 'height': 513, 'width': 515})
     self.assertEqual(analyze_string(data2),
                      {'format': 'wbmp', 'codec': 'uncompressed', 'height': 513, 'width': 515})
+    self.assertEqual(analyze_string('\0\0@\x10'),
+                     {'format': 'wbmp', 'codec': 'uncompressed', 'height': 16, 'width': 64})
+    self.assertEqual(analyze_string('\0\0@\x0f'),
+                     {'format': '?'})  # Dimensions too small.
 
   def test_analyze_gd(self):
     self.assertEqual(analyze_string('\xff\xfe\2\3\2\1\1'),

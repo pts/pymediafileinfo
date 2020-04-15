@@ -8701,6 +8701,7 @@ def parse_count_wbmp_header(header):
       i += 1  # Not increasing f, we don't have additional info.
       if ord(header[i - 1]) < 0x80:
         break
+  i2 = i
   width = c = 0
   while 1:
     if i >= len(header):
@@ -8727,6 +8728,10 @@ def parse_count_wbmp_header(header):
     height = height << 7 | (b & 0x7f)
     if b < 0x80:
       break
+  if not (width > 15 and height > 15):
+    # Prevent '\0\0\1\1' from being recognized as
+    # format=wbmp width=1 height=1. Most likely it's format=?.
+    raise ValueError('wbmp dimensions too small.')
   return f, width, height
 
 
