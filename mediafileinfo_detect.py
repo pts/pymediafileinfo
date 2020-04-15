@@ -5295,7 +5295,9 @@ def analyze_sun_icon(fread, info, fskip):
     info['width'], info['height'] = dimens['width'], dimens['height']
 
 
-def analyze_wav(fread, info, fskip):
+def analyze_wav(fread, info, fskip, format='wav', fclass='audio', ext='.wav',
+                spec=(0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))):
+  # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
   header = fread(36)
   if len(header) < 16:
     raise ValueError('Too short for wav.')
@@ -10035,8 +10037,6 @@ FORMAT_ITEMS = (
 
     # fclass='audio'. Audio.
 
-    # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
-    ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
@@ -10450,7 +10450,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'wav': analyze_wav,
     'gif': analyze_gif,
     'jng': analyze_jng,
     'lbm': analyze_lbm,
