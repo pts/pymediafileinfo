@@ -7446,10 +7446,11 @@ def get_av1_track_info(header):
   return {'type': 'video', 'codec': 'av1', 'width': width, 'height': height}
 
 
-def analyze_av1(fread, info, fskip):
+def analyze_av1(fread, info, fskip, format='av1', fclass='video',
+                spec=(0, '\x12\0\x0a', 3, tuple(chr(c) for c in xrange(4, 128)))):
   header = fread(131)
   track_info = get_av1_track_info(header)
-  info['format'] = 'av1'
+  info['format'], info['tracks'] = 'av1', [track_info]
   info['tracks'] = [track_info]
 
 
@@ -9875,7 +9876,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('av1', (0, '\x12\0\x0a', 3, tuple(chr(c) for c in xrange(4, 128)))),
     ('dirac', (0, 'BBCD\0\0\0\0', 9, '\0\0\0\0', 14, lambda header: (is_dirac(header), 10))),
     ('theora', (0, '\x80theora', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
@@ -10452,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'av1': analyze_av1,
     'dirac': analyze_dirac,
     'theora': analyze_theora,
     'daala': analyze_daala,
