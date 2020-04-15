@@ -9845,7 +9845,7 @@ FORMAT_ITEMS = (
     ('short2', (3, lambda header: (len(header) == 2, MAX_CONFIDENCE))),
     ('short3', (4, lambda header: (len(header) == 3, MAX_CONFIDENCE))),
 
-    # Media container (with audio and/or video).
+    # fclass='media': Media container (with audio and/or video).
 
     ('realmedia', (0, '.RMF\0\0\0')),
     # .ifo and .bup files on a video DVD.
@@ -9862,7 +9862,7 @@ FORMAT_ITEMS = (
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
 
-    # Video (single elementary stream, no audio).
+    # fclass='video': Video (single elementary stream, no audio).
 
     ('mpeg-video', (0, '\0\0\1', 3, ('\xb3', '\xb0', '\xb5'), 9, lambda header: (header[3] != '\xb0' or header[5 : 9] == '\0\0\1\xb5', 0))),
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
@@ -9882,7 +9882,7 @@ FORMAT_ITEMS = (
     # http://www.drdobbs.com/windows/the-flic-file-format/184408954
     ('flic', (4, ('\x12\xaf', '\x11\xaf'), 12, '\x08\0', 14, ('\3\0', '\0\0'))),
 
-    # Image.
+    # fclass='image': Image. Can be animated.
     #
     # TODO(pts): Add detection and analyzing of OpenEXR, DNG, CR2.
     # XnView MP supports even more: https://www.xnview.com/en/xnviewmp/#formats
@@ -10030,7 +10030,7 @@ FORMAT_ITEMS = (
     # * It's not possible to detect CCITT Fax Group 4 (G4), it doesn't have a
     #   header. http://fileformats.archiveteam.org/wiki/CCITT_Group_4
 
-    # Audio.
+    # fclass='audio'. Audio.
 
     # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
     ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))),
@@ -10065,7 +10065,7 @@ FORMAT_ITEMS = (
     ('impulsetracker', (0, 'IMPM')),  # .it
     ('au', (0, '.snd\0\0\0', 12, '\0\0\0', 15, tuple(chr(c) for c in AU_CODECS), 20, '\0\0\0', 23, tuple(chr(c) for c in xrange(1, 16)))),
 
-    # Document media and vector graphics.
+    # fclass='doc': Document media and vector graphics.
 
     ('pdf', (0, '%PDF-1.')),
     ('ps', (0, '%!PS-Adobe-', 11, ('1', '2', '3'), 12, '.')),
@@ -10158,7 +10158,7 @@ FORMAT_ITEMS = (
     # of this.
     ('hxs', (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
 
-    # Compressed archive.
+    # fclass='archive': Compressed archive.
 
     # '\6\6' is ZIP64.
     # Also Java jar and Android apk.
@@ -10212,7 +10212,7 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/StuffIt_X#Identification
     ('stuffitx', (0, 'StuffIt', 7, ('!', '?'))),
 
-    # Compressed single file.
+    # fclass='compress': Compressed single file.
 
     ('gz', (0, '\x1f\x8b\x08')),  # .gz
     # http://fileformats.archiveteam.org/wiki/MSZIP
@@ -10279,7 +10279,7 @@ FORMAT_ITEMS = (
     ('binhex', (0, '(Convert with')),
     ('macbinary', (0, '\0', 128, lambda header: (is_macbinary(header), 800))),
 
-    # Non-compressed, non-media.
+    # fclass='code', fclass='other': Non-compressed, non-media.
 
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
