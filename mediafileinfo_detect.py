@@ -10522,6 +10522,8 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     # https://www.adobe.com/content/dam/acom/en/devnet/font/pdfs/5004.AFM_Spec.pdf
     ('afm', (0, 'StartFontMetrics ', 17, ('1', '2', '3', '4'), 18, '.')),  # .afm
+    # https://en.wikipedia.org/wiki/Glyph_Bitmap_Distribution_Format
+    ('bdf', (0, 'STARTFONT 2.', 12, ('1', '2'))),  # .bdf
 )
 
 
