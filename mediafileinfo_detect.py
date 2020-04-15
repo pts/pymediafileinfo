@@ -7554,7 +7554,8 @@ def analyze_theora(fread, info, fskip, format='theora', fclass='video',
   set_video_dimens(info['tracks'][0], picw | picw_h << 16, pich | pich_h << 16)
 
 
-def analyze_daala(fread, info, fskip):
+def analyze_daala(fread, info, fskip, format='daala', fclass='video',
+                  spec=(0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))):
   # daala_decode_header_in in src/infodec.c in 	https://git.xiph.org/daala.git
   # https://en.wikipedia.org/wiki/Daala
   header = fread(17)
@@ -9878,7 +9879,6 @@ FORMAT_ITEMS = (
     #
     # TODO(pts): Add 'mpeg-pes', it starts with: '\0\0\1' + [\xc0-\xef\xbd]. mpeg-pes in mpeg-ts has more sids (e.g. 0xfd for AC3 audio).
 
-    ('daala', (0, '\x80daala', 7, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7'))),
     ('yuv4mpeg2', (0, 'YUV4MPEG2 ')),
     ('realvideo', (0, 'VIDO', 8, lambda header: ((header[4 : 6] == 'RV' and header[6] in '123456789T' and header[7].isalnum()) or header[4 : 8] == 'CLV1', 350))),
     ('realvideo', (0, '\0\0\0', 4, 'VIDO', 12, lambda header: (ord(header[3]) >= 32 and (header[8 : 10] == 'RV' and header[10] in '123456789T' and header[11].isalnum()) or header[8 : 12] == 'CLV1', 400))),
@@ -10452,7 +10452,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'daala': analyze_daala,
     'yuv4mpeg2': analyze_yuv4mpeg2,
     'realvideo': analyze_realvideo,
     'wav': analyze_wav,
