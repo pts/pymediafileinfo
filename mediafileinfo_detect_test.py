@@ -23,37 +23,7 @@ import mediafileinfo_detect
 import mediafileinfo_formatdb
 
 
-FORMAT_DB = mediafileinfo_formatdb.FormatDb(mediafileinfo_detect)
-ANALYZE_FUNCS_BY_FORMAT = mediafileinfo_formatdb.get_analyze_funcs_by_format(mediafileinfo_detect)
-
-
-def analyze_string(data, expect_error=False, analyze_func=None):
-  info = {}
-  detected_format = FORMAT_DB.detect(data)[0]
-  analyze_func2 = ANALYZE_FUNCS_BY_FORMAT.get(detected_format)
-  if analyze_func is None:
-    analyze_func = analyze_func2
-  elif analyze_func is not analyze_func2:
-    info['detected_analyze'] = analyze_func2
-  if analyze_func is None:
-    info['format'] = detected_format
-  else:
-    fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
-    if expect_error:
-      try:
-        analyze_func(fread, info, fskip)
-        raise AssertionError('ValueError expected but not raised.')
-      except ValueError, e:
-        info['error'] = str(e)
-    else:
-      analyze_func(fread, info, fskip)
-      if info.get('format') is None:
-        raise AssertionError('Format not populated in info.')
-    if info.get('format') is not None and info.get('format') not in FORMAT_DB.formats:
-      raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
-    if detected_format != info.get('format'):
-      info['detected_format'] = detected_format
-  return info
+# ---
 
 
 class FormatDbTest(unittest.TestCase):
@@ -126,6 +96,40 @@ class FormatDbTest(unittest.TestCase):
   def test_detect_unknown(self):
     format_db = mediafileinfo_formatdb.FormatDb((('test0', (0, 'pre0')), ('test1', (1, 'prefix1'))))
     self.assertEqual(format_db.detect('Unknown data'), ('?', 'Unknown '))  # Truncated to the longer spec size.
+
+
+# ---
+
+
+def analyze_string(data, expect_error=False, analyze_func=None,
+                   _format_db=mediafileinfo_formatdb.FormatDb(mediafileinfo_detect),
+                   _analyze_funcs_by_format=mediafileinfo_formatdb.get_analyze_funcs_by_format(mediafileinfo_detect)):
+  info = {}
+  detected_format = _format_db.detect(data)[0]
+  analyze_func2 = _analyze_funcs_by_format.get(detected_format)
+  if analyze_func is None:
+    analyze_func = analyze_func2
+  elif analyze_func is not analyze_func2:
+    info['detected_analyze'] = analyze_func2
+  if analyze_func is None:
+    info['format'] = detected_format
+  else:
+    fread, fskip = mediafileinfo_detect.get_string_fread_fskip(data)
+    if expect_error:
+      try:
+        analyze_func(fread, info, fskip)
+        raise AssertionError('ValueError expected but not raised.')
+      except ValueError, e:
+        info['error'] = str(e)
+    else:
+      analyze_func(fread, info, fskip)
+      if info.get('format') is None:
+        raise AssertionError('Format not populated in info.')
+    if info.get('format') is not None and info.get('format') not in _format_db.formats:
+      raise RuntimeError('Unknown format in info: %r' % (info.get('format'),))
+    if detected_format != info.get('format'):
+      info['detected_format'] = detected_format
+  return info
 
 
 class MediaFileInfoDetectTest(unittest.TestCase):
