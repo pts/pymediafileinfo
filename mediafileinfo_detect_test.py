@@ -583,6 +583,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'mpeg-adts',
                       'tracks': [{'channel_count': 1, 'sample_size': 16, 'subformat': 'mpeg-4', 'codec': 'aac', 'sample_rate': 8000, 'type': 'audio'}]})
 
+  def test_analyze_id3v2(self):
+    self.assertEqual(analyze_string(''.join(('ID3\3\0\0\0\0\x03*TRCK\0\0\0\1\0\0\x00TENC\0\0\0\x01@\0\x00WXXX\0\0\0\x02\0\0\0\x00TCOP\0\0\0\1\0\0\x00TOPE\0\0\0\1\0\0\x00TCOM\0\0\0\1\0\0\x00COMM\0\0\0\x05\0\0\0\x00C\x93\x00TCON\0\0\0\1\0\0\x00TYER\0\0\0\1\0\0\x00TALB\0\0\0\x0c\0\0\x00MYALBUBNAMETPE1\0\0\0\x0c\0\0\0\xd6kr\xf6s FoobaTIT2\0\0\0\1', '\0' * 270, '\xff\xfb0L'))),
+                     {'format': 'mp3', 'detected_format': 'id3v2', 'id3_version': '2.3.0',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
+
   def test_analyze_dirac(self):
     self.assertEqual(analyze_string('BBCD\0\0\0\0\x12\0\0\0\0\x6c\x1c\x1a'),
                      {'format': 'dirac', 'tracks': [{'type': 'video', 'codec': 'dirac', 'width': 720, 'height': 576}]})

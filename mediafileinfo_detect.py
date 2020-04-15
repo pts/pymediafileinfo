@@ -4688,9 +4688,12 @@ def detect_id3v2_audio_format(header):
     return None
 
 
-def analyze_id3v2(fread, info, fskip):
+def analyze_id3v2(fread, info, fskip, format='id3v2', fclass='audio',
+                  spec=(0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))):
   # Just reads the ID3v2 header with fread and fskip.
+  # https://en.wikipedia.org/wiki/ID3
   # http://id3.org/id3v2.3.0
+  # ID3v1 is at the end of the file, so we don't care.
   header = fread(10)
   while 1:
     if len(header) < 10:
@@ -10037,11 +10040,6 @@ FORMAT_ITEMS = (
 
     # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
     ('wav', (0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))),
-    # https://en.wikipedia.org/wiki/ID3
-    # http://id3.org/id3v2.3.0
-    # ID3v1 is at the end of the file, so we don't care.
-    # ID3v2 is at the start of the file, before the mpeg-adts frames.
-    ('mp3-id3v2', (0, 'ID3', 10, lambda header: (len(header) >= 10 and ord(header[3]) < 10 and (ord(header[5]) & 7) == 0 and ord(header[6]) >> 7 == 0 and ord(header[7]) >> 7 == 0 and ord(header[8]) >> 7 == 0 and ord(header[9]) >> 7 == 0, 100))),
     ('aac', (0, 'ADIF')),
     ('flac', (0, 'fLaC')),
     ('ac3', (0, '\x0b\x77', 7, lambda header: (is_ac3(header), 20))),
@@ -10455,7 +10453,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'mp3-id3v2': analyze_id3v2,
     'h264': analyze_h264,
     'h265': analyze_h265,
     'vp8': analyze_vp8,
