@@ -10518,6 +10518,10 @@ FORMAT_ITEMS = (
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     # '\x80\x01' is followed by little-endian 32-bit size of ASCII block.
     ('pfb', (0, '\x80\x01', 3, tuple(chr(c) for c in xrange(64)), 4, '\0\0' '%!PS-AdobeFont-1.', 23, ('0', '1'), 24, ': ')),  # .pfb
+    # Adobe Font Metrics. Version 4.1 is current.
+    # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
+    # https://www.adobe.com/content/dam/acom/en/devnet/font/pdfs/5004.AFM_Spec.pdf
+    ('afm', (0, 'StartFontMetrics ', 17, ('1', '2', '3', '4'), 18, '.')),  # .afm
 )
 
 
