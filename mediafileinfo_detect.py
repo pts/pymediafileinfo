@@ -4408,13 +4408,15 @@ def is_mpeg_ts(header):
   #print '---ts'
   for pc in xrange(5):  # Number of packets to scan.
     if len(header) < i + 4:
-      return True
+      return pc > 0
     if header[i] != '\x47':
       return False
     b, = struct.unpack('>L', header[i : i + 4])
     tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
     pid = (b >> 8) & 0x1fff  # Packet id.
     tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
+    if not afc:  # Valid values are: 1, 2, 3.
+      return False
     if tei:  # Error in transport.
       return False
     if pid == 0x1fff:  # Ignore null packet.
@@ -4481,7 +4483,6 @@ def analyze_mpeg_ts(fread, info, fskip):
   while 1:
     if ts_packet_count >= ts_packet_count_limit:
       break
-    ts_packet_count += 1
     if is_bdav:
       if len(prefix) != 4:
         prefix += fread(4 - len(prefix))
@@ -4494,6 +4495,8 @@ def analyze_mpeg_ts(fread, info, fskip):
       prefix = ''
     data = prefix + fread(188 - len(prefix))
     prefix = ''
+    if data:
+      ts_packet_count += 1
     if len(data) < 188:
       if data:
         eof_msg = 'EOF in mpeg-ts packet.'
@@ -4647,8 +4650,10 @@ def analyze_mpeg_ts(fread, info, fskip):
   info['hdr_vframes'] = es_payloads_by_type['video']
   info['hdr_aframes'] = es_payloads_by_type['audio']
   if not programs:
+    info['format'] = 'mpeg-ts'
     raise ValueError('Missing mpeg-ts pat payload.')
   if not es_streams:
+    info['format'] = 'mpeg-ts'
     raise ValueError('Missing mpeg-ts pmt with streams.')
   if expected_es_streams:
     raise ValueError('Missing some mpeg-ts pes payloads (tracks).')

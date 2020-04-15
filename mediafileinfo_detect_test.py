@@ -1184,6 +1184,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('RIFF????AVI '), {'format': 'avi', 'tracks': []}),
     # TODO(pts): Add tests with audio and video tracks.
 
+  def test_analyze_mpeg_ts(self):
+    self.assertEqual(analyze_string('G\0\x10\x10' + '\0' * 184, expect_error=True),
+                     {'format': 'mpeg-ts', 'subformat': 'ts', 'tracks': [], 'error': 'Missing mpeg-ts pat payload.', 'hdr_aframes': 0, 'hdr_astreams': 0, 'hdr_ts_packet_count': 1, 'hdr_ts_payload_count': 1, 'hdr_ts_pusi_count': 0, 'hdr_vframes': 0, 'hdr_vstreams': 0})
+    self.assertEqual(analyze_string('474000110000b00d0001c300000001e10076578e5fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff474100110002b0230001c10000f011f0001bf011f00081f100f00c0a04656e6700050441432d334a1fa123ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff475011310790000001c97e1e000001e000008080052100018ca100000109100000000001274d40289a6280f0088fbc07d404040500000303e90000ea60e8c0004c4b0002faf2ef380a0000000128fe3c800000000106000780afc800000300400601510104004008148000000001218882220511161dffce9476e99daf8a53f6aaff59c484622613c2528d9e92c995737ce45d3d500db3e82dfff2ec1f0f6f362ba597fff77cf27fcdedf525fc9cead6ab045328af7f759ba8ee1c6547510011000001bd06088080052100018ca10b7739181c30e1c414ec9200fc2bfb52d49888a4ea87078707d2622293ae94404e25d28809c49aaae3214e84aa12e5ed92d27f5c8437cfab3dd70d33d88862499da953aa736df4441712aa56e2b5f7ea9ef4e953f4ab61c37b4dfb8af5e0bf86a5f7a95daa736df4441712aa56e2b5f7ea9effbe1c3736d33f72fdfa4c0fb59db0a5f7fbe1c3736d33f72fdfa4c0fb59db0a5f7727be5bd0993264c99326400c7b99b93f2fee8f583d74'.decode('hex')),
+                     {'format': 'mpeg-ts', 'subformat': 'ts', 'hdr_vstreams': 1, 'hdr_ts_packet_count': 4, 'hdr_ts_payload_count': 4, 'hdr_vframes': 1, 'hdr_astreams': 1, 'hdr_ts_pusi_count': 4, 'hdr_aframes': 1,
+                      'tracks': [{'width': 1920, 'codec': 'h264', 'type': 'video', 'height': 1080},
+                                 {'sample_size': 16, 'codec': 'ac3', 'sample_rate': 48000, 'channel_count': 5, 'type': 'audio'}]})
+
   def test_detect_midi(self):
     data1 = 'MThd\0\0\0\6\0\0\0\1'
     data2 = 'MThd\0\0\0\6\0\2\3'
