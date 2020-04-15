@@ -2182,7 +2182,8 @@ def analyze_rmmp(fread, info, fskip, format='rmmp', fclass='media', ext='.mmm',
     info['tracks'].append(track_info)
 
 
-def analyze_ani(fread, info, fskip):
+def analyze_ani(fread, info, fskip, format='ani', fclass='media', ext='.ani',
+                spec=(0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))):
   # http://fileformats.archiveteam.org/wiki/Windows_Animated_Cursor
   # https://www.daubnet.com/en/file-format-ani
   # https://web.archive.org/web/20130530192915/http://oreilly.com/www/centers/gff/formats/micriff
@@ -9837,7 +9838,6 @@ FORMAT_ITEMS = (
 
     # Media container (with audio and/or video).
 
-    ('ani', (0, 'RIFF', 8, 'ACON', 12, ('LIST', 'anih', 'seq ', 'rate'))),
     # Video CD (VCD).
     ('mpeg-cdxa', (0, 'RIFF', 8, 'CDXAfmt ', 17, '\0\0\0')),
     # is_mpeg_ts indeed needs 392 bytes.
@@ -10450,7 +10450,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'ani': analyze_ani,
     'mpeg-cdxa': analyze_mpeg_cdxa,
     'mpeg-ts': analyze_mpeg_ts,
     'mpeg-video': analyze_mpeg_video,
