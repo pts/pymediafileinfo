@@ -6857,7 +6857,9 @@ def parse_tex_dimen(data):
   return data
 
 
-def analyze_dvi(fread, info, fskip):
+def analyze_dvi(fread, info, fskip, format='dvi', fclass='doc',
+                # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
+                spec=(0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')):
   # http://mirror.utexas.edu/ctan/dviware/driv-standard/level-0/dvistd0.pdf
   # http://www.pirbot.com/mirrors/ctan/dviware/driv-standard/level-0/dvistd0.pdf
   data = fread(10)
@@ -10159,8 +10161,6 @@ FORMAT_ITEMS.extend((
     ('ps', (0, '%!PS', 4, ('\n', '\r'), 5, '%%BoundingBox: ')),
     ('ps', (0, '%!PS\r\n%%BoundingBox: ')),
     ('ps', (0, '\xc5\xd0\xd3\xc6', 5, '\0\0\0', 8, lambda header: (ord(header[4]) >= 30, 2))),
-    # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
-    ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
     ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from 'macbinary'. Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
     ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
     # http://fileformats.archiveteam.org/wiki/CGM
@@ -10657,5 +10657,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'ivf': analyze_ivf,
     'amv': analyze_amv,
     '4xm': analyze_4xm,
-    'dvi': analyze_dvi,
 }
