@@ -9411,7 +9411,8 @@ def is_macbinary(header):
           header[65 : 69] in MACBINARY_TYPES)
 
 
-def analyze_macbinary(fread, info, fskip):
+def analyze_macbinary(fread, info, fskip, format='macbinary', fclass='other',
+                      spec=(0, '\0', 128, lambda header: (is_macbinary(header), 800))):
   # http://fileformats.archiveteam.org/wiki/MacBinary
   # https://github.com/mietek/theunarchiver/wiki/MacBinarySpecs
   # TODO(pts): Check checksum for MacBinary II and MacBinary III,
@@ -10343,7 +10344,6 @@ FORMAT_ITEMS = (
     ('binhex', (0, '(This file must be converted with BinHex')),
     ('binhex', (0, '(This file ')),
     ('binhex', (0, '(Convert with')),
-    ('macbinary', (0, '\0', 128, lambda header: (is_macbinary(header), 800))),
 
     # fclass='code', fclass='other': Non-compressed, non-media.
 
@@ -10659,5 +10659,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'sun-icon': analyze_sun_icon,
     'ftc': analyze_ftc,
     'binhex': analyze_binhex,
-    'macbinary': analyze_macbinary,
 }
