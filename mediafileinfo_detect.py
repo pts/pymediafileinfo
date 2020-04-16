@@ -5242,7 +5242,11 @@ def analyze_pcpaint_pic(fread, info, fskip):
       info['codec'] = 'uncompressed'
 
 
-def analyze_xwd(fread, info, fskip):
+def analyze_xwd(fread, info, fskip, format='xwd', fclass='image',
+                spec=((0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1')),
+                      (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33))),
+                      (1, ('\0', '\1'), 2, '\0\0', 4, '\6\0\0\0', 8, tuple(chr(c) for c in xrange(17)), 9, '\0\0\0', 12, ('\1', '\2', '\3', '\4', '\5'), 13, '\0\0\0', 16, ('\0', '\1'), 17, '\0\0\0'),
+                      (1, ('\0', '\1'), 2, '\0\0', 4, '\7\0\0\0', 8, ('\0', '\1', '\2'), 9, '\0\0\0', 12, tuple(chr(c) for c in xrange(1, 33)), 13, '\0\0\0'))):
   # https://www.fileformat.info/format/xwd/egff.htm
   # http://fileformats.archiveteam.org/wiki/XWD
   # https://en.wikipedia.org/wiki/Xwd
@@ -10093,10 +10097,6 @@ FORMAT_ITEMS.extend((
     ('dcx', (0, '\xb1\x68\xde\x3a', 8, lambda header: (len(header) < 8 or header[5 : 8] != '\0\0\0' or ord(header[4]) >= 12, 2))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 7, ('\0', '\x10', '\x18', '\x20'), 16, ('\1', '\2', '\4', '\x08', '\x0f', '\x10', '\x18', '\x20'))),
-    ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\6', 8, '\0\0\0', 11, tuple(chr(c) for c in xrange(17)), 12, '\0\0\0', 15, ('\1', '\2', '\3', '\4', '\5'), 16, '\0\0\0', 19, ('\0', '\1'))),
-    ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
-    ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\6\0\0\0', 8, tuple(chr(c) for c in xrange(17)), 9, '\0\0\0', 12, ('\1', '\2', '\3', '\4', '\5'), 13, '\0\0\0', 16, ('\0', '\1'), 17, '\0\0\0')),
-    ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\7\0\0\0', 8, ('\0', '\1', '\2'), 9, '\0\0\0', 12, tuple(chr(c) for c in xrange(1, 33)), 13, '\0\0\0')),
     # Corel Binary Material Format. Used by cliparts in Corel Gallery. The
     # file format is not public, no way to get width and height.
     # https://file-extension.net/seeker/seeker.py?filetype_AND=binary
@@ -10660,5 +10660,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'emf': analyze_emf,
     '?-zeros32': analyze_zeros32_64,
     '?-zeros64': analyze_zeros32_64,
-    'xwd': analyze_xwd,
 }
