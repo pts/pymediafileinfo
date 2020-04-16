@@ -1733,7 +1733,8 @@ X4XM_AUDIO_CODECS = {
 }
 
 
-def analyze_4xm(fread, info, fskip):
+def analyze_4xm(fread, info, fskip, format='4xm', fclass='media',
+                spec=(0, 'RIFF', 8, '4XMVLIST', 20, 'HEADLIST', 32, 'HNFO')):
   # https://wiki.multimedia.cx/index.php/4xm_Format
   # Samples: http://samples.mplayerhq.hu/game-formats/4xm/
   data = fread(36)
@@ -9982,7 +9983,6 @@ FORMAT_ITEMS.extend((
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
     ('amv', (0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')),
-    ('4xm', (0, 'RIFF', 8, '4XMVLIST', 20, 'HEADLIST', 32, 'HNFO')),
     # http://fileformats.archiveteam.org/wiki/RIFX
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
@@ -10656,5 +10656,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'pict': analyze_pict,
     'ivf': analyze_ivf,
     'amv': analyze_amv,
-    '4xm': analyze_4xm,
 }
