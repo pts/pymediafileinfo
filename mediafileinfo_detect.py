@@ -17,6 +17,18 @@ WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
 
 MAX_CONFIDENCE = 100000
 
+FORMAT_ITEMS = []
+
+
+def add_format(format, fclass, spec):  # Call with kwargs.
+  # TODO(pts): Check for duplicates.
+  if isinstance(spec[0], tuple):
+    for spec1 in spec:
+      FORMAT_ITEMS.append((format, spec1))
+  else:
+    FORMAT_ITEMS.append((format, spec))
+
+
 # ---
 
 
@@ -9801,9 +9813,9 @@ def analyze_python_pyc(fread, info, fskip, format='python-pyc', fclass='code',
   info['format'], info['subformat'] = 'python-pyc', version
 
 
-def analyze_ocaml_bytecode(fread, info, fskip, format='ocaml-bytecode', fclass='code',
-                           spec=((0, '\x54\0\0\0', 6, '\0\0'),
-                                 (0, '\0\0\0\x54\0\0'))):
+add_format(format='ocaml-bytecode', fclass='code',
+           spec=((0, '\x54\0\0\0', 6, '\0\0'),
+                 (0, '\0\0\0\x54\0\0')))
   # Bytecode file format explained here: https://github.com/ocaml/ocaml/blob/b1fdc44547dc20d891bd260b55740f37c57b4961/runtime/caml/exec.h#L23-L38
   # Bytecode file ends with 'Caml1999X027', no header.
   # Usually the file starts with section "CODE", which contains 32-bit
@@ -9812,7 +9824,6 @@ def analyze_ocaml_bytecode(fread, info, fskip, format='ocaml-bytecode', fclass='
   # Description of opcodes: http://cadmium.x9c.fr/distrib/caml-instructions.pdf
   # Below we opportunistically match a BRANCH opcode with a 16-bit offset
   # (typically 0x2df), at the beginning of the CODE section.
-  match_spec(spec, fread, info, format)
 
 
 def analyze_lua_luac(fread, info, fskip, format='lua-luac', fclass='code', ext='.luac',
@@ -9936,7 +9947,7 @@ def count_is_html(header):
 # TODO(pts): Make Spec matching callable from analyze_...().
 # TODO(pts): Static analysis: autodetect conflicts and subsumes in string-only matchers.
 # TODO(pts): Optimization: create prefix dict of 8 bytes as well.
-FORMAT_ITEMS = (
+FORMAT_ITEMS.extend((
     # (n, f, ...) means: read at most n bytes from the beginning of the file
     # to header, call f(header).
     ('empty', (1, lambda header: (len(header) == 0, MAX_CONFIDENCE))),
@@ -10543,7 +10554,7 @@ FORMAT_ITEMS = (
     # https://stuff.mit.edu/afs/athena.mit.edu/system/x11r4/rtlib/X11/fonts/misc/
     # https://github.com/shattered/dmd-730Xhost/blob/master/Xmtg/src/mtg/fonts/bdftosnf/showsnf.c
     ('snf', (0, '\0\0\0\4', 4, '\0\0\0', 7, ('\0', '\1'), 8, '\0\0\0', 11, ('\0', '\1'), 12, '\0\0\0', 15, ('\0', '\1'), 16, '\0\0\0', 19, ('\0', '\1'), 20, '\0\0\0', 23, ('\0', '\1'), 28, '\0\0\0', 32, '\0\0\0', 36, '\0\0\0', 40, '\0\0\0', 44, '\0\0\0')),  # .snf
-)
+))
 
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
