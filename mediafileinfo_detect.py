@@ -6749,7 +6749,9 @@ def analyze_ps(fread, info, fskip):
       info['width'], info['height'] = (wd_ht[0] or 1, wd_ht[1] or 1)
 
 
-def analyze_wmf(fread, info, fskip):
+def analyze_wmf(fread, info, fskip, format='wmf', fclass='vector',
+                spec=((0, '\xd7\xcd\xc6\x9a\0\0'),
+                      (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0'))):
   # https://en.wikipedia.org/wiki/Windows_Metafile
   # https://www.fileformat.info/format/wmf/egff.htm
   # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/4813e7fd-52d0-4f42-965f-228c8b7488d2
@@ -10159,8 +10161,6 @@ FORMAT_ITEMS.extend((
     ('ps', (0, '\xc5\xd0\xd3\xc6', 5, '\0\0\0', 8, lambda header: (ord(header[4]) >= 30, 2))),
     # Bytes at offset 8 are numerator and denominator: struct.pack('>LL', 25400000, 473628672).
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
-    ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
-    ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
     ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from 'macbinary'. Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
     ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
     # http://fileformats.archiveteam.org/wiki/CGM
@@ -10657,6 +10657,5 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'ivf': analyze_ivf,
     'amv': analyze_amv,
     '4xm': analyze_4xm,
-    'wmf': analyze_wmf,
     'dvi': analyze_dvi,
 }
