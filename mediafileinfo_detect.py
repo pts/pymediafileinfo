@@ -10447,6 +10447,16 @@ FORMAT_ITEMS = (
     # https://github.com/HaxeFoundation/neko/blob/1df580cb95e6f93d71d553391a92eda2fab283dd/src/neko/Bytecode.nml#L275
     # Languages which target this bytecode: Neko, NekoML, Haxe.
     ('nekovm-bytecode', (0, 'NEKO', 7, '\0', 11, '\0')),
+    # https://en.wikipedia.org/wiki/SCUMM
+    # https://github.com/AlbanBedel/scummc/wiki/Scumm-6-data-format
+    # http://www.jestarjokin.net/apps/scummbler/
+    # XOR encryption with 0, 0x69 or 0xff.
+    ('scumm-bytecode', (0, 'LECF', 8, 'LOFF')),
+    ('scumm-bytecode', (0, '%,*/', 8, '%&//')),  # Based on Day of the Tentacle (xor 0x69).
+    ('scumm-bytecode', (0, '\xb3\xba\xbc\xb9', 8, '\xb3\xb0\xb9\xb9')),
+    ('scumm-index', (0, 'RNAM\0\0\0\x09\x00MAXS')),
+    ('scumm-index', (0, ';\'($iii`i$(1:')),  # Based on Day of the Tentacle (xor 0x69). Maybe size of RNAM is not always the same (9).
+    ('scumm-index', (0, '\xad\xb1\xbe\xb2\xff\xff\xff\xf6\xff\xb2\xbe\xa7\xac')),
     # https://en.wikipedia.org/wiki/Scratch_(programming_language)#File_formats
     ('scratch', (0, ('ScratchV01', 'ScratchV02'))),
     # OLE compound file == composite document file, including Thumbs.db and
