@@ -1693,7 +1693,8 @@ def analyze_realmedia(fread, info, fskip, format='realmedia', fclass='media',
       # Other mime-type found: application/x-pn-multirate-imagemap
 
 
-def analyze_ivf(fread, info, fskip):
+def analyze_ivf(fread, info, fskip, format='ivf', fclass='media',
+                spec=(0, 'DKIF\0\0 \0')):
   # https://wiki.multimedia.cx/index.php/IVF
   # https://formats.kaitai.io/vp8_ivf/
   # samples: https://gitlab.com/mbunkus/mkvtoolnix/issues/2553
@@ -9982,7 +9983,6 @@ FORMAT_ITEMS.extend((
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
-    ('ivf', (0, 'DKIF\0\0 \0')),
     # http://fileformats.archiveteam.org/wiki/RIFX
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
@@ -10654,5 +10654,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'gem': analyze_gem,
     'pcpaint-pic': analyze_pcpaint_pic,
     'pict': analyze_pict,
-    'ivf': analyze_ivf,
 }
