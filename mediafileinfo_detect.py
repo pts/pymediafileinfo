@@ -1296,7 +1296,8 @@ def yield_bits_msbfirst(fread):
       yield (c >> i) & 1
 
 
-def analyze_swf(fread, info, fskip):
+def analyze_swf(fread, info, fskip, format='swf', fclass='vector',
+                spec=(0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))):
   # https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
   header = fread(8)
   if len(header) < 8:
@@ -9982,7 +9983,6 @@ FORMAT_ITEMS.extend((
     ('dvd-video-vts-ifo', (0, 'DVDVIDEO-VTS\0')),
     # DIF DV (digital video).
     ('dv', (0, '\x1f\x07\x00')),
-    ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     # http://fileformats.archiveteam.org/wiki/RIFX
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
@@ -10631,7 +10631,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'gz': analyze_gz,
     'lzma': analyze_lzma,
     'olecf': analyze_olecf,
-    'swf': analyze_swf,
     'pnot': analyze_pnot,
     'ac3': analyze_ac3,
     'dts': analyze_dts,
