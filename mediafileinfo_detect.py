@@ -6139,7 +6139,8 @@ def analyze_lepton(fread, info, fskip):
   info['format'] = info['codec'] = 'lepton'
 
 
-def analyze_lbm(fread, info, fskip):
+def analyze_lbm(fread, info, fskip, format='lbm', fclass='image',
+                spec=(0, 'FORM', 8, ('ILBM', 'PBM ', 'RGB8', 'RGBN', 'ACBM', 'VDAT'), 12, 'BMHD\0\0\0\x14')):
   # https://en.wikipedia.org/wiki/ILBM
   # https://github.com/unwind/gimpilbm/blob/master/ilbm.c
   header = fread(24)
@@ -9980,7 +9981,6 @@ FORMAT_ITEMS = (
     ('xpm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xpm1(header)))),  # '#define test_format 1'. XPM1.
     ('xpm', (0, '! XPM2', 6, ('\r', '\n'))),  # XPM2.
     ('xpm', (0, '/* XPM */', 9, ('\r', '\n'))),  # XPM3.
-    ('lbm', (0, 'FORM', 8, ('ILBM', 'PBM ', 'RGB8', 'RGBN', 'ACBM', 'VDAT'), 12, 'BMHD\0\0\0\x14')),
     ('deep', (0, 'FORM', 8, 'DEEPDGBL\0\0\0\x08')),
     ('djvu', (0, 'AT&TFORM', 12, 'DJV', 15, ('U', 'M'))),
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
@@ -10553,7 +10553,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'lbm': analyze_lbm,
     'deep': analyze_deep,
     'pcx': analyze_pcx,
     'dcx': analyze_dcx,
