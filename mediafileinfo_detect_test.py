@@ -932,17 +932,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(data_pict1[:-1] + data_rle),
                      {'format': 'pict', 'height': 1285, 'width': 771, 'codec': 'rle', 'sampled_format': 'pict', 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_zeros1 + data_pict1[:15], analyze_func=mediafileinfo_detect.analyze_pict),
-                     {'format': 'pict', 'detected_format': '?-zeros32', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+                     {'format': 'pict', 'detected_format': '?-zeros32-64', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_zeros1 + data_pict1[:16], analyze_func=mediafileinfo_detect.analyze_pict),
-                     {'format': 'pict', 'detected_format': '?-zeros32', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+                     {'format': 'pict', 'detected_format': '?-zeros32-64', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_zeros1 + data_pict1[:16]),
-                     {'format': 'pict', 'detected_format': '?-zeros32', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
+                     {'format': 'pict', 'detected_format': '?-zeros32-64', 'height': 513, 'width': 515, 'subformat': '1', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_pict2),
                      {'format': 'pict', 'height': 120, 'width': 160, 'codec': 'jpeg', 'sampled_format': 'jpeg', 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_pict2[:16]),
                      {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_zeros2 + data_pict2[:16], analyze_func=mediafileinfo_detect.analyze_pict),
-                     {'format': 'pict', 'detected_format': '?-zeros64', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
+                     {'format': 'pict', 'detected_format': '?-zeros32-64', 'detected_analyze': mediafileinfo_detect.analyze_zeros32_64, 'height': 513, 'width': 515, 'subformat': '2', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_pict2ext),
                      {'format': 'pict', 'height': 513, 'width': 515, 'subformat': '2ext', 'pt_height': 513, 'pt_width': 515})
     self.assertEqual(analyze_string(data_pict2ext[:16]),

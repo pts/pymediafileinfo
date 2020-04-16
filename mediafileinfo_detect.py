@@ -7251,14 +7251,20 @@ def analyze_pict(fread, info, fskip, header=''):
     data = ''
 
 
-def analyze_zeros32_64(fread, info, fskip):
+add_format(format='?-zeros8', fclass='other', spec=(0, '\0' * 8))
+add_format(format='?-zeros16', fclass='other', spec=(0, '\0' * 16))
+
+
+def analyze_zeros32_64(fread, info, fskip, format='?-zeros32-64', extra_formats=('?-zeros32', '?-zeros64',),
+                       spec=((0, '\0' * 32), (0, '\0' * 64))):
+  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
   header = fread(32)
   if len(header) < 32:
     raise ValueError('Too short for zeros32.')
   if header.rstrip('\0'):
     raise ValueError('zeros32 signature not found.')
   header = fread(32)
-  if len(header) == 32 and not header.rstrip('\n'):
+  if len(header) == 32 and not header.rstrip('\0'):
     info['format'] = '?-zeros64'
   else:
     info['format'] = '?-zeros32'
@@ -10505,10 +10511,6 @@ FORMAT_ITEMS.extend((
     ('cue', (0, '\xef\xbb\xbfPERFORMER ')),
     ('cue', (0, '\xef\xbb\xbfTITLE ')),
     ('cue', (0, '\xef\xbb\xbfFILE ')),
-    ('?-zeros8', (0, '\0' * 8)),
-    ('?-zeros16', (0, '\0' * 16)),
-    ('?-zeros32', (0, '\0' * 32)),
-    ('?-zeros64', (0, '\0' * 64)),  # ``ISO 9660 CD-ROM filesystem data'' typically ends up in this format, because it starts with 40960 '\0' bytes (unless bootable).
     ('utf8', (0, '\xef\xbb\xbf')),  # BOM.
     ('utf16', (0, ('\xff\xfe', '\xfe\xff'))),  # BOM.
     # http://fileformats.archiveteam.org/wiki/PostScript_Printer_Description
@@ -10658,6 +10660,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'wmf': analyze_wmf,
     'dvi': analyze_dvi,
     'emf': analyze_emf,
-    '?-zeros32': analyze_zeros32_64,
-    '?-zeros64': analyze_zeros32_64,
 }
