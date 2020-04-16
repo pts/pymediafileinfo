@@ -9321,7 +9321,12 @@ def analyze_olecf(fread, info, fskip):
             return
 
 
-def analyze_binhex(fread, info, fskip):
+def analyze_binhex(fread, info, fskip, format='binhex', fclass='compress',
+                   spec=((0, '(This file must be converted with BinHex 4.0)'),
+                         (0, '(This file must be converted with BinHex.Hex)'),
+                         (0, '(This file must be converted with BinHex'),
+                         (0, '(This file '),
+                         (0, '(Convert with'))):
   # http://fileformats.archiveteam.org/wiki/BinHex
   # https://tools.ietf.org/html/rfc1741
   # https://en.wikipedia.org/wiki/BinHex
@@ -10339,11 +10344,6 @@ FORMAT_ITEMS = (
     ('diet', (0, '\xb4\x4c\xcd\x21\x9d\x89\x64\x6c\x7a')),
     # https://github.com/pts/upxbc/blob/0c5c63aef8c5c3336945a92a3829078d64dfdee2/upxbc#L1239
     ('upxz', (0, 'UPXZ')),
-    ('binhex', (0, '(This file must be converted with BinHex 4.0)')),
-    ('binhex', (0, '(This file must be converted with BinHex.Hex)')),
-    ('binhex', (0, '(This file must be converted with BinHex')),
-    ('binhex', (0, '(This file ')),
-    ('binhex', (0, '(Convert with')),
 
     # fclass='code', fclass='other': Non-compressed, non-media.
 
@@ -10658,5 +10658,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'xwd': analyze_xwd,
     'sun-icon': analyze_sun_icon,
     'ftc': analyze_ftc,
-    'binhex': analyze_binhex,
 }
