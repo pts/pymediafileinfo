@@ -6114,7 +6114,8 @@ def analyze_png(fread, info, fskip, format='png', extra_formats=('apng',), fclas
         break
 
 
-def analyze_jng(fread, info, fskip):
+def analyze_jng(fread, info, fskip, format='jng', fclass='image',
+                spec=(0, '\x8bJNG\r\n\x1a\n\0\0\0')):
   # http://www.libpng.org/pub/mng/spec/jng.html
   header = fread(24)
   if len(header) < 24:
@@ -9966,7 +9967,6 @@ FORMAT_ITEMS = (
     # XnView MP supports even more: https://www.xnview.com/en/xnviewmp/#formats
     # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
-    ('jng', (0, '\x8bJNG\r\n\x1a\n\0\0\0')),
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
     # Also includes 'nikon-nef' raw images.
     ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
@@ -10553,7 +10553,6 @@ FORMAT_ITEMS = (
 
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
-    'jng': analyze_jng,
     'lbm': analyze_lbm,
     'deep': analyze_deep,
     'pcx': analyze_pcx,
