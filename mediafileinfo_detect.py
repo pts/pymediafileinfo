@@ -5291,7 +5291,8 @@ def count_is_sun_icon(header):
   return (i + 17) * 100
 
 
-def analyze_sun_icon(fread, info, fskip):
+def analyze_sun_icon(fread, info, fskip, format='sun-icon', fclass='image',
+                     spec=(0, '/*', 2, (' ', '\t', '\r', '\n'), 21, lambda header: adjust_confidence(300, count_is_sun_icon(header)))):  # '/* Format_version=1,'.
   # https://www.fileformat.info/format/sunicon/egff.htm
   data = fread(4)
   if data.startswith('/*') and data[2 : 3] in ' \t\r\n':
@@ -10096,7 +10097,6 @@ FORMAT_ITEMS.extend((
     ('xwd', (0, '\0\0', 2, ('\0', '\1'), 4, '\0\0\0\7', 8, '\0\0\0', 11, ('\0', '\1', '\2'), 12, '\0\0\0', 15, tuple(chr(c) for c in xrange(1, 33)))),
     ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\6\0\0\0', 8, tuple(chr(c) for c in xrange(17)), 9, '\0\0\0', 12, ('\1', '\2', '\3', '\4', '\5'), 13, '\0\0\0', 16, ('\0', '\1'), 17, '\0\0\0')),
     ('xwd', (1, ('\0', '\1'), 2, '\0\0', 4, '\7\0\0\0', 8, ('\0', '\1', '\2'), 9, '\0\0\0', 12, tuple(chr(c) for c in xrange(1, 33)), 13, '\0\0\0')),
-    ('sun-icon', (0, '/*', 2, (' ', '\t', '\r', '\n'), 21, lambda header: adjust_confidence(300, count_is_sun_icon(header)))),  # '/* Format_version=1,'.
     # Corel Binary Material Format. Used by cliparts in Corel Gallery. The
     # file format is not public, no way to get width and height.
     # https://file-extension.net/seeker/seeker.py?filetype_AND=binary
@@ -10661,5 +10661,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     '?-zeros32': analyze_zeros32_64,
     '?-zeros64': analyze_zeros32_64,
     'xwd': analyze_xwd,
-    'sun-icon': analyze_sun_icon,
 }
