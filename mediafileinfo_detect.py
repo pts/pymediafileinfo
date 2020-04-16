@@ -8480,16 +8480,12 @@ def analyze_utah_rle(fread, info, fskip):
       raise ValueError('Bad utah-rle cmaplen.')
 
 
-def analyze_ftc(fread, info, fskip):
+def analyze_ftc(fread, info, fskip, format='ftc', fclass='image',
+                spec=(0, 'FTC\0\1\1\2\1')):
   # http://cd.textfiles.com/wthreepack/wthreepack-1/COMPRESS/FIFDEMO.ZIP
-  header = fread(8)
-  if len(header) < 8:
-    raise ValueError('Too short for ftc.')
-  # We don't know how long the signature is: 3..16 bytes.
-  if not header.startswith('FTC\0\1\1\2\1'):
-    raise ValueError('ftc signature not found.')
-  info['format'], info['codec'] = 'ftc', 'fractal'
   # We don't know how to get width and height, the file format is not public.
+  match_spec(spec, fread, info, format)
+  info['codec'] = 'fractal'
 
 
 def analyze_fif(fread, info, fskip):
@@ -10035,7 +10031,6 @@ FORMAT_ITEMS = (
     ('utah-rle', (0, '\x52\xcc',         10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
     # Adding this with xpos=0 and ypos=0 for better header matching of the most common case.
     ('utah-rle', (0, '\x52\xcc\0\0\0\0', 10, tuple(chr(c) for c in xrange(16)), 11, tuple(chr(c) for c in xrange(1, 6)), 12, '\x08', 13, tuple(chr(c) for c in xrange(6)), 14, tuple(chr(c) for c in xrange(9)))),
-    ('ftc', (0, 'FTC\0\1\1\2\1')),
     ('fif', (0, 'FIF\1')),
     ('spix', (0, 'spix', 24, lambda header: (is_spix(header), 812))),
     ('sgi-rgb', (0, '\x01\xda', 2, ('\0', '\1'), 3, ('\1', '\2'), 4, ('\0\1', '\0\2', '\0\3'), 12, lambda header: (len(header) >= 12 and (header[5] != '\3' or (header[10] == '\0' and 1 <= ord(header[11]) <= 5)), 10))),
@@ -10597,7 +10592,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'fbm': analyze_fbm,
     'cmuwm': analyze_cmuwm,
     'utah-rle': analyze_utah_rle,
-    'ftc': analyze_ftc,
     'fif': analyze_fif,
     'spix': analyze_spix,
     'sgi-rgb': analyze_sgi_rgb,
@@ -10657,5 +10651,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     '?-zeros64': analyze_zeros32_64,
     'xwd': analyze_xwd,
     'sun-icon': analyze_sun_icon,
-    'ftc': analyze_ftc,
 }
