@@ -1709,7 +1709,8 @@ def analyze_ivf(fread, info, fskip):
     info['tracks'].append({'type': 'video', 'codec': get_windows_video_codec(codec), 'width': width, 'height': height})
 
 
-def analyze_amv(fread, info, fskip):
+def analyze_amv(fread, info, fskip, format='amv', fclass='media',
+                spec=(0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')):
   # http://fileformats.archiveteam.org/wiki/MTV_Video_(.AMV)
   # https://wiki.multimedia.cx/index.php/AMV
   # http://svn.rot13.org/cgi-bin/viewvc.cgi/amv/amv.pl?view=markup
@@ -9982,7 +9983,6 @@ FORMAT_ITEMS.extend((
     ('dv', (0, '\x1f\x07\x00')),
     ('swf', (0, ('FWS', 'CWS', 'ZWS'), 3, tuple(chr(c) for c in xrange(1, 40)))),
     ('ivf', (0, 'DKIF\0\0 \0')),
-    ('amv', (0, 'RIFF', 8, 'AMV LIST', 20, 'hdrlamvh\x38\0\0\0')),
     # http://fileformats.archiveteam.org/wiki/RIFX
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),
@@ -10655,5 +10655,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'pcpaint-pic': analyze_pcpaint_pic,
     'pict': analyze_pict,
     'ivf': analyze_ivf,
-    'amv': analyze_amv,
 }
