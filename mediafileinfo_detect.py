@@ -6781,7 +6781,8 @@ def analyze_wmf(fread, info, fskip):
     raise ValueError('wmf signature not found.')
 
 
-def analyze_emf(fread, info, fskip):
+def analyze_emf(fread, info, fskip, format='emf', fclass='vector',
+                spec=(0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')):
   "Analyzes an EMF (Enhanced Metafile) or EMF+ file."""
   # https://en.wikipedia.org/wiki/Windows_Metafile
   # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-emf/91c257d7-c39d-4a36-9b1f-63e3f73d30ca
@@ -10160,7 +10161,6 @@ FORMAT_ITEMS.extend((
     ('dvi', (0, '\367', 1, ('\002', '\003'), 2, '\001\203\222\300\034;\0\0')),
     ('wmf', (0, '\xd7\xcd\xc6\x9a\0\0')),
     ('wmf', (0, ('\1\0\x09\0\0', '\2\0\x09\0\0'), 5, ('\1', '\3'), 16, '\0\0')),
-    ('emf', (0, '\1\0\0\0', 5, '\0\0\0', 40, ' EMF\0\0\1\0', 58, '\0\0')),
     ('pict', (2, '\0\0\0\0', 16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Also from 'macbinary'. Also from '?-zeros32' and '?-zeros64' if it has the 512-byte to be ignored at the beginning.
     ('pict', (16, lambda header: adjust_confidence(0, count_is_pict_at_512(header)))),  # Much less confidence.
     # http://fileformats.archiveteam.org/wiki/CGM
@@ -10659,5 +10659,4 @@ ANALYZE_FUNCS_BY_FORMAT = {
     '4xm': analyze_4xm,
     'wmf': analyze_wmf,
     'dvi': analyze_dvi,
-    'emf': analyze_emf,
 }
