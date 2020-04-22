@@ -10399,6 +10399,9 @@ FORMAT_ITEMS.extend((
     # doesn't seem to print any specific header in the assemble(...)
     # function. The corresponding lex.c in Go prints "go object ".
     ('go-object', (0, 'go object ')),
+    # `nasm -f rdf' output.
+    # https://en.wikipedia.org/wiki/Netwide_Assembler#RDOFF
+    ('rdoff', (0, 'RDOFF', 5, ('1', '2'))),
     # This header seems to come right after 'go object ...\n!\n', so it
     # isn't at the beginning of the file.
     # .o object files created by newer (1.14) Go.
