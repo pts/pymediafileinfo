@@ -10571,10 +10571,11 @@ FORMAT_ITEMS.extend((
     ('gpg-pubkey-encrypted', (0, '\xc1', 2, lambda header: (len(header) >= 2 and 192 <= ord(header[1]) < 224, 1), 3, '\3', 12, GPG_PUBKEY_ENCRYPTED_ALGOS)),
     # https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-09#section-5.4
     ('gpg-signed', (0, ('\x90', '\xc4'), 1, '\x0d\3', 3, ('\0', '\1'), 4, GPG_DIGEST_ALGOS, 5, GPG_PUBKEY_SIGNED_ALGOS)),  # gpg --sign --compress-algo none  # TODO(pts); codec=uncompressed
+    # Typically it is also signed, but the outer layer is compressed, so that's what we detect.
     ('gpg-compressed', (0, '\xa3\1', 3, lambda header: (len(header) >= 3 and (ord(header[2]) & 6) != 6, 5))),  # gpg --sign --compress-algo zip  # TODO(pts): codec=flate
     ('gpg-compressed', (0, '\xa3\2\x78', 3, ('\x01', '\x5e', '\x9c', '\xda'))),  # gpg --sign --compress-algo zlib  # TODO(pts): codec=flate
     ('gpg-compressed', (0, '\xa3\x03BZh')),  # gpg --sign --compress-algo bzip2  # TODO(pts): codec=bz2
-    ('gpg-ascii', (0, '-----BEGIN PGP MESSAGE-----', 27, ('\r', '\n'))),
+    ('gpg-ascii', (0, '-----BEGIN PGP MESSAGE-----', 27, ('\r', '\n'))),  # Can be gpg-symmetric-encrypted, gpgp-pubkey-encrypted, gpg-signed, gpg-compressed.
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
