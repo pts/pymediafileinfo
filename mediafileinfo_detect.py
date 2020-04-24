@@ -10606,6 +10606,17 @@ FORMAT_ITEMS.extend((
     # Private key signature: 'AGE-SECRET-KEY-', but it may contain comment
     # lines starting with '#' first.
     ('age-encrypted', (0, 'age-encryption.org/v1\n')),
+    # Example: ~/.ssh/id_*.pub , ~/.ssh/authorized_keys
+    ('ssh-public-keys', (0, 'ssh-rsa ')),
+    ('ssh-public-keys', (0, 'ssh-dss ')),
+    ('ssh-public-keys', (0, 'ssh-ed25519 ')),
+    ('ssh-public-keys', (0, 'ecdsa-sha2-nistp256 ')),
+    ('ssh-public-keys', (0, 'ecdsa-sha2-nistp384 ')),
+    ('ssh-public-keys', (0, 'ecdsa-sha2-nistp521 ')),
+    ('ssh-public-keys', (0, 'sk-ssh-ed25519@openssh.com ')),
+    ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp256@openssh.com ')),
+    ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp384@openssh.com ')),
+    ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp521@openssh.com ')),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
