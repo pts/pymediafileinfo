@@ -10600,6 +10600,10 @@ FORMAT_ITEMS.extend((
     # but it doesn't detect `openssl enc -... -nosalt', because that one
     # doesn't have a signature.
     ('openssl-symmetric-encrypted', (0, 'Salted__')),
+    # https://age-encryption.org/v1
+    # https://github.com/FiloSottile/age
+    # https://github.com/FiloSottile/age/blob/f0f8092d60bb96737fa096c29ec6d8adb5810390/internal/format/format.go#L46
+    ('age-encrypted', (0, 'age-encryption.org/v1\n')),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
