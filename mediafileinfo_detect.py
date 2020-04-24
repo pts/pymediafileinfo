@@ -10587,6 +10587,12 @@ FORMAT_ITEMS.extend((
     ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, ('\4', '\5'), 8, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '-----BEGIN PGP PRIVATE KEY BLOCK-----', 37, ('\r', '\n'))),
+    # Multiple keys: e.g. output of `gpg --export'.
+    ('gpg-public-keys', (0, '\x98', 2, '\3', 9, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-public-keys', (0, '\x98', 2, ('\4', '\5'), 7, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-public-keys', (0, '\x99', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-public-keys', (0, '\x99', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, ('\4', '\5'), 8, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-public-keys', (0, '-----BEGIN PGP PUBLIC KEY BLOCK-----', 36, ('\r', '\n'))),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa

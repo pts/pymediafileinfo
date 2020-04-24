@@ -1826,6 +1826,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\x95\3?\4????\x01'), {'format': 'gpg-private-keys'})
     self.assertEqual(analyze_string('-----BEGIN PGP PRIVATE KEY BLOCK-----\n'), {'format': 'gpg-private-keys'})
 
+  def test_analyze_gpg_public_keys(self):
+    self.assertEqual(analyze_string('\x98?\4????\x12'), {'format': 'gpg-public-keys'})
+    self.assertEqual(analyze_string('\x99\1?\4????\x11'), {'format': 'gpg-public-keys'})
+    self.assertEqual(analyze_string('\x99\3?\4????\x01'), {'format': 'gpg-public-keys'})
+    self.assertEqual(analyze_string('-----BEGIN PGP PUBLIC KEY BLOCK-----\n'), {'format': 'gpg-public-keys'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
