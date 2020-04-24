@@ -10603,6 +10603,8 @@ FORMAT_ITEMS.extend((
     # https://age-encryption.org/v1
     # https://github.com/FiloSottile/age
     # https://github.com/FiloSottile/age/blob/f0f8092d60bb96737fa096c29ec6d8adb5810390/internal/format/format.go#L46
+    # Private key signature: 'AGE-SECRET-KEY-', but it may contain comment
+    # lines starting with '#' first.
     ('age-encrypted', (0, 'age-encryption.org/v1\n')),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
