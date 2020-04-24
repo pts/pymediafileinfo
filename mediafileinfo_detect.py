@@ -18,12 +18,17 @@ WHITESPACE = ('\t', '\n', '\x0b', '\x0c', '\r', ' ')
 # https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-09#section-9.1
 GPG_PUBKEY_ENCRYPTED_ALGOS = ('\1', '\x10', '\x12', '\x13', '\x15', '\x16', '\x17', '\x18')
 GPG_PUBKEY_SIGNED_ALGOS = ('\1', '\x11', '\x12', '\x13', '\x15', '\x16', '\x17', '\x18')
+# TODO(pts): Are '\2' (RSA encrypt-only), '\3' (RSA sign-only), '\x10' (Elgamal encrypt-only) allowed here? '\x01' and '\x11' are allowed.
+GPG_PUBKEY_KEY_ALGOS = ('\1', '\x11', '\x12', '\x13', '\x15', '\x16', '\x17', '\x18')
 
 # https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-09#section-9.3
 GPG_CIPHER_ALGOS = ('\1', '\2', '\3', '\4', '\7', '\x08', '\x09', '\x0a')
 
 # https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-09#section-9.5
 GPG_DIGEST_ALGOS = ('\1', '\2', '\3', '\x08', '\x09', '\x0a', '\x0b')
+
+# Max byte size: 9 * 256. Typically it's less than 4 * 256 bytes for RSA.
+GPG_KEY_BYTE_SHR8_SIZES = ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08')
 
 MAX_CONFIDENCE = 100000
 
@@ -10576,6 +10581,12 @@ FORMAT_ITEMS.extend((
     ('gpg-compressed', (0, '\xa3\2\x78', 3, ('\x01', '\x5e', '\x9c', '\xda'))),  # gpg --sign --compress-algo zlib  # TODO(pts): codec=flate
     ('gpg-compressed', (0, '\xa3\x03BZh')),  # gpg --sign --compress-algo bzip2  # TODO(pts): codec=bz2
     ('gpg-ascii', (0, '-----BEGIN PGP MESSAGE-----', 27, ('\r', '\n'))),  # Can be gpg-symmetric-encrypted, gpgp-pubkey-encrypted, gpg-signed, gpg-compressed.
+    # Multiple keys: e.g. output of `gpg --export-secret-keys'.
+    ('gpg-private-keys', (0, '\x94', 2, '\3', 9, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-private-keys', (0, '\x94', 2, ('\4', '\5'), 7, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, ('\4', '\5'), 8, GPG_PUBKEY_KEY_ALGOS)),
+    ('gpg-private-keys', (0, '-----BEGIN PGP PRIVATE KEY BLOCK-----', 37, ('\r', '\n'))),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa

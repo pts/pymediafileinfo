@@ -1820,6 +1820,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('StuffIt (c)1997'), {'format': 'stuffit'})
     self.assertEqual(analyze_string('StuffIt?'), {'format': 'stuffitx'})
 
+  def test_analyze_gpg_private_keys(self):
+    self.assertEqual(analyze_string('\x94?\4????\x12'), {'format': 'gpg-private-keys'})
+    self.assertEqual(analyze_string('\x95\1?\4????\x11'), {'format': 'gpg-private-keys'})
+    self.assertEqual(analyze_string('\x95\3?\4????\x01'), {'format': 'gpg-private-keys'})
+    self.assertEqual(analyze_string('-----BEGIN PGP PRIVATE KEY BLOCK-----\n'), {'format': 'gpg-private-keys'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
