@@ -10548,6 +10548,7 @@ FORMAT_ITEMS.extend((
         # 270 possible manufacturer values: http://www.color.org/signatureRegistry/index.xalter
         #48, ('\0\0\0\0', 'ADBE', 'CANO', 'EPSO', 'HP  ', 'IBM ', 'IEC ', 'KODA', 'QMS ', 'TEKT', 'argl', 'none'),
     )),
+    ('gpg-symmetric', (0, '\x8c\x0d\x04', 3, ('\1', '\2', '\3', '\4', '\7', '\x08', '\x09', '\x0a'), 4, ('\0', '\1', '\3'), 5, ('\1', '\2', '\3', '\x08', '\x09', '\x0a', '\x0b'))),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
