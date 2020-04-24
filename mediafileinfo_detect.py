@@ -10595,6 +10595,11 @@ FORMAT_ITEMS.extend((
     ('gpg-public-keys', (0, '\x99', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-public-keys', (0, '\x99', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, ('\4', '\5'), 8, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-public-keys', (0, '-----BEGIN PGP PUBLIC KEY BLOCK-----', 36, ('\r', '\n'))),
+    # https://wiki.openssl.org/index.php/Enc
+    # This detects `openssl enc -... -salt' and `openssl enc -... -pbkdf2',
+    # but it doesn't detect `openssl enc -... -nosalt', because that one
+    # doesn't have a signature.
+    ('openssl-symmetric-encrypted', (0, 'Salted__')),
     # PostScript Type 1 font, ASCII.
     # http://fileformats.archiveteam.org/wiki/Adobe_Type_1
     ('pfa', (0, '%!PS-AdobeFont-1.', 17, ('0', '1'), 18, ': ')),  # .pfa
