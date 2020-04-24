@@ -10582,12 +10582,14 @@ FORMAT_ITEMS.extend((
     ('gpg-compressed', (0, '\xa3\x03BZh')),  # gpg --sign --compress-algo bzip2  # TODO(pts): codec=bz2
     ('gpg-ascii', (0, '-----BEGIN PGP MESSAGE-----', 27, ('\r', '\n'))),  # Can be gpg-symmetric-encrypted, gpgp-pubkey-encrypted, gpg-signed, gpg-compressed.
     # Multiple keys: e.g. output of `gpg --export-secret-keys'.
+    # Also multiple keys (GPG 1.x): ~/.gnupg/secring.gpg
     ('gpg-private-keys', (0, '\x94', 2, '\3', 9, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '\x94', 2, ('\4', '\5'), 7, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '\x95', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, ('\4', '\5'), 8, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-private-keys', (0, '-----BEGIN PGP PRIVATE KEY BLOCK-----', 37, ('\r', '\n'))),
     # Multiple keys: e.g. output of `gpg --export'.
+    # Also multiple keys (GPG 1.x and 2.x): ~/.gnupg/pubring.gpg
     ('gpg-public-keys', (0, '\x98', 2, '\3', 9, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-public-keys', (0, '\x98', 2, ('\4', '\5'), 7, GPG_PUBKEY_KEY_ALGOS)),
     ('gpg-public-keys', (0, '\x99', 1, GPG_KEY_BYTE_SHR8_SIZES, 3, '\3', 10, GPG_PUBKEY_KEY_ALGOS)),
