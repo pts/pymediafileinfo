@@ -10606,6 +10606,18 @@ FORMAT_ITEMS.extend((
     # Private key signature: 'AGE-SECRET-KEY-', but it may contain comment
     # lines starting with '#' first.
     ('age-encrypted', (0, 'age-encryption.org/v1\n')),
+    # https://saltpack.org/
+    ('saltpack-binary', (0, '\xc4', 2, tuple('\x94\x95\x96\x97\x98\x99'), 3, '\xa8saltpack\x92', 13, ('\1', '\2', '\3', '\4'), 14, tuple('\0\1\2\3\4\5\6\7'))),
+    ('saltpack-binary', (0, '\xc5', 3, tuple('\x94\x95\x96\x97\x98\x99'), 4, '\xa8saltpack\x92', 14, ('\1', '\2', '\3', '\4'), 16, tuple('\0\1\2\3\4\5\6\7'))),
+    ('saltpack-binary', (0, '\xc7', 5, tuple('\x94\x95\x96\x97\x98\x99'), 6, '\xa8saltpack\x92', 16, ('\1', '\2', '\3', '\4'), 18, tuple('\0\1\2\3\4\5\6\7'))),
+    ('saltpack-ascii', (0, 'BEGIN KEYBASE SALTPACK MESSAGE.')),
+    ('saltpack-ascii', (0, 'BEGIN KEYBASE SALTPACK ENCRYPTED MESSAGE.')),
+    ('saltpack-ascii', (0, 'BEGIN KEYBASE SALTPACK DETACHED SIGNATURE.')),
+    ('saltpack-ascii', (0, 'BEGIN KEYBASE SALTPACK SIGNED MESSAGE.')),
+    ('saltpack-ascii', (0, 'BEGIN SALTPACK MESSAGE.')),
+    ('saltpack-ascii', (0, 'BEGIN SALTPACK ENCRYPTED MESSAGE.')),
+    ('saltpack-ascii', (0, 'BEGIN SALTPACK DETACHED SIGNATURE.')),
+    ('saltpack-ascii', (0, 'BEGIN SALTPACK SIGNED MESSAGE.')),
     # Example: ~/.ssh/id_*.pub , ~/.ssh/authorized_keys
     ('ssh-public-keys', (0, 'ssh-rsa ')),
     ('ssh-public-keys', (0, 'ssh-dss ')),
