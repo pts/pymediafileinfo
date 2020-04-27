@@ -9888,6 +9888,46 @@ def analyze_lua_luac(fread, info, fskip, format='lua-luac', fclass='code', ext='
   info['subformat'] = '%d.%d' % (ord(header[4]) >> 4, ord(header[4]) & 15)
 
 
+def analyze_signify(fread, info, fskip, format='signify', fclass='crypto',
+                    extra_formats=('signify-signature', 'signify-public-key', 'signify-private-key'),
+                    spec=(0, 'untrusted comment: ')):
+  # https://github.com/aperezdc/signify
+  # minisign: https://jedisct1.github.io/minisign/
+  signature = 'untrusted comment: '
+  header = fread(len(signature))
+  if len(header) < len(signature):
+    raise ValueError('Too short for signify.')
+  if not header.startswith(signature):
+    raise ValueError('signify signature not found.')
+  info['format'] = 'signify'
+  data = fread(256 - len(header))
+  while 1:
+    i = data.find('\n')
+    if i >= 0:
+      break
+    if len(data) >= 8192:
+      raise ValueError('signify untrusted comment too long.')
+    size = len(data)
+    data += fread(len(data))
+    if len(data) == size:
+      raise ValueError('EOF in signify comment.')
+  comment = data[:i]
+  if comment.startswith('minisign '):
+    info['subformat'] = 'minisign'
+  if comment.startswith('signature from minisign '):
+    info['format'], info['subformat'] = 'signify-signature', 'minisign'
+  elif comment.startswith('minisign public key '):
+    info['format'], info['subformat'] = 'signify-public-key', 'minisign'
+  elif comment.endswith(' public key'):
+    info['format'] = 'signify-public-key'
+  elif comment.endswith(' secret key'):
+    info['format'] = 'signify-private-key'
+  elif comment.startswith('verify with '):
+    info['format'] = 'signify-signature'
+  elif comment.startswith('signature from '):
+    info['format'] = 'signify-signature'
+
+
 def count_is_troff(header):
   i = 0
   if header.startswith('.\\" ') or header.startswith('.\\"*'):

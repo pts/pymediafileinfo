@@ -1832,6 +1832,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\x99\3?\4????\x01'), {'format': 'gpg-public-keys'})
     self.assertEqual(analyze_string('-----BEGIN PGP PUBLIC KEY BLOCK-----\n'), {'format': 'gpg-public-keys'})
 
+  def test_analyze_signify(self):
+    self.assertEqual(analyze_string('untrusted comment: verify with keyname.pub\n'), {'format': 'signify-signature', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: mycomment public key\n'), {'format': 'signify-public-key', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: mycomment secret key\n'), {'format': 'signify-private-key', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: signature from minisign secret key\n'), {'format': 'signify-signature', 'subformat': 'minisign', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: minisign encrypted secret key\n'), {'format': 'signify-private-key', 'subformat': 'minisign', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: minisign public key 42\n'), {'format': 'signify-public-key', 'subformat': 'minisign', 'detected_format': 'signify'})
+    self.assertEqual(analyze_string('untrusted comment: minisign foo\n'), {'format': 'signify', 'subformat': 'minisign'})
+    self.assertEqual(analyze_string('untrusted comment: foo\n'), {'format': 'signify'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
