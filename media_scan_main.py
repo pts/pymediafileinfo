@@ -767,7 +767,9 @@ def detect_file(filename, filesize, do_fp, do_sha256, filemtime):
     info.setdefault('mtime', int(filemtime))
 
   if (info.get('error') in (None, 'bad_data') and do_fp and
-      info['format'] in FINGERPRINTABLE_FORMATS):
+      info['format'] in FINGERPRINTABLE_FORMATS and
+      info.get('width') and info.get('height') and
+      info['width'] * info['height'] < 300000000):  # pymagick would die with SIGBUS (out of memory on a Linux system with 4 GiB of memory) for large images, both JPEG and PNG.
       try:
         info['xfidfp'] = fingerprint_image(filename)
       except IOError, e:
