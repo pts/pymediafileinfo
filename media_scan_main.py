@@ -631,7 +631,10 @@ def xattr_detect():
 # All image file formats supported by GraphicsMagick.
 # TODO(pts): Try and support 'agif'.
 # TODO(pts): Does it support other image formats mediafileinfo_detect supports?
-FINGERPRINTABLE_FORMATS = ('gif', 'jpeg', 'png', 'bmp', 'pbm', 'pgm', 'ppm')
+FINGERPRINTABLE_FORMATS = (
+    'gif', 'jpeg', 'png', 'bmp', 'pnm', 'pam', 'tiff', 'ico', 'miff', 'pcx',
+    'utah-rle', 'sgi-rgb', 'ras', 'tga', 'xbm', 'xpm', 'xwd',
+)
 
 
 class FileWithHash(object):
