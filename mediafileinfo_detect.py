@@ -1128,6 +1128,7 @@ def analyze_mov(
         if size < 16:
           raise ValueError('64-bit mp4 box size too small.')
         size -= 16
+        data = ''
       elif size >= 8:
         size -= 8
       else:
