@@ -592,6 +592,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\xff\xf9\x2c\x40'),
                      {'format': 'mpeg-adts',
                       'tracks': [{'channel_count': 1, 'sample_size': 16, 'subformat': 'mpeg-4', 'codec': 'aac', 'sample_rate': 8000, 'type': 'audio'}]})
+    self.assertEqual(analyze_string('\xff\xf1P\x80'),
+                     {'format': 'mpeg-adts',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-4', 'codec': 'aac', 'sample_rate': 44100, 'type': 'audio'}]})
 
   def test_analyze_id3v2(self):
     self.assertEqual(analyze_string(''.join(('ID3\3\0\0\0\0\x03*TRCK\0\0\0\1\0\0\x00TENC\0\0\0\x01@\0\x00WXXX\0\0\0\x02\0\0\0\x00TCOP\0\0\0\1\0\0\x00TOPE\0\0\0\1\0\0\x00TCOM\0\0\0\1\0\0\x00COMM\0\0\0\x05\0\0\0\x00C\x93\x00TCON\0\0\0\1\0\0\x00TYER\0\0\0\1\0\0\x00TALB\0\0\0\x0c\0\0\x00MYALBUBNAMETPE1\0\0\0\x0c\0\0\0\xd6kr\xf6s FoobaTIT2\0\0\0\1', '\0' * 270, '\xff\xfb0L'))),

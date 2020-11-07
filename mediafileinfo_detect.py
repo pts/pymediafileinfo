@@ -3134,7 +3134,7 @@ def is_mpeg_adts(header, expect_aac=None):
   return (len(header) >= 4 and header[0] == '\xff' and
           ((header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
            ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
-           (expect_aac is not False and header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13)))
+           (expect_aac is not False and header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) & 2 and ((ord(header[2]) >> 2) & 15) < 13)))
 
 
 def get_mpeg_adts_track_info(header, expect_aac=None):
@@ -3154,8 +3154,7 @@ def get_mpeg_adts_track_info(header, expect_aac=None):
     if sfi > 12:
       raise ValueError('Invalid mpeg-adts AAC sampling frequency index: %d' % sfi)
     track_info['sample_rate'] = (96000, 88200, 6400, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0)[sfi]
-    if ord(header[2]) >> 6:
-      raise SyntaxError
+    if ord(header[2]) & 2:
       raise ValueError('Unexpected mpeg-adts AAC private bit.')
     cc = ord(header[2]) >> 7 << 2 | ord(header[3]) >> 6
     if cc:
