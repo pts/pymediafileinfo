@@ -979,7 +979,7 @@ def analyze_mov(
         process_box(size2 - 8)
         xtype_path.pop()
     else:
-      if size > 16383 or xtype in ('free', 'skip', 'wide', 'junk'):
+      if size > 16383 or xtype in ('free', 'skip', 'wide', 'junk', 'mdat'):
         if not fskip(size):
           raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
       else:
