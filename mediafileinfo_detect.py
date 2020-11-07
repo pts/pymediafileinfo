@@ -4062,11 +4062,19 @@ def get_jpeg_dimensions(fread, header='', is_first_eof_ok=False):
       height, width = struct.unpack('>xHH', read_all(5))
       return width, height
     read_all(ss)
+    # Some buggy JPEG encoders add ? or \0\0 after the 0xfe (COM)
+    # marker. We will ignore those extra NUL bytes.
+    is_nul_ok = m == 0xfe
 
     # Read next marker to m.
     m = read_all(2)
     if m[0] != '\xff':
-      raise ValueError('Marker expected.')
+      if is_nul_ok and m == '\0\0':
+        m = read_all(2)
+      elif is_nul_ok and m[1] == '\xff':
+        m = m[1] + read_all(1)
+      if m[0] != '\xff':
+        raise ValueError('Marker expected.')
     m = ord(m[1])
   raise AssertionError('Internal JPEG parser error.')
 

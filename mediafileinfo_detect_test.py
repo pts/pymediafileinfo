@@ -1483,6 +1483,12 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'jpeg', 'codec': 'jpeg', 'error': 'EOF in jpeg first.'})
     self.assertEqual(analyze_string(data1),
                      {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
+    data2 = data1[:2] + '\xff\xfe\0\5???' + data1[2:]  # Add COM marker.
+    self.assertEqual(analyze_string(data2),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
+    data3 = data1[:2] + '\xff\xfe\0\5???+' '\xff\xfe\0\5???\0\0' + data1[2:]  # Add COM markers with extra + and \0\0.
+    self.assertEqual(analyze_string(data3),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
 
   def test_analyze_gif(self):
     self.assertEqual(analyze_string('GIF89a'),
