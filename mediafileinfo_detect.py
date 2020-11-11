@@ -4822,7 +4822,7 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
   if len(header) < 10 or not (
       header.startswith('GIF87a') or header.startswith('GIF89a')):
     raise ValueError('Not a GIF file.')
-  if len(header) <= 10:
+  if len(header) < 13:
     return False
   pb = ord(header[10])
   if pb & 128:  # Global Color Table present.
@@ -4857,8 +4857,12 @@ def is_animated_gif(fread, header='', do_read_entire_file=False):
           read_all(data_size)
           data_size = ord(read_all(1))
       else:
-        # TODO(pts): AssertionError: Unknown extension: 0x01; in badgif1.gif
-        if b not in (0xf9, 0xfe):
+        # https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+        # 0x01: plain text extension
+        # 0xf9: graphic control extension
+        # 0xfe: comment extension
+        # 0xff: application extension (handled above)
+        if b not in (0x01, 0xf9, 0xfe):
           raise ValueError('Unknown GIF extension type: 0x%02x' % b)
         ext_data_size = ord(read_all(1))
         if b == 0xf9:  # Graphic Control extension.
