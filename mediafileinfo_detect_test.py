@@ -597,7 +597,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                       'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-4', 'codec': 'aac', 'sample_rate': 44100, 'type': 'audio'}]})
 
   def test_analyze_id3v2(self):
-    self.assertEqual(analyze_string(''.join(('ID3\3\0\0\0\0\x03*TRCK\0\0\0\1\0\0\x00TENC\0\0\0\x01@\0\x00WXXX\0\0\0\x02\0\0\0\x00TCOP\0\0\0\1\0\0\x00TOPE\0\0\0\1\0\0\x00TCOM\0\0\0\1\0\0\x00COMM\0\0\0\x05\0\0\0\x00C\x93\x00TCON\0\0\0\1\0\0\x00TYER\0\0\0\1\0\0\x00TALB\0\0\0\x0c\0\0\x00MYALBUBNAMETPE1\0\0\0\x0c\0\0\0\xd6kr\xf6s FoobaTIT2\0\0\0\1', '\0' * 270, '\xff\xfb0L'))),
+    data = 'ID3\3\0\0\0\0\x03*TRCK\0\0\0\1\0\0\x00TENC\0\0\0\x01@\0\x00WXXX\0\0\0\x02\0\0\0\x00TCOP\0\0\0\1\0\0\x00TOPE\0\0\0\1\0\0\x00TCOM\0\0\0\1\0\0\x00COMM\0\0\0\x05\0\0\0\x00C\x93\x00TCON\0\0\0\1\0\0\x00TYER\0\0\0\1\0\0\x00TALB\0\0\0\x0c\0\0\x00MYALBUBNAMETPE1\0\0\0\x0c\0\0\0\xd6kr\xf6s FoobaTIT2\0\0\0\1' + '\0' * 270
+    mp3_header = '\xff\xfb0L'
+    self.assertEqual(analyze_string(''.join((data, mp3_header))),
+                     {'format': 'mp3', 'detected_format': 'id3v2', 'id3_version': '2.3.0',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
+    self.assertEqual(analyze_string(''.join((data, '\xff\0\0\0', mp3_header))),
+                     {'format': 'mp3', 'detected_format': 'id3v2', 'id3_version': '2.3.0',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
+    self.assertEqual(analyze_string(''.join((data, '\xff\0\0\0\0', mp3_header))),
+                     {'format': 'mp3', 'detected_format': 'id3v2', 'id3_version': '2.3.0',
+                      'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
+    self.assertEqual(analyze_string(''.join((data, '\0\0\0\0\0', mp3_header))),
                      {'format': 'mp3', 'detected_format': 'id3v2', 'id3_version': '2.3.0',
                       'tracks': [{'channel_count': 2, 'sample_size': 16, 'subformat': 'mpeg-1', 'codec': 'mp3', 'sample_rate': 44100, 'type': 'audio'}]})
 

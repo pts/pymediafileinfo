@@ -4767,12 +4767,16 @@ def analyze_id3v2(fread, info, fskip, format='id3v2', fclass='audio',
     if not header.startswith('ID3'):
       break
     header += fread(10 - len(header))  # Another ID3 tag found.
+  if len(header) == 4 and header.startswith('\xff\0\0\0'):
+    header = header[1:] + fread(1)  # Skip \xff present in some broken MP3s.
   c = 0
   while 1:  # Skip some \0 bytes.
     if not header.startswith('\0') or len(header) != 4 or c >= 4096:
       break
     c += 1
-    if header.startswith('\0\0\0'):
+    if header == '\0\0\0\0':
+      header = ''
+    elif header.startswith('\0\0\0'):
       header = header[3:]
     elif header.startswith('\0\0'):
       header = header[2:]
