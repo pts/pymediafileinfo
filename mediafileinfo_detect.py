@@ -4362,8 +4362,10 @@ def parse_mpeg_ts_pat(data):
         raise ValueError('EOF in mpeg-ts pat entry pmt_pid.')
       h, = struct.unpack('>H', data[j : j + 2])
       j += 2
-      if (h & 0xe000) != 0xe000:
-        raise ValueError('Bad mpeg-ts pat entry reserved3.')
+      reserved3 = h >> 13
+      if reserved3 not in (0, 7):
+        # 7 is required, but we also accept 7, for some broken mpeg-ts files.
+        raise ValueError('Bad mpeg-ts pat entry reserved3: %d' % reserved3)
       pmt_pid = h & 0x1fff
       if pmt_pid in (0, 0x1fff):
         raise ValueError('Bad mpeg-ts pat entry pmt_pid: 0x%x' % pmt_pid)
