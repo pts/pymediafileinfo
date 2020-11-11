@@ -1008,7 +1008,7 @@ def mediafileinfo_detect():
           process_box(size2 - 8)
           xtype_path.pop()
       else:
-        if size > 16383 or xtype in ('free', 'skip', 'wide', 'junk'):
+        if size > 16383 or xtype in ('free', 'skip', 'wide', 'junk', 'mdat'):
           if not fskip(size):
             raise ValueError('EOF while skipping mp4 box, xtype=%r' % xtype)
         else:
@@ -1157,6 +1157,7 @@ def mediafileinfo_detect():
           if size < 16:
             raise ValueError('64-bit mp4 box size too small.')
           size -= 16
+          data = ''
         elif size >= 8:
           size -= 8
         else:
@@ -3162,7 +3163,7 @@ def mediafileinfo_detect():
     return (len(header) >= 4 and header[0] == '\xff' and
             ((header[1] in '\xe2\xe3' '\xf2\xf3\xf4\xf5\xf6\xf7\xfa\xfb\xfc\xfd\xfe\xff' and
              ord(header[2]) >> 4 not in (0, 15) and ord(header[2]) & 0xc != 12) or
-             (expect_aac is not False and header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) >> 6 and ((ord(header[2]) >> 2) & 15) < 13)))
+             (expect_aac is not False and header[1] in '\xf0\xf1\xf8\xf9' and not ord(header[2]) & 2 and ((ord(header[2]) >> 2) & 15) < 13)))
 
 
   def get_mpeg_adts_track_info(header, expect_aac=None):
@@ -3182,8 +3183,7 @@ def mediafileinfo_detect():
       if sfi > 12:
         raise ValueError('Invalid mpeg-adts AAC sampling frequency index: %d' % sfi)
       track_info['sample_rate'] = (96000, 88200, 6400, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0)[sfi]
-      if ord(header[2]) >> 6:
-        raise SyntaxError
+      if ord(header[2]) & 2:
         raise ValueError('Unexpected mpeg-adts AAC private bit.')
       cc = ord(header[2]) >> 7 << 2 | ord(header[3]) >> 6
       if cc:
@@ -4091,11 +4091,19 @@ def mediafileinfo_detect():
         height, width = struct.unpack('>xHH', read_all(5))
         return width, height
       read_all(ss)
+      # Some buggy JPEG encoders add ? or \0\0 after the 0xfe (COM)
+      # marker. We will ignore those extra NUL bytes.
+      is_nul_ok = m == 0xfe
 
       # Read next marker to m.
       m = read_all(2)
       if m[0] != '\xff':
-        raise ValueError('Marker expected.')
+        if is_nul_ok and m == '\0\0':
+          m = read_all(2)
+        elif is_nul_ok and m[1] == '\xff':
+          m = m[1] + read_all(1)
+        if m[0] != '\xff':
+          raise ValueError('Marker expected.')
       m = ord(m[1])
     raise AssertionError('Internal JPEG parser error.')
 
@@ -4383,8 +4391,10 @@ def mediafileinfo_detect():
           raise ValueError('EOF in mpeg-ts pat entry pmt_pid.')
         h, = struct.unpack('>H', data[j : j + 2])
         j += 2
-        if (h & 0xe000) != 0xe000:
-          raise ValueError('Bad mpeg-ts pat entry reserved3.')
+        reserved3 = h >> 13
+        if reserved3 not in (0, 7):
+          # 7 is required, but we also accept 7, for some broken mpeg-ts files.
+          raise ValueError('Bad mpeg-ts pat entry reserved3: %d' % reserved3)
         pmt_pid = h & 0x1fff
         if pmt_pid in (0, 0x1fff):
           raise ValueError('Bad mpeg-ts pat entry pmt_pid: 0x%x' % pmt_pid)
@@ -4788,12 +4798,16 @@ def mediafileinfo_detect():
       if not header.startswith('ID3'):
         break
       header += fread(10 - len(header))  # Another ID3 tag found.
+    if len(header) == 4 and header.startswith('\xff\0\0\0'):
+      header = header[1:] + fread(1)  # Skip \xff present in some broken MP3s.
     c = 0
     while 1:  # Skip some \0 bytes.
       if not header.startswith('\0') or len(header) != 4 or c >= 4096:
         break
       c += 1
-      if header.startswith('\0\0\0'):
+      if header == '\0\0\0\0':
+        header = ''
+      elif header.startswith('\0\0\0'):
         header = header[3:]
       elif header.startswith('\0\0'):
         header = header[2:]
@@ -4839,7 +4853,7 @@ def mediafileinfo_detect():
     if len(header) < 10 or not (
         header.startswith('GIF87a') or header.startswith('GIF89a')):
       raise ValueError('Not a GIF file.')
-    if len(header) <= 10:
+    if len(header) < 13:
       return False
     pb = ord(header[10])
     if pb & 128:  # Global Color Table present.
@@ -4874,8 +4888,12 @@ def mediafileinfo_detect():
             read_all(data_size)
             data_size = ord(read_all(1))
         else:
-          # TODO(pts): AssertionError: Unknown extension: 0x01; in badgif1.gif
-          if b not in (0xf9, 0xfe):
+          # https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+          # 0x01: plain text extension
+          # 0xf9: graphic control extension
+          # 0xfe: comment extension
+          # 0xff: application extension (handled above)
+          if b not in (0x01, 0xf9, 0xfe):
             raise ValueError('Unknown GIF extension type: 0x%02x' % b)
           ext_data_size = ord(read_all(1))
           if b == 0xf9:  # Graphic Control extension.
