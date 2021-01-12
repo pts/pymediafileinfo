@@ -12080,7 +12080,6 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, ski
           if do_th or not (path.endswith('.th.jpg') or path.endswith('.th.jpg.tmp')):
             print >>sys.stderr, 'warning: stat %s: %s' % (path, e)
           st2 = None
-        # Don't do anything special with symlinks to directories.
         if st2 and stat.S_ISREG(st2.st_mode):
           tags = None  # Don't emit tags= with --tags=false.
           if tags_impl:
@@ -12091,7 +12090,7 @@ def scan(path_iter, old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, ski
               print >>sys.stderr, 'warning: symlink tags %s: %s' % (path, e)
           file_items.append((path, st2, tags, symlink, False))
         else:
-          # No tags for symlinks. This is to avoid EPERM on lgetattr.
+          # No tags for symlinks pointing to directories. This is to avoid EPERM on lgetattr.
           tags = None
           if tags_impl:
             tags = ''
@@ -12236,6 +12235,7 @@ def format_info(info):
 
 
 def get_file_info(filename, stat_obj):
+  """Returns info dict with file format info, but without sha256=... or xfidfp=...: format=... hdr_done_at=.... ... mtime=... size=... f=..."""
   do_fp = do_sha256 = False
   return detect_file(filename, stat_obj.st_size, do_fp, do_sha256,
                      stat_obj.st_mtime)
@@ -12245,6 +12245,7 @@ def get_file_info(filename, stat_obj):
 
 
 def get_quick_info(filename, stat_obj):
+  """Returns info dict: format=? mtime=... size=... f=..."""
   return {'mtime': int(stat_obj.st_mtime), 'size': stat_obj.st_size,
           'f': filename}, False
 
@@ -12260,37 +12261,73 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
+def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, has_lstat, do_th, do_mtime, tags_impl, old_files):
   """Prints results sorted by filename."""
   had_error = False
-  try:
-    entries = os.listdir(dirname)
-  except OSError, e:
-    print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
-    had_error = True
-    entries = ()
-  files, subdirs = [], []
-  for entry in entries:
-    if dirname == '.':
-      filename = entry
-    else:
-      filename = os.path.join(dirname, entry)
+  if isinstance(dirname, (list, tuple)):
+    files, subdirs = dirname, ()  # Sequence of (filename, stat_obj) pairs.
+  else:
     try:
-      stat_obj = os.lstat(filename)
+      entries = os.listdir(dirname)
     except OSError, e:
-      print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
-      stat_obj = None
-    if stat_obj is None:
+      print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
       had_error = True
-    elif stat.S_ISDIR(stat_obj.st_mode):
-      subdirs.append(filename)
-    elif (stat.S_ISREG(stat_obj.st_mode) or
-          stat.S_ISLNK(stat_obj.st_mode)):
-      files.append((filename, stat_obj))
-  for filename, stat_obj in sorted(files):
-    if stat.S_ISLNK(stat_obj.st_mode):
+      entries = ()
+    files, subdirs = [], []
+    for entry in entries:
+      if not do_th and (entry.endswith('.th.jpg') or entry.endswith('.th.jpg.tmp')):
+        continue
+      if dirname == '.':
+        filename = entry
+      else:
+        filename = os.path.join(dirname, entry)
+      try:
+        if has_lstat:
+          stat_obj = os.lstat(filename)
+        else:
+          stat_obj = os.stat(filename)
+      except OSError, e:
+        print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
+        stat_obj = None
+      if stat_obj is None:
+        had_error = True
+      elif stat.S_ISDIR(stat_obj.st_mode):
+        subdirs.append(filename)
+      elif (stat.S_ISREG(stat_obj.st_mode) or
+            has_lstat and stat.S_ISLNK(stat_obj.st_mode)):
+        files.append((filename, stat_obj))
+    entries, files = None, sorted(files)
+  for filename, stat_obj in files:
+    old_item = old_files.get(filename)
+    symlink = tags = None  # Don't emit tags= with --tags=false.
+    is_symlink = False
+    if has_lstat and stat.S_ISLNK(stat_obj.st_mode):
       info, had_error_here = get_symlink_info(filename, stat_obj)
-    else:
+      if had_error_here:
+        had_error = True
+      symlink, is_symlink = info.get('symlink'), True
+      if symlink:
+        try:
+          stat_obj2 = os.stat(filename)
+        except OSError, e:
+          stat_obj2 = None
+        if stat_obj2 and stat.S_ISREG(stat_obj2.st_mode):
+          stat_obj, is_symlink = stat_obj2, False
+    if tags_impl and is_symlink is False:
+      rfilename = filename
+      if symlink is not None:  # We use os.path.realpath to avoid EPERM on lgetattr on symlink.
+        rfilename = os.path.realpath(filename)
+      try:
+        tags = ','.join(tags_impl(rfilename).strip().split())
+      except OSError, e:
+        print >>sys.stderr, 'warning: tags %s: %s' % (filename, e)
+    if not (not old_item or old_item[0] != info['size'] or
+            (do_mtime and old_item[1] != int(info['mtime'])) or
+            old_item[3] != symlink or
+            old_item[4] != is_symlink or
+            (tags_impl and tags != old_item[2])):
+      continue
+    if not is_symlink:
       if skip_recent_sec is not None:
         try:
           stat_obj = os.lstat(filename)
@@ -12301,45 +12338,22 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
         if stat_obj.st_mtime + skip_recent_sec >= time.time():
           continue
       info, had_error_here = get_file_info_func(filename, stat_obj)
-    if had_error_here:
-      had_error = True
+      if had_error_here:
+        had_error = True
+      if tags is not None:
+        info['tags'] = tags  # Save '', don't save None.
+      if symlink is not None:
+        info['symlink'] = symlink
+    if not do_mtime:
+      info.pop('mtime', None)
     elif info.get('format') == '?':
       print >>sys.stderr, 'warning: unknown file format: %r' % filename
       had_error = True
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec)
+    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, has_lstat, do_th, do_mtime, tags_impl, old_files)
   return had_error
-
-
-def process(filename, outf, get_file_info_func, skip_recent_sec):
-  """Prints results sorted by filename."""
-  try:
-    stat_obj = os.lstat(filename)
-  except OSError, e:
-    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
-    return True
-  if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func, skip_recent_sec)
-  elif stat.S_ISREG(stat_obj.st_mode):
-    if (skip_recent_sec is not None and
-        stat_obj.st_mtime + skip_recent_sec >= time.time()):
-      return True
-    info, had_error = get_file_info_func(filename, stat_obj)
-    outf.write(format_info(info))
-    outf.flush()
-    if not had_error and info.get('format') == '?':
-      print >>sys.stderr, 'warning: unknown file format: %r' % filename
-      had_error = True
-    return had_error
-  elif stat.S_ISLNK(stat_obj.st_mode):
-    info, had_error = get_symlink_info(filename, stat_obj)
-    outf.write(format_info(info))
-    outf.flush()
-    return had_error
-  else:
-    return False
 
 
 # ---
@@ -12360,7 +12374,7 @@ def main(argv):
   do_th = True
   do_fp = False
   do_tags = False
-  do_sha256 = True
+  do_sha256 = None
   do_mtime = True
   mode = 'scan'
   # If not None, skip scanning files whose mtime is more recent than the
@@ -12414,6 +12428,8 @@ def main(argv):
       return
     else:
       sys.exit('Unknown flag: %s' % arg)
+  if do_sha256 is None:
+    do_sha256 = mode == 'scan'
   if outf is None:
     # For unbuffered appending.
     outf = os.fdopen(os.dup(sys.stdout.fileno()), 'ab', 0)
@@ -12424,20 +12440,41 @@ def main(argv):
         getxattr(filename, 'user.mmfs.tags', True) or '')
   had_error = False
   if mode == 'scan':
-    # Files are yielded in deterministic (sorted) order, not in original argv
-    # order. This is for *.jpg.
+    # Files are yielded in deterministic (sorted) order (non-directories
+    # first, with that lexicographical), not in original argv order. This is
+    # for *.jpg.
     for info in scan(argv[i:], old_files, do_th, do_fp, do_sha256, do_mtime, tags_impl, skip_recent_sec):
       outf.write(format_info(info))  # Files with some errors are skipped.
       outf.flush()
     # TODO(pts): Detect had_error in scan.
   elif mode in ('quick', 'info'):
+    if do_sha256:
+      sys.exit('--sha256=true is incompatible with --mode=%s' % mode)
+    if do_fp:
+      sys.exit('--fp=true is incompatible with --mode=%s' % mode)
     prefix = '.' + os.sep
     get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
-    # Keep the original argv order, don't sort.
+    has_lstat = callable(getattr(os, 'lstat', None))
+    # Keep the original argv order, don't sort. TODO(pts): Add --sorta.
     for filename in argv[i:]:
+      if not do_th and (filename.endswith('.th.jpg') or filename.endswith('.th.jpg.tmp')):
+        continue
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
-      had_error |= process(filename, outf, get_file_info_func, skip_recent_sec)
+      try:
+        if has_lstat:
+          stat_obj = os.lstat(filename)
+        else:
+          stat_obj = os.stat(filename)
+      except OSError, e:
+        print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+        had_error = True
+        continue
+      if (stat.S_ISREG(stat_obj.st_mode) or (has_lstat and stat.S_ISLNK(stat_obj.st_mode))):
+        filename = ((filename, stat_obj),)
+      elif not stat.S_ISDIR(stat_obj.st_mode):
+        continue
+      had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, has_lstat, do_th, do_mtime, tags_impl, old_files)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
   if had_error:
