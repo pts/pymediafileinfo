@@ -1010,7 +1010,7 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files):
+def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_th, do_mtime, old_files):
   """Prints results sorted by filename."""
   had_error = False
   if isinstance(dirname, (list, tuple)):
@@ -1024,6 +1024,8 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_
       entries = ()
     files, subdirs = [], []
     for entry in entries:
+      if not do_th and (entry.endswith('.th.jpg') or entry.endswith('.th.jpg.tmp')):
+        continue
       if dirname == '.':
         filename = entry
       else:
@@ -1078,7 +1080,7 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
+    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_th, do_mtime, old_files)
   return had_error
 
 
@@ -1179,12 +1181,12 @@ def main(argv):
       sys.exit('--fp=true is incompatible with --mode=%s' % mode)
     if do_tags:
       sys.exit('--tags=true is incompatible with --mode=%s' % mode)
-    if not do_th:
-      sys.exit('--th=false is incompatible with --mode=%s' % mode)
     prefix = '.' + os.sep
     get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
     # Keep the original argv order, don't sort.
     for filename in argv[i:]:
+      if not do_th and (filename.endswith('.th.jpg') or filename.endswith('.th.jpg.tmp')):
+        continue
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
       try:
@@ -1197,7 +1199,7 @@ def main(argv):
         filename = ((filename, stat_obj),)
       elif not stat.S_ISDIR(stat_obj.st_mode):
         continue
-      had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
+      had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_th, do_mtime, old_files)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
   if had_error:
