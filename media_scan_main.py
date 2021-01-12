@@ -984,6 +984,7 @@ def format_info(info):
 
 
 def get_file_info(filename, stat_obj):
+  """Returns info dict with file format info, but without sha256=... or xfidfp=...: format=... hdr_done_at=.... ... mtime=... size=... f=..."""
   do_fp = do_sha256 = False
   return detect_file(filename, stat_obj.st_size, do_fp, do_sha256,
                      stat_obj.st_mtime)
@@ -993,6 +994,7 @@ def get_file_info(filename, stat_obj):
 
 
 def get_quick_info(filename, stat_obj):
+  """Returns info dict: format=? mtime=... size=... f=..."""
   return {'mtime': int(stat_obj.st_mtime), 'size': stat_obj.st_size,
           'f': filename}, False
 
@@ -1008,7 +1010,7 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
+def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files):
   """Prints results sorted by filename."""
   had_error = False
   try:
@@ -1036,8 +1038,16 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
           stat.S_ISLNK(stat_obj.st_mode)):
       files.append((filename, stat_obj))
   for filename, stat_obj in sorted(files):
+    old_item = old_files.get(filename)
     if stat.S_ISLNK(stat_obj.st_mode):
       info, had_error_here = get_symlink_info(filename, stat_obj)
+      if not (not old_item or old_item[0] != info['size'] or
+              (do_mtime and old_item[1] != int(info['mtime'])) or
+              old_item[3] != info.get('symlink') or
+              old_item[4] != True):  # is_symlink.
+        if had_error_here:
+          had_error = True
+        continue
     else:
       if skip_recent_sec is not None:
         try:
@@ -1048,7 +1058,14 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
           continue
         if stat_obj.st_mtime + skip_recent_sec >= time.time():
           continue
+      if not (not old_item or old_item[0] != stat_obj.st_size or
+              (do_mtime and old_item[1] != int(stat_obj.st_mtime)) or
+              old_item[3] is not None or  # symlink.
+              old_item[4] != False):  # is_symlink.
+        continue
       info, had_error_here = get_file_info_func(filename, stat_obj)
+    if not do_mtime:
+      info.pop('mtime', None)
     if had_error_here:
       had_error = True
     elif info.get('format') == '?':
@@ -1057,11 +1074,11 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec):
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec)
+    had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
   return had_error
 
 
-def process(filename, outf, get_file_info_func, skip_recent_sec):
+def process(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files):
   """Prints results sorted by filename."""
   try:
     stat_obj = os.lstat(filename)
@@ -1069,22 +1086,36 @@ def process(filename, outf, get_file_info_func, skip_recent_sec):
     print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
     return True
   if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func, skip_recent_sec)
+    return info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
   elif stat.S_ISREG(stat_obj.st_mode):
     if (skip_recent_sec is not None and
         stat_obj.st_mtime + skip_recent_sec >= time.time()):
-      return True
-    info, had_error = get_file_info_func(filename, stat_obj)
-    outf.write(format_info(info))
-    outf.flush()
-    if not had_error and info.get('format') == '?':
-      print >>sys.stderr, 'warning: unknown file format: %r' % filename
-      had_error = True
+      return False
+    old_item, had_error = old_files.get(filename), False
+    if (not old_item or old_item[0] != stat_obj.st_size or
+        (do_mtime and old_item[1] != int(stat_obj.st_mtime)) or
+        old_item[3] is not None or  # symlink.
+        old_item[4] != False):  # is_symlink.
+      info, had_error = get_file_info_func(filename, stat_obj)
+      if not do_mtime:
+        info.pop('mtime', None)
+      outf.write(format_info(info))
+      outf.flush()
+      if not had_error and info.get('format') == '?':
+        print >>sys.stderr, 'warning: unknown file format: %r' % filename
+        had_error = True
     return had_error
   elif stat.S_ISLNK(stat_obj.st_mode):
+    old_item = old_files.get(filename)
     info, had_error = get_symlink_info(filename, stat_obj)
-    outf.write(format_info(info))
-    outf.flush()
+    if not do_mtime:
+      info.pop('mtime', None)
+    if (not old_item or old_item[0] != info['size'] or
+        (do_mtime and old_item[1] != int(info['mtime'])) or
+        old_item[3] != info.get('symlink') or
+        old_item[4] != True):  # is_symlink.
+      outf.write(format_info(info))
+      outf.flush()
     return had_error
   else:
     return False
@@ -1185,7 +1216,7 @@ def main(argv):
     for filename in argv[i:]:
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
-      had_error |= process(filename, outf, get_file_info_func, skip_recent_sec)
+      had_error |= process(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
   if had_error:
