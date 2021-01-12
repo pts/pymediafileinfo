@@ -1100,7 +1100,7 @@ def main(argv):
   do_th = True
   do_fp = False
   do_tags = False
-  do_sha256 = True
+  do_sha256 = None
   do_mtime = True
   mode = 'scan'
   # If not None, skip scanning files whose mtime is more recent than the
@@ -1154,6 +1154,8 @@ def main(argv):
       return
     else:
       sys.exit('Unknown flag: %s' % arg)
+  if do_sha256 is None:
+    do_sha256 = mode == 'scan'
   if outf is None:
     # For unbuffered appending.
     outf = os.fdopen(os.dup(sys.stdout.fileno()), 'ab', 0)
@@ -1171,6 +1173,14 @@ def main(argv):
       outf.flush()
     # TODO(pts): Detect had_error in scan.
   elif mode in ('quick', 'info'):
+    if do_sha256:
+      sys.exit('--sha256=true is incompatible with --mode=%s' % mode)
+    if do_fp:
+      sys.exit('--fp=true is incompatible with --mode=%s' % mode)
+    if do_tags:
+      sys.exit('--tags=true is incompatible with --mode=%s' % mode)
+    if not do_th:
+      sys.exit('--th=false is incompatible with --mode=%s' % mode)
     prefix = '.' + os.sep
     get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
     # Keep the original argv order, don't sort.
