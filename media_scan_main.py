@@ -1013,31 +1013,35 @@ def get_symlink_info(filename, stat_obj):
 def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files):
   """Prints results sorted by filename."""
   had_error = False
-  try:
-    entries = os.listdir(dirname)
-  except OSError, e:
-    print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
-    had_error = True
-    entries = ()
-  files, subdirs = [], []
-  for entry in entries:
-    if dirname == '.':
-      filename = entry
-    else:
-      filename = os.path.join(dirname, entry)
+  if isinstance(dirname, (list, tuple)):
+    files, subdirs = dirname, ()  # Sequence of (filename, stat_obj) pairs.
+  else:
     try:
-      stat_obj = os.lstat(filename)
+      entries = os.listdir(dirname)
     except OSError, e:
-      print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
-      stat_obj = None
-    if stat_obj is None:
+      print >>sys.stderr, 'error: listdir %r: %s' % (dirname, e)
       had_error = True
-    elif stat.S_ISDIR(stat_obj.st_mode):
-      subdirs.append(filename)
-    elif (stat.S_ISREG(stat_obj.st_mode) or
-          stat.S_ISLNK(stat_obj.st_mode)):
-      files.append((filename, stat_obj))
-  for filename, stat_obj in sorted(files):
+      entries = ()
+    files, subdirs = [], []
+    for entry in entries:
+      if dirname == '.':
+        filename = entry
+      else:
+        filename = os.path.join(dirname, entry)
+      try:
+        stat_obj = os.lstat(filename)
+      except OSError, e:
+        print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
+        stat_obj = None
+      if stat_obj is None:
+        had_error = True
+      elif stat.S_ISDIR(stat_obj.st_mode):
+        subdirs.append(filename)
+      elif (stat.S_ISREG(stat_obj.st_mode) or
+            stat.S_ISLNK(stat_obj.st_mode)):
+        files.append((filename, stat_obj))
+    entries, files = None, sorted(files)
+  for filename, stat_obj in files:
     old_item = old_files.get(filename)
     if stat.S_ISLNK(stat_obj.st_mode):
       info, had_error_here = get_symlink_info(filename, stat_obj)
@@ -1076,49 +1080,6 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, do_mtime, old_
   for filename in sorted(subdirs):
     had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
   return had_error
-
-
-def process(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files):
-  """Prints results sorted by filename."""
-  try:
-    stat_obj = os.lstat(filename)
-  except OSError, e:
-    print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
-    return True
-  if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
-  elif stat.S_ISREG(stat_obj.st_mode):
-    if (skip_recent_sec is not None and
-        stat_obj.st_mtime + skip_recent_sec >= time.time()):
-      return False
-    old_item, had_error = old_files.get(filename), False
-    if (not old_item or old_item[0] != stat_obj.st_size or
-        (do_mtime and old_item[1] != int(stat_obj.st_mtime)) or
-        old_item[3] is not None or  # symlink.
-        old_item[4] != False):  # is_symlink.
-      info, had_error = get_file_info_func(filename, stat_obj)
-      if not do_mtime:
-        info.pop('mtime', None)
-      outf.write(format_info(info))
-      outf.flush()
-      if not had_error and info.get('format') == '?':
-        print >>sys.stderr, 'warning: unknown file format: %r' % filename
-        had_error = True
-    return had_error
-  elif stat.S_ISLNK(stat_obj.st_mode):
-    old_item = old_files.get(filename)
-    info, had_error = get_symlink_info(filename, stat_obj)
-    if not do_mtime:
-      info.pop('mtime', None)
-    if (not old_item or old_item[0] != info['size'] or
-        (do_mtime and old_item[1] != int(info['mtime'])) or
-        old_item[3] != info.get('symlink') or
-        old_item[4] != True):  # is_symlink.
-      outf.write(format_info(info))
-      outf.flush()
-    return had_error
-  else:
-    return False
 
 
 # ---
@@ -1216,7 +1177,17 @@ def main(argv):
     for filename in argv[i:]:
       if filename.startswith(prefix):
         filename = filename[len(prefix):]
-      had_error |= process(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
+      try:
+        stat_obj = os.lstat(filename)
+      except OSError, e:
+        print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
+        had_error = True
+        continue
+      if (stat.S_ISREG(stat_obj.st_mode) or stat.S_ISLNK(stat_obj.st_mode)):
+        filename = ((filename, stat_obj),)
+      elif not stat.S_ISDIR(stat_obj.st_mode):
+        continue
+      had_error |= info_scan(filename, outf, get_file_info_func, skip_recent_sec, do_mtime, old_files)
   else:
     raise AssertionError('Unknown mode: %s' % mode)
   if had_error:
