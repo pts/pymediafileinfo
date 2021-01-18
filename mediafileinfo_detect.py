@@ -440,6 +440,7 @@ MKV_CODEC_IDS = {
     'A_QUICKTIME/QDM2': 'qdmc2',
     'A_TTA1': 'tta1',
     'A_WAVPACK4': 'wavpack4',
+    'A_OPUS': 'opus',
 }
 
 
