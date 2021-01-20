@@ -352,7 +352,7 @@ def fingerprint_image(filename, _use_impl_ary=[]):
 # Tested on Linux >=2.6 only.
 #
 
-XATTR_KEYS = ('getxattr', 'fgetxattr', 'listxattr', 'flistxattr')
+XATTR_KEYS = ('getxattr', 'listxattr')
 
 XATTR_DOCS = {
     'getxattr': """Get an extended attribute of a file.
