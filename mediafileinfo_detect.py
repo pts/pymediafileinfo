@@ -4448,7 +4448,7 @@ def is_mpeg_ts(header):
   # https://github.com/drillbits/go-ts
   # https://github.com/small-teton/MpegTsAnalyzer
   # https://github.com/mzinin/ts_splitter
-  is_bdav = header.startswith('\0\0')
+  is_bdav = header.startswith('\0')
   i = (0, 4)[is_bdav]
   if len(header) < i + 4:
     return False
@@ -4464,6 +4464,7 @@ def is_mpeg_ts(header):
     tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
     pid = (b >> 8) & 0x1fff  # Packet id.
     tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
+    #print 'afc=%d tei=%d pid=0x%x tsc=%d cc=%d' % (afc, tei, pid, tsc, cc)
     if not afc:  # Valid values are: 1, 2, 3.
       return False
     if tei:  # Error in transport.
@@ -4510,7 +4511,7 @@ def analyze_mpeg_ts(fread, info, fskip, format='mpeg-ts', fclass='media',
   if prefix.startswith('\x47'):
     is_bdav = False
     info['subformat'] = 'ts'
-  elif prefix.startswith('\0\0'):
+  elif prefix.startswith('\0'):
     is_bdav = True
     info['subformat'] = 'bdav'
   else:
