@@ -476,6 +476,7 @@ def mediafileinfo_detect():
       'A_QUICKTIME/QDM2': 'qdmc2',
       'A_TTA1': 'tta1',
       'A_WAVPACK4': 'wavpack4',
+      'A_OPUS': 'opus',
   }
 
 
@@ -1361,14 +1362,14 @@ def mediafileinfo_detect():
     read_size = 17
     if signature == 'FWS':
       info['codec'] = codec = 'uncompressed'
-    elif signature == 'CWS' and version >= 8:
+    elif signature == 'CWS' and version >= 6:
       info['codec'] = codec = 'flate'
       read_size += 256  # Educated guess.
     elif signature == 'ZWS' and version >= 13:
       info['codec'] = codec = 'lzma'
       read_size += 256  # Educated guess.
     else:
-      raise ValueError('Bad swf version %d for codec: %s' % (version, codec))
+      raise ValueError('Bad swf version %d for signature: %r' % (version, signature))
     if codec == 'flate':
       try:
         import zlib
@@ -2875,7 +2876,7 @@ def mediafileinfo_detect():
     # TODO(pts): Estimate how many bytes are used (looks like data[:10], data[:22]).
     if len(data) < 4:
       raise ValueError('h264 avcc sps too short.')
-    if len(data) > 255:  # Typically just 22 bytes.
+    if len(data) > 4096:  # Typically just 22 bytes, also observed 101 bytes (with io['seq_scaling_matrix_present_flag'] == 1).
       raise ValueError('h264 avcc sps too long.')
     io = {}
     io['chroma_format'] = 1
@@ -2906,7 +2907,8 @@ def mediafileinfo_detect():
       else:
         return -(r >> 1)
     def read_scaling_list(size):  # Return value ingored.
-      # Untested, based on h264_scale.c.
+      # Maximum number of bits read: size * 64.
+      # Untested, based on h264_stream.c
       last_scale, next_scale = 8, 8
       for j in xrange(size):
         if next_scale:
@@ -2920,7 +2922,6 @@ def mediafileinfo_detect():
                          (expected_sps_id, io['sps_id']))
       if io['profile'] in (
           100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134):
-        # Untested.
         io['chroma_format'] = read_ue()
         if io['chroma_format'] == 3:
           io['residual_colour_transform_flag'] = read_1()
@@ -2929,9 +2930,11 @@ def mediafileinfo_detect():
         io['qpprime_y_zero_transform_bypass_flag'] = read_1()
         io['seq_scaling_matrix_present_flag'] = read_1()
         if io['seq_scaling_matrix_present_flag']:
+          # Maximum number of bits read in the loop below:
+          # 8 + (16 * 6 + 64 * 2) * 64 == 14344.
           for si in xrange(8):
             if read_1():
-              read_scaling_list((64, 16)[i < 6])
+              read_scaling_list((64, 16)[si < 6])
       io['log2_max_frame_num'] = 4 + read_ue()
       io['pic_order_cnt_type'] = read_ue()
       if io['pic_order_cnt_type'] == 0:
@@ -2941,7 +2944,7 @@ def mediafileinfo_detect():
         io['delta_pic_order_always_zero_flag'] = read_1()
         io['offset_for_non_ref_pic'] = read_se()
         io['offset_for_top_to_bottom_field'] = read_se()
-        for _ in read_ue():
+        for _ in read_ue():  # Practically unlimited number of bits.
           read_se()
       elif io['pic_order_cnt_type'] == 2:
         io['log2_max_pic_order_cnt'] = 0
@@ -3000,10 +3003,11 @@ def mediafileinfo_detect():
     if not i:
       raise ValueError('h264 signature not found.')
     assert i <= len(header), 'h264 preread header too short.'
+    x = header[:i]
     header = header[i:]
     info['format'], info['tracks'] = 'h264', [{'type': 'video', 'codec': 'h264'}]
-    if len(header) < 40:  # Maybe 32 bytes are also enough.
-      header += fread(40 - len(header))
+    if len(header) < 4096:
+      header += fread(4096 - len(header))
     if has_bad_emulation_prevention(header):
       raise ValueError('Bad emulation prevention in h264.')
     i = header.find('\0\0\1')
@@ -4483,7 +4487,7 @@ def mediafileinfo_detect():
     # https://github.com/drillbits/go-ts
     # https://github.com/small-teton/MpegTsAnalyzer
     # https://github.com/mzinin/ts_splitter
-    is_bdav = header.startswith('\0\0')
+    is_bdav = header.startswith('\0')
     i = (0, 4)[is_bdav]
     if len(header) < i + 4:
       return False
@@ -4499,6 +4503,7 @@ def mediafileinfo_detect():
       tei, pusi, tp = (b >> 23) & 1, (b >> 22) & 1, (b >> 21) & 1
       pid = (b >> 8) & 0x1fff  # Packet id.
       tsc, afc, cc = (b >> 6) & 3, (b >> 4) & 3, b & 15
+      #print 'afc=%d tei=%d pid=0x%x tsc=%d cc=%d' % (afc, tei, pid, tsc, cc)
       if not afc:  # Valid values are: 1, 2, 3.
         return False
       if tei:  # Error in transport.
@@ -4545,7 +4550,7 @@ def mediafileinfo_detect():
     if prefix.startswith('\x47'):
       is_bdav = False
       info['subformat'] = 'ts'
-    elif prefix.startswith('\0\0'):
+    elif prefix.startswith('\0'):
       is_bdav = True
       info['subformat'] = 'bdav'
     else:
