@@ -263,6 +263,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('0000000109f0000000016764000dacd9416096c044000003000400000300c83c50a658'.decode('hex')),
                      {'format': 'h264',
                       'tracks': [{'width': 352, 'codec': 'h264', 'type': 'video', 'height': 288}]})
+    self.assertEqual(analyze_string('0000000109100000000127640028ad8811214820444843151e4c2a4c9d6a522092349d24733213948426528efe217b255d7aeb5531a4d75ebebf5fd7ebebfd7f4c05a044fdffe0008000620000258000075301d0c001e848000225515de5c686000f424000112a8aef2e1f088451600000000128ee040572c00000000106000d804752006876004752006876408000000000000106055617ee8c60f84d11d98cd60800200c'.decode('hex')),
+                     {'format': 'h264',  # Contains io['profile'] == 100 and io['seq_scaling_matrix_present_flag'] == 1.
+                      'tracks': [{'width': 1440, 'codec': 'h264', 'type': 'video', 'height': 1080}]})
 
   def test_analyze_h265(self):
     self.assertEqual(analyze_string('000000014601500000000140010c01ffff01600000030090000003000003003c9598090000000142010101600000030090000003000003003ca00b08048596566924caf010100000030010000003019080'.decode('hex')),
