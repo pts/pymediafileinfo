@@ -2896,7 +2896,7 @@ def parse_h264_sps(data, expected_sps_id=0):
       if io['seq_scaling_matrix_present_flag']:
         for si in xrange(8):
           if read_1():
-            read_scaling_list((64, 16)[i < 6])
+            read_scaling_list((64, 16)[si < 6])
     io['log2_max_frame_num'] = 4 + read_ue()
     io['pic_order_cnt_type'] = read_ue()
     if io['pic_order_cnt_type'] == 0:
