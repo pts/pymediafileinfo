@@ -1326,14 +1326,14 @@ def analyze_swf(fread, info, fskip, format='swf', fclass='vector',
   read_size = 17
   if signature == 'FWS':
     info['codec'] = codec = 'uncompressed'
-  elif signature == 'CWS' and version >= 8:
+  elif signature == 'CWS' and version >= 6:
     info['codec'] = codec = 'flate'
     read_size += 256  # Educated guess.
   elif signature == 'ZWS' and version >= 13:
     info['codec'] = codec = 'lzma'
     read_size += 256  # Educated guess.
   else:
-    raise ValueError('Bad swf version %d for codec: %s' % (version, codec))
+    raise ValueError('Bad swf version %d for signature: %r' % (version, signature))
   if codec == 'flate':
     try:
       import zlib
