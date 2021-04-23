@@ -902,11 +902,17 @@ def analyze_mov(
       # Contains items in /meta.
       info['format'] = 'isobmff-image'
     else:
-      info['format'] = 'mp4'
+      info['format'] = None
     info['subformat'] = major_brand.strip()
     brands = set(data[i : i + 4] for i in xrange(8, len(data), 4))
     brands.discard('\0\0\0\0')
     brands.add(major_brand)
+    if info['format'] is not None:
+      pass
+    elif 'mif1' in brands:  # iPhone .heic files have major_brand == 'heic'.
+      info['format'] = 'isobmff-image'
+    else:
+      info['format'] = 'mp4'
     brands = sorted(brands)
     info['brands'] = brands  # Example: ['isom', 'mp42'].
 
