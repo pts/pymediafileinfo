@@ -760,6 +760,9 @@ MP4_AUDIO_CODECS = {
     'dtsh': 'dts',
     'dtsl': 'dts',
     'dtsx': 'dts',
+    'ac-3': 'ac3',
+    'ec-3': 'enhanced-ac3',
+    'ac-4': 'ac4',
 }
 
 JP2_CODECS = {
