@@ -110,7 +110,13 @@ def copy_info_from_tracks(info):
   # Copy audio fields.
   audio_track_infos = [track for track in info['tracks']
                        if track['type'] == 'audio']
-  if len(audio_track_infos) == 1:
+  if len(audio_track_infos) > 1:
+    codecs_set = filter(None, set(ati.get('codec') for ati in audio_track_infos))
+    if len(codecs_set) == 1:
+      info['acodec'] = codecs_set[0]
+    else:
+      info['acodec'] = 'multiple'
+  elif len(audio_track_infos) == 1:
     for key, value in sorted(audio_track_infos[0].iteritems()):
       if key == 'codec':
         key = 'acodec'  # Also used by medid.
@@ -139,6 +145,14 @@ def copy_info_from_tracks(info):
                      for vti in video_track_infos)
     if len(dimens_set) == 1:
       del video_track_infos[1:]
+    else:
+      codecs_set = filter(None, set(vti.get('codec') for vti in video_track_infos))
+      if len(codecs_set) > 1:
+        info['vcodec'] = 'multiple'
+      elif codecs_set:
+        info['vcodec'] = codecs_set[0]
+      else:
+        info['vcodec'] = '?'
   if len(video_track_infos) == 1:
     for key, value in sorted(video_track_infos[0].iteritems()):
       if key == 'codec':
