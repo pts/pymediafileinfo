@@ -709,7 +709,7 @@ MP4_VIDEO_CODECS = {
     'fmp4': 'divx5',
     'dvav': 'h264',
     'dvhc': 'h265',
-    'hev1': 'h265',
+    'hev1': 'h265',  # Difference between hev1 and hvc1 (both h265): https://stackoverflow.com/a/63471265 .
     'hvc1': 'h265',
     'av01': 'av1',
     'vc-1': 'vc1',
@@ -878,7 +878,7 @@ def analyze_mov(
   last_hdlr_type_list = []
 
   infe_count_ary = []
-  item_infos = {}
+  item_infos = {}  # {item_id: (item_protection_index, item_type)}.
   primary_item_id_ary = []
   ipco_boxes = []
   ipma_values = []
@@ -1199,6 +1199,18 @@ def analyze_mov(
       raise ValueError('EOD in isobmff-image ispe.')
     info['width'], info['height'] = struct.unpack('>LL', buffer(primary_ispe_boxes[0], 4, 8))
     codec = item_infos[primary_item_id_ary[0]][1].strip().lower()
+    if codec == 'grid':
+      gcodecs = [gcodec for gcodec in
+                 (item_info[1] for item_info in item_infos.itervalues())
+                 if gcodec not in ('mime', 'Exif', 'grid')]
+      # In iPhone .heic files gcodecs contains 50 instances of 'hvc1'. We
+      # will use the most common gcodec with count >= 4.
+      gccs = {}
+      for gcodec in gcodecs:
+        gccs[gcodec] = gccs.get(gcodec, 0) + 1
+      gccs = [(item[1], item[0]) for item in gccs.iteritems() if item[1] >= 4]
+      if gccs:
+        codec = max(gccs)[1]
     if codec is not None:
       # Typically codec is 'hvc1' for .heic and 'av01' or .avif.
       info['codec'] = MP4_VIDEO_CODECS.get(codec, codec)
