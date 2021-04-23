@@ -726,7 +726,7 @@ MP4_VIDEO_CODECS = {
     'kpcd': 'photocd',  # For pict.
 }
 
-# See all on: http://mp4ra.org/codecs.html
+# See all on: http://mp4ra.org/#/codecs
 # All keys are converted to lowercase, and whitespace-trimmed.
 # Also includes AIFC (AIFF_C) codecs.
 MP4_AUDIO_CODECS = {
