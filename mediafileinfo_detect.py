@@ -6539,9 +6539,11 @@ TIFF_CODECS = {
 }
 
 
-def analyze_tiff(fread, info, fskip):
+def analyze_tiff(fread, info, fskip, format='tiff', fclass='image',
+                 spec=(0, ('MM\x00\x2a', 'II\x2a\x00'))):
   # https://www.adobe.io/content/dam/udp/en/open/standards/tiff/TIFF6.pdf
   # https://en.wikipedia.org/wiki/TIFF
+  # Also includes 'nikon-nef' raw images: http://lclevy.free.fr/nef/
   header = fread(8)
   if len(header) < 8:
     raise ValueError('Too short for tiff.')
@@ -10108,8 +10110,6 @@ FORMAT_ITEMS.extend((
     # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
-    # Also includes 'nikon-nef' raw images.
-    ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
     ('pnm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
     ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
@@ -10748,7 +10748,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'xcf': analyze_xcf,
     'psd': analyze_psd,
     'tga': analyze_tga,
-    'tiff': analyze_tiff,
     'pnm': analyze_pnm,
     'xv-thumbnail': analyze_pnm,
     'pam': analyze_pam,
