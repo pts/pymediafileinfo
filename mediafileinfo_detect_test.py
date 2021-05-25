@@ -1805,7 +1805,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\x1bLua\x54\0'), {'format': 'lua-luac', 'subformat': '5.4'})
 
   def test_detect_hxs(self):
-    self.assertEqual(analyze_string(self.HXS_HEADER), {'format': 'hxs'})
+    self.assertEqual(analyze_string(self.HXS_HEADER), {'format': 'hxs', 'detected_format': 'exe'})
 
   def test_detect_rtf(self):
     self.assertEqual(analyze_string(r'{\rtf1'), {'format': 'rtf'})

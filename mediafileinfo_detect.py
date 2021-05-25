@@ -5588,11 +5588,23 @@ def parse_lxle(fread, info, fskip, pe_ofs, header):
     info['format'] = ('os2exe', 'os2dll')[info['binary_type'] == 'shlib']  # OS/2 2.x.
 
 
+def is_hxs(header):
+  # http://www.russotto.net/chm/itolitlsformat.html
+  return (len(header) >= 40 and
+          header.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and
+          header[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')
+
+
 def analyze_exe(fread, info, fskip, format='exe', fclass='code',
                 # 408 is arbitrary, but since cups-raster has it, we can also that much.
-                spec=(0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
+                spec=((0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
+                      # format='hxs' bare. Usually there is a PE header (analyze_exe) in front of this.
+                      (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
                 extra_formats=('dosexe', 'dosxexe', 'dotnetexe', 'dotnetdll', 'pe', 'pe-coff', 'pe-nonexec', 'winexe', 'windll', 'efiexe', 'efidll', 'vxd', 'os2exe', 'os2dll', 'hxs')):
   header = fread(64)
+  if is_hxs(header):
+    info['format'] = 'hxs'
+    return
   if len(header) < 32:
     raise ValueError('Too short for exe.')
   if not header.startswith('MZ'):
@@ -5718,8 +5730,7 @@ def analyze_exe(fread, info, fskip, format='exe', fclass='code',
         if data is not None:
           if len(data) < 40:
             data += fread(40 - len(data))
-          if (len(data) >= 40 and data.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and data[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'):
-            # http://www.russotto.net/chm/itolitlsformat.html
+          if is_hxs(data):
             info['format'] = 'hxs'
             info.pop('endian', None)
   elif size_hi == 0:
@@ -10348,9 +10359,6 @@ FORMAT_ITEMS.extend((
     # http://fileformats.archiveteam.org/wiki/Microsoft_Help_2
     # http://www.russotto.net/chm/itolitlsformat.html
     # TODO(pts): Also add .mshc (.zip-based). https://fileinfo.com/extension/mshc
-    # Please note that typically there is a pe header (analyze_exe) in front
-    # of this.
-    ('hxs', (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
 
     # fclass='archive': Compressed archive.
 
