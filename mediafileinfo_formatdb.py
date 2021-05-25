@@ -201,19 +201,30 @@ def get_format_items_from_module(module_obj):
   if not isinstance(module_obj, module_type):
     raise TypeError('Module expected, got: %r' % type(module_obj))
   format_items = list(module_obj.FORMAT_ITEMS)
+  formats = set(item[0] for item in format_items)
   for name, obj in sorted(module_obj.__dict__.iteritems()):
     if callable(obj) and name.startswith('analyze_'):
       spec = get_default_arg(obj, 'spec')
       if spec is not None:
         format = get_default_arg(obj, 'format')
+        extra_formats = get_default_arg(obj, 'extra_formats')
         if format is not None:
+          if format in formats:
+            raise ValueError('duplicate format= in analyze funcs: %s' % format)
+          formats.add(format)
           if isinstance(spec[0], tuple):
             for spec2 in spec:
               format_items.append((format, spec2))
           else:
             format_items.append((format, spec))
-        for extra_format in (get_default_arg(obj, 'extra_formats') or ()):
-          format_items.append((extra_format,))
+          for extra_format in (extra_formats or ()):
+            if extra_format in formats:
+              raise ValueError('duplicate extra_format= in analyze funcs: %s' % extra_format)
+            formats.add(extra_format)
+            format_items.append((extra_format,))
+        else:
+          if extra_formats is not None:
+            raise ValueError('extra_formats= without format= in analyze func %s' % name)
   return format_items
 
 
