@@ -850,6 +850,13 @@ def parse_isobmff_infe_box(version, flags, data):
   return {item_id: (item_protection_index, item_type)}
 
 
+def is_jp2(header):
+  return (len(header) >= 28 and
+          header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+          header[16 : 20] == 'ftyp' and
+          header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
+
+
 def analyze_mov(
     fread, info, fskip, header='', format='mov', fclass='media',
     extra_formats=('mp4', 'jp2', 'isobmff-image', 'f4v'),
@@ -864,6 +871,8 @@ def analyze_mov(
         (0, '\0\0', 4, ('wide', 'free', 'skip', 'junk')),
         (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',)),
         (0, '\0\0\0', 4, 'ftypmif1', 12, lambda header: (is_mp4(header), 26)),  # 'isobmff-image'.
+        # format='jp2': JPEG 2000 container format.
+        (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750)),
     )):
   # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
   # Also apple.com has some .mov docs.
@@ -1219,14 +1228,7 @@ def analyze_mov(
         info['subformat'] = subformat
 
 
-def is_jp2(header):
-  return (len(header) >= 28 and
-          header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
-          header[16 : 20] == 'ftyp' and
-          header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
-
-
-def analyze_jp2(fread, info, fskip):
+def noformat_analyze_jp2(fread, info, fskip):
   header = fread(28)
   if len(header) < 28:
     raise ValueError('Too short for jp2.')
@@ -1243,7 +1245,9 @@ def is_jpc(header):
           ord(header[5]) % 3 == 2 and 41 <= ord(header[5]) <= 68)
 
 
-def analyze_jpc(fread, info, fskip, header=''):
+def analyze_jpc(fread, info, fskip, header='', format='jpc', fclass='image',
+                spec=(0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))):
+  # JPEG 2000 codestream (elementary stream, bitstream).
   # http://fileformats.archiveteam.org/wiki/JPEG_2000_codestream
   # Annex A of http://www.hlevkin.com/Standards/fcd15444-1.pdf
   if len(header) < 24:
@@ -1259,7 +1263,7 @@ def analyze_jpc(fread, info, fskip, header=''):
     info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
-def analyze_jpeg2000(fread, info, fskip):
+def noformat_analyze_jpeg2000(fread, info, fskip):
   header = fread(28)
   if len(header) < 6:
     raise ValueError('Too short for jpeg2000.')
@@ -1455,7 +1459,7 @@ def get_ogg_es_track_info(header):
         get_string_fread(header))
     return track_info
   elif header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0'):
-    return get_track_info_from_analyze_func(header, analyze_jp2)
+    return get_track_info_from_analyze_func(header, noformat_analyze_jp2)
   elif header.startswith('\xff\x4f\xff\x51\0'):
     return get_track_info_from_analyze_func(header, analyze_jpc)
   elif header.startswith('\xff\x0a'):
@@ -7083,7 +7087,7 @@ def analyze_by_format(fread, info, fskip, format, data_size):
   elif format == 'png':
     analyze_func = analyze_png
   elif format == 'jpeg2000':
-    analyze_func = analyze_jpeg2000
+    analyze_func = noformat_analyze_jpeg2000
   elif format == 'photocd':
     analyze_func = analyze_photocd
   elif format == 'lbm':
@@ -10205,10 +10209,6 @@ FORMAT_ITEMS.extend((
     ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
     ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
     ('qtif', (0, '\0\0\0', 4, 'idsc')),
-    # JPEG 2000 container format.
-    ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
-    # JPEG 2000 codestream (elementary stream, bitstream).
-    ('jpc', (0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
@@ -10812,8 +10812,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'pnot': analyze_pnot,
     'ac3': analyze_ac3,
     'dts': analyze_dts,
-    'jp2': analyze_jp2,
-    'jpc': analyze_jpc,
     'bmp': analyze_bmp,
     'rdi': analyze_rdi,
     'mng': analyze_mng,

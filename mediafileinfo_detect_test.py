@@ -440,10 +440,11 @@ class MediaFileInfoDetectTest(unittest.TestCase):
 
   def test_analyze_jpeg2000(self):
     expected = {'format': 'jp2', 'bpc': 8, 'brands': ['jp2 '], 'codec': 'jpeg2000', 'component_count': 3, 'has_early_mdat': False, 'height': 288, 'minor_version': 0, 'subformat': 'jp2', 'tracks': [], 'width': 352}
-    expected2 = dict(expected, detected_analyze=mediafileinfo_detect.analyze_jp2)
+    expected2 = dict(expected, detected_format='mov')
+    expected3 = dict(expected2, detected_format='mov', detected_analyze=mediafileinfo_detect.analyze_mov)
     self.assertEqual(analyze_string(self.JP2_HEADER, analyze_func=mediafileinfo_detect.analyze_mov), expected2)
-    self.assertEqual(analyze_string(self.JP2_HEADER), expected)
-    self.assertEqual(analyze_string(self.JP2_HEADER, analyze_func=mediafileinfo_detect.analyze_jpeg2000), expected2)
+    self.assertEqual(analyze_string(self.JP2_HEADER), expected2)
+    self.assertEqual(analyze_string(self.JP2_HEADER, analyze_func=mediafileinfo_detect.noformat_analyze_jpeg2000), expected3)
     data1 = '\xff\x4f\xff\x51\0\x29'
     data2 = '\xff\x4f\xff\x51\0\x2f\0\0\0\0\2\3\0\0\2\1\0\0\0\0\0\0\0\0'
     self.assertEqual(analyze_string(data1),
@@ -451,7 +452,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     expected = {'format': 'jpc', 'codec': 'jpeg2000', 'height': 513, 'width': 515}
     expected2 = dict(expected, detected_analyze=mediafileinfo_detect.analyze_jpc)
     self.assertEqual(analyze_string(data2, analyze_func=mediafileinfo_detect.analyze_jpc), expected)
-    self.assertEqual(analyze_string(data2, analyze_func=mediafileinfo_detect.analyze_jpeg2000), expected2)
+    self.assertEqual(analyze_string(data2, analyze_func=mediafileinfo_detect.noformat_analyze_jpeg2000), expected2)
 
   def test_analyze_pnot(self):
     self.assertEqual(analyze_string('\0\0\0\x14pnot\1\2\3\4\0\0PICT\0\1\0\0\0\x0aPICT..' + self.JP2_HEADER),
