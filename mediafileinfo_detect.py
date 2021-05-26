@@ -6554,11 +6554,11 @@ TIFF_CODECS = {
 }
 
 
-def analyze_tiff(fread, info, fskip, format='tiff', fclass='image',
+def analyze_tiff(fread, info, fskip, format='tiff', fclass='image', extra_formats=('tiff-preview',),
                  spec=(0, ('MM\x00\x2a', 'II\x2a\x00'))):
   # https://www.adobe.io/content/dam/udp/en/open/standards/tiff/TIFF6.pdf
   # https://en.wikipedia.org/wiki/TIFF
-  # Also includes 'nikon-nef' raw images: http://lclevy.free.fr/nef/
+  # Also includes codec=nikon-nef has_preview=1 raw images: http://lclevy.free.fr/nef/
   header = fread(8)
   if len(header) < 8:
     raise ValueError('Too short for tiff.')
@@ -6572,22 +6572,26 @@ def analyze_tiff(fread, info, fskip, format='tiff', fclass='image',
   ifd_ofs, = struct.unpack(fmt + '4xL', header)
   if ifd_ofs < 8:
     raise ValueError('Bad tiff ifd_ofs: %d' % ifd_ofs)
+  #print 'ifd_ofs=%d' % ifd_ofs
   if not fskip(ifd_ofs - 8):
     raise ValueError('EOF before tiff ifd_ofs.')
   data = fread(2)
   if len(data) < 2:
     raise ValueError('EOF in tiff ifd_size.')
   ifd_count, = struct.unpack(fmt + 'H', data)
-  if ifd_count < 10:
+  if ifd_count < 10:  # Mandatory tags. SubIFD may have only 8 (no ImageWidth and ImageLength).
     raise ValueError('tiff ifd_count too small: %d' % ifd_count)
   ifd_data = fread(12 * ifd_count)
   if len(ifd_data) != 12 * ifd_count:
     raise ValueError('EOF in tiff ifd_data.')
   ifd_fmt, short_fmt = fmt + 'HHLL', fmt + 'H'
+  is_uncompressed = is_reduced = False
+  subifd_count = subifd_ofs = None
   for i in xrange(0, len(ifd_data), 12):
     # if ie_tag < 254: raise ValueError('...')
     ie_tag, ie_type, ie_count, ie_value = struct.unpack(
         ifd_fmt, buffer(ifd_data, i, 12))
+    #print 'tag=%d=0x%x type=%d count=%d value=%d' % (ie_tag, ie_tag, ie_type, ie_count, ie_value)
     if ie_count == 1 and ie_type in (3, 4):  # (SHORT, LONG).
       if ie_type == 3:  # SHORT.
         ie_value, = struct.unpack(short_fmt, buffer(ifd_data, i + 8, 2))
@@ -6596,10 +6600,65 @@ def analyze_tiff(fread, info, fskip, format='tiff', fclass='image',
       elif ie_tag == 257:  # ImageLength.
         info['height'] = ie_value
       elif ie_tag == 259:  # Compression.
+        if ie_value == 1:
+          is_uncompressed = True
         if ie_value in TIFF_CODECS:
           info['codec'] = TIFF_CODECS[ie_value]
         else:
           info['codec'] = str(ie_value)
+      elif ie_tag == 254 and ie_value == 1:  # SubfileType = reduced-resolution image.
+        is_reduced = True
+      elif ie_tag == 330:  # SubIFD.
+        subifd_count, subifd_ofs = 1, ie_value
+    elif ie_tag == 330 and ie_count > 1 and ie_type == 4:  # SubIFD, at least 2.
+      subifd_count, subifd_ofs = ie_count, ie_value
+  if is_uncompressed and is_reduced and subifd_count is not None:
+    info['format'] = 'tiff-preview'
+    read_ofs = (ifd_ofs + 2 + len(ifd_data))
+    if subifd_count > 1:
+      if subifd_ofs > read_ofs and fskip(subifd_ofs - read_ofs):
+        data = fread(subifd_count << 2)
+        if len(data) == (subifd_count << 2):
+          read_ofs = subifd_ofs + len(data)
+          subifd_ofs = struct.unpack(fmt + 'L' * subifd_count, data)  # tuple.
+    else:
+      subifd_ofs = (subifd_ofs,)
+    if isinstance(subifd_ofs, tuple) and subifd_ofs:
+      # Full-resolution image. http://lclevy.free.fr/nef/
+      # In the wild, len(subifd_ofs) == 3 also appears, it also has the
+      # full-resolution image at subifd_ofs[1].
+      subifd_ofs = subifd_ofs[len(subifd_ofs) > 1]
+      if subifd_ofs > read_ofs and fskip(subifd_ofs - read_ofs):
+        data = fread(2)
+        if len(data) < 2:
+          raise ValueError('EOF in tiff subifd_size.')
+        ifd_count, = struct.unpack(fmt + 'H', data)
+        if ifd_count < 8:  # Mandatory tags. SubIFD may have only 8 (no ImageWidth and ImageLength).
+          raise ValueError('tiff subifd_count too small: %d' % ifd_count)
+        ifd_data = fread(12 * ifd_count)
+        if len(ifd_data) != 12 * ifd_count:
+          raise ValueError('EOF in tiff subifd_data.')
+        info2 = {'format': 'tiff'}
+        for i in xrange(0, len(ifd_data), 12):
+          ie_tag, ie_type, ie_count, ie_value = struct.unpack(
+              ifd_fmt, buffer(ifd_data, i, 12))
+          #print 'subifd tag=%d=0x%x type=%d count=%d value=%d' % (ie_tag, ie_tag, ie_type, ie_count, ie_value)
+          if ie_count == 1 and ie_type in (3, 4):  # (SHORT, LONG).
+            if ie_type == 3:  # SHORT.
+              ie_value, = struct.unpack(short_fmt, buffer(ifd_data, i + 8, 2))
+            if ie_tag == 256:  # ImageWidth.
+              info2['width'] = ie_value
+            elif ie_tag == 257:  # ImageLength.
+              info2['height'] = ie_value
+            elif ie_tag == 259:  # Compression.
+              if ie_value in TIFF_CODECS:
+                info2['codec'] = TIFF_CODECS[ie_value]
+              else:
+                info2['codec'] = str(ie_value)
+            elif ie_tag == 254 and ie_value == 0:  # SubfileType = full-resolution image.
+              info2['has_preview'] = True
+        if info2.get('has_preview'):
+          info.update(info2)
 
 
 def analyze_pnm(fread, info, fskip):
