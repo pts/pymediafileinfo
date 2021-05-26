@@ -6658,6 +6658,9 @@ def analyze_tiff(fread, info, fskip, format='tiff', fclass='image', extra_format
             elif ie_tag == 254 and ie_value == 0:  # SubfileType = full-resolution image.
               info2['has_preview'] = True
         if info2.get('has_preview'):
+          # This can still be incorrect. For example, TIFF tags indicate
+          # codec=nikon-nef width=6032 height=4032, but uctually ufraw-batch(1)
+          # generates width=4039 height=6031 (correct).
           info.update(info2)
 
 
