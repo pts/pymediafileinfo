@@ -886,6 +886,13 @@ def mediafileinfo_detect():
     return {item_id: (item_protection_index, item_type)}
 
 
+  def is_jp2(header):
+    return (len(header) >= 28 and
+            header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
+            header[16 : 20] == 'ftyp' and
+            header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
+
+
   def analyze_mov(
       fread, info, fskip, header='', format='mov', fclass='media',
       extra_formats=('mp4', 'jp2', 'isobmff-image', 'f4v'),
@@ -900,6 +907,8 @@ def mediafileinfo_detect():
           (0, '\0\0', 4, ('wide', 'free', 'skip', 'junk')),
           (0, '\0', 1, ('\0', '\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08'), 4, ('moov',)),
           (0, '\0\0\0', 4, 'ftypmif1', 12, lambda header: (is_mp4(header), 26)),  # 'isobmff-image'.
+          # format='jp2': JPEG 2000 container format.
+          (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750)),
       )):
     # Documented here: http://xhelmboyx.tripod.com/formats/mp4-layout.txt
     # Also apple.com has some .mov docs.
@@ -1255,14 +1264,7 @@ def mediafileinfo_detect():
           info['subformat'] = subformat
 
 
-  def is_jp2(header):
-    return (len(header) >= 28 and
-            header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0') and
-            header[16 : 20] == 'ftyp' and
-            header[20 : 24] in ('jp2 ', 'jpm ', 'jpx '))
-
-
-  def analyze_jp2(fread, info, fskip):
+  def noformat_analyze_jp2(fread, info, fskip):
     header = fread(28)
     if len(header) < 28:
       raise ValueError('Too short for jp2.')
@@ -1279,7 +1281,9 @@ def mediafileinfo_detect():
             ord(header[5]) % 3 == 2 and 41 <= ord(header[5]) <= 68)
 
 
-  def analyze_jpc(fread, info, fskip, header=''):
+  def analyze_jpc(fread, info, fskip, header='', format='jpc', fclass='image',
+                  spec=(0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))):
+    # JPEG 2000 codestream (elementary stream, bitstream).
     # http://fileformats.archiveteam.org/wiki/JPEG_2000_codestream
     # Annex A of http://www.hlevkin.com/Standards/fcd15444-1.pdf
     if len(header) < 24:
@@ -1295,7 +1299,7 @@ def mediafileinfo_detect():
       info['width'], info['height'] = struct.unpack('>LL', header[8 : 16])
 
 
-  def analyze_jpeg2000(fread, info, fskip):
+  def noformat_analyze_jpeg2000(fread, info, fskip):
     header = fread(28)
     if len(header) < 6:
       raise ValueError('Too short for jpeg2000.')
@@ -1491,7 +1495,7 @@ def mediafileinfo_detect():
           get_string_fread(header))
       return track_info
     elif header.startswith('\0\0\0\x0cjP  \r\n\x87\n\0\0\0'):
-      return get_track_info_from_analyze_func(header, analyze_jp2)
+      return get_track_info_from_analyze_func(header, noformat_analyze_jp2)
     elif header.startswith('\xff\x4f\xff\x51\0'):
       return get_track_info_from_analyze_func(header, analyze_jpc)
     elif header.startswith('\xff\x0a'):
@@ -5620,11 +5624,23 @@ def mediafileinfo_detect():
       info['format'] = ('os2exe', 'os2dll')[info['binary_type'] == 'shlib']  # OS/2 2.x.
 
 
+  def is_hxs(header):
+    # http://www.russotto.net/chm/itolitlsformat.html
+    return (len(header) >= 40 and
+            header.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and
+            header[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')
+
+
   def analyze_exe(fread, info, fskip, format='exe', fclass='code',
                   # 408 is arbitrary, but since cups-raster has it, we can also that much.
-                  spec=(0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
+                  spec=((0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
+                        # format='hxs' bare. Usually there is a PE header (analyze_exe) in front of this.
+                        (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
                   extra_formats=('dosexe', 'dosxexe', 'dotnetexe', 'dotnetdll', 'pe', 'pe-coff', 'pe-nonexec', 'winexe', 'windll', 'efiexe', 'efidll', 'vxd', 'os2exe', 'os2dll', 'hxs')):
     header = fread(64)
+    if is_hxs(header):
+      info['format'] = 'hxs'
+      return
     if len(header) < 32:
       raise ValueError('Too short for exe.')
     if not header.startswith('MZ'):
@@ -5750,8 +5766,7 @@ def mediafileinfo_detect():
           if data is not None:
             if len(data) < 40:
               data += fread(40 - len(data))
-            if (len(data) >= 40 and data.startswith('ITOLITLS\1\0\0\0\x28\0\0\0') and data[24 : 40] == '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT'):
-              # http://www.russotto.net/chm/itolitlsformat.html
+            if is_hxs(data):
               info['format'] = 'hxs'
               info.pop('endian', None)
     elif size_hi == 0:
@@ -6575,9 +6590,11 @@ def mediafileinfo_detect():
   }
 
 
-  def analyze_tiff(fread, info, fskip):
+  def analyze_tiff(fread, info, fskip, format='tiff', fclass='image', extra_formats=('tiff-preview',),
+                   spec=(0, ('MM\x00\x2a', 'II\x2a\x00'))):
     # https://www.adobe.io/content/dam/udp/en/open/standards/tiff/TIFF6.pdf
     # https://en.wikipedia.org/wiki/TIFF
+    # Also includes codec=nikon-nef has_preview=1 raw images: http://lclevy.free.fr/nef/
     header = fread(8)
     if len(header) < 8:
       raise ValueError('Too short for tiff.')
@@ -6591,22 +6608,26 @@ def mediafileinfo_detect():
     ifd_ofs, = struct.unpack(fmt + '4xL', header)
     if ifd_ofs < 8:
       raise ValueError('Bad tiff ifd_ofs: %d' % ifd_ofs)
+    #print 'ifd_ofs=%d' % ifd_ofs
     if not fskip(ifd_ofs - 8):
       raise ValueError('EOF before tiff ifd_ofs.')
     data = fread(2)
     if len(data) < 2:
       raise ValueError('EOF in tiff ifd_size.')
     ifd_count, = struct.unpack(fmt + 'H', data)
-    if ifd_count < 10:
+    if ifd_count < 10:  # Mandatory tags. SubIFD may have only 8 (no ImageWidth and ImageLength).
       raise ValueError('tiff ifd_count too small: %d' % ifd_count)
     ifd_data = fread(12 * ifd_count)
     if len(ifd_data) != 12 * ifd_count:
       raise ValueError('EOF in tiff ifd_data.')
     ifd_fmt, short_fmt = fmt + 'HHLL', fmt + 'H'
+    is_uncompressed = is_reduced = False
+    subifd_count = subifd_ofs = None
     for i in xrange(0, len(ifd_data), 12):
       # if ie_tag < 254: raise ValueError('...')
       ie_tag, ie_type, ie_count, ie_value = struct.unpack(
           ifd_fmt, buffer(ifd_data, i, 12))
+      #print 'tag=%d=0x%x type=%d count=%d value=%d' % (ie_tag, ie_tag, ie_type, ie_count, ie_value)
       if ie_count == 1 and ie_type in (3, 4):  # (SHORT, LONG).
         if ie_type == 3:  # SHORT.
           ie_value, = struct.unpack(short_fmt, buffer(ifd_data, i + 8, 2))
@@ -6615,10 +6636,65 @@ def mediafileinfo_detect():
         elif ie_tag == 257:  # ImageLength.
           info['height'] = ie_value
         elif ie_tag == 259:  # Compression.
+          if ie_value == 1:
+            is_uncompressed = True
           if ie_value in TIFF_CODECS:
             info['codec'] = TIFF_CODECS[ie_value]
           else:
             info['codec'] = str(ie_value)
+        elif ie_tag == 254 and ie_value == 1:  # SubfileType = reduced-resolution image.
+          is_reduced = True
+        elif ie_tag == 330:  # SubIFD.
+          subifd_count, subifd_ofs = 1, ie_value
+      elif ie_tag == 330 and ie_count > 1 and ie_type == 4:  # SubIFD, at least 2.
+        subifd_count, subifd_ofs = ie_count, ie_value
+    if is_uncompressed and is_reduced and subifd_count is not None:
+      info['format'] = 'tiff-preview'
+      read_ofs = (ifd_ofs + 2 + len(ifd_data))
+      if subifd_count > 1:
+        if subifd_ofs > read_ofs and fskip(subifd_ofs - read_ofs):
+          data = fread(subifd_count << 2)
+          if len(data) == (subifd_count << 2):
+            read_ofs = subifd_ofs + len(data)
+            subifd_ofs = struct.unpack(fmt + 'L' * subifd_count, data)  # tuple.
+      else:
+        subifd_ofs = (subifd_ofs,)
+      if isinstance(subifd_ofs, tuple) and subifd_ofs:
+        # Full-resolution image. http://lclevy.free.fr/nef/
+        # In the wild, len(subifd_ofs) == 3 also appears, it also has the
+        # full-resolution image at subifd_ofs[1].
+        subifd_ofs = subifd_ofs[len(subifd_ofs) > 1]
+        if subifd_ofs > read_ofs and fskip(subifd_ofs - read_ofs):
+          data = fread(2)
+          if len(data) < 2:
+            raise ValueError('EOF in tiff subifd_size.')
+          ifd_count, = struct.unpack(fmt + 'H', data)
+          if ifd_count < 8:  # Mandatory tags. SubIFD may have only 8 (no ImageWidth and ImageLength).
+            raise ValueError('tiff subifd_count too small: %d' % ifd_count)
+          ifd_data = fread(12 * ifd_count)
+          if len(ifd_data) != 12 * ifd_count:
+            raise ValueError('EOF in tiff subifd_data.')
+          info2 = {'format': 'tiff'}
+          for i in xrange(0, len(ifd_data), 12):
+            ie_tag, ie_type, ie_count, ie_value = struct.unpack(
+                ifd_fmt, buffer(ifd_data, i, 12))
+            #print 'subifd tag=%d=0x%x type=%d count=%d value=%d' % (ie_tag, ie_tag, ie_type, ie_count, ie_value)
+            if ie_count == 1 and ie_type in (3, 4):  # (SHORT, LONG).
+              if ie_type == 3:  # SHORT.
+                ie_value, = struct.unpack(short_fmt, buffer(ifd_data, i + 8, 2))
+              if ie_tag == 256:  # ImageWidth.
+                info2['width'] = ie_value
+              elif ie_tag == 257:  # ImageLength.
+                info2['height'] = ie_value
+              elif ie_tag == 259:  # Compression.
+                if ie_value in TIFF_CODECS:
+                  info2['codec'] = TIFF_CODECS[ie_value]
+                else:
+                  info2['codec'] = str(ie_value)
+              elif ie_tag == 254 and ie_value == 0:  # SubfileType = full-resolution image.
+                info2['has_preview'] = True
+          if info2.get('has_preview'):
+            info.update(info2)
 
 
   def analyze_pnm(fread, info, fskip):
@@ -7117,7 +7193,7 @@ def mediafileinfo_detect():
     elif format == 'png':
       analyze_func = analyze_png
     elif format == 'jpeg2000':
-      analyze_func = analyze_jpeg2000
+      analyze_func = noformat_analyze_jpeg2000
     elif format == 'photocd':
       analyze_func = analyze_photocd
     elif format == 'lbm':
@@ -10144,8 +10220,6 @@ def mediafileinfo_detect():
       # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
       ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
-      # Also includes 'nikon-nef' raw images.
-      ('tiff', (0, ('MM\x00\x2a', 'II\x2a\x00'))),
       ('pnm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
       ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
       ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
@@ -10241,10 +10315,6 @@ def mediafileinfo_detect():
       ('pik', (0, ('P\xccK\x0a', '\xd7LM\x0a'))),
       ('qtif', (0, ('\0', '\1'), 4, ('idat', 'iicc'))),
       ('qtif', (0, '\0\0\0', 4, 'idsc')),
-      # JPEG 2000 container format.
-      ('jp2', (0, '\0\0\0\x0cjP  \r\n\x87\n\0\0\0', 28, lambda header: (is_jp2(header), 750))),
-      # JPEG 2000 codestream (elementary stream, bitstream).
-      ('jpc', (0, '\xff\x4f\xff\x51\0', 5, tuple(chr(38 + 3 * c) for c in xrange(1, 11)))),
       # .mov preview image.
       ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
       ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
@@ -10384,9 +10454,6 @@ def mediafileinfo_detect():
       # http://fileformats.archiveteam.org/wiki/Microsoft_Help_2
       # http://www.russotto.net/chm/itolitlsformat.html
       # TODO(pts): Also add .mshc (.zip-based). https://fileinfo.com/extension/mshc
-      # Please note that typically there is a pe header (analyze_exe) in front
-      # of this.
-      ('hxs', (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),
 
       # fclass='archive': Compressed archive.
 
@@ -10784,7 +10851,6 @@ def mediafileinfo_detect():
       'xcf': analyze_xcf,
       'psd': analyze_psd,
       'tga': analyze_tga,
-      'tiff': analyze_tiff,
       'pnm': analyze_pnm,
       'xv-thumbnail': analyze_pnm,
       'pam': analyze_pam,
@@ -10849,8 +10915,6 @@ def mediafileinfo_detect():
       'pnot': analyze_pnot,
       'ac3': analyze_ac3,
       'dts': analyze_dts,
-      'jp2': analyze_jp2,
-      'jpc': analyze_jpc,
       'bmp': analyze_bmp,
       'rdi': analyze_rdi,
       'mng': analyze_mng,
@@ -11077,19 +11141,30 @@ def mediafileinfo_formatdb():
     if not isinstance(module_obj, module_type):
       raise TypeError('Module expected, got: %r' % type(module_obj))
     format_items = list(module_obj.FORMAT_ITEMS)
+    formats = set(item[0] for item in format_items)
     for name, obj in sorted(module_obj.__dict__.iteritems()):
       if callable(obj) and name.startswith('analyze_'):
         spec = get_default_arg(obj, 'spec')
         if spec is not None:
           format = get_default_arg(obj, 'format')
+          extra_formats = get_default_arg(obj, 'extra_formats')
           if format is not None:
+            if format in formats:
+              raise ValueError('duplicate format= in analyze funcs: %s' % format)
+            formats.add(format)
             if isinstance(spec[0], tuple):
               for spec2 in spec:
                 format_items.append((format, spec2))
             else:
               format_items.append((format, spec))
-          for extra_format in (get_default_arg(obj, 'extra_formats') or ()):
-            format_items.append((extra_format,))
+            for extra_format in (extra_formats or ()):
+              if extra_format in formats:
+                raise ValueError('duplicate extra_format= in analyze funcs: %s' % extra_format)
+              formats.add(extra_format)
+              format_items.append((extra_format,))
+          else:
+            if extra_formats is not None:
+              raise ValueError('extra_formats= without format= in analyze func %s' % name)
     return format_items
 
 
