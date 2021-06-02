@@ -936,6 +936,7 @@ def analyze_mov(
     is_composite = xytype in (
         '/moov', '/jp2h', 'moov/trak', 'trak/mdia', 'mdia/minf', 'minf/stbl',
         '/meta', 'meta/iprp', 'iprp/ipco', 'meta/iinf')
+    #print 'process_box xtypes=%r size=%d is_composite=%d' % ('/'.join(xtype_path), size, is_composite)
     if xtype == 'mdat':  # 816 of 2962 mp4 files have it.
       # Videos downloaded by youtube-dl (usually) don't have it: in the corpus
       # only 11 of 1418 videos have it, but maybe they were downloaded
@@ -986,13 +987,14 @@ def analyze_mov(
         infe_count_ary.append(count)
       ofs_limit = size
       while ofs_limit > 0:  # Dump sequences of boxes inside.
+        #print 'composite xtypes=%r ofs_limit=%d' % ('/'.join(xtype_path), ofs_limit)
         if ofs_limit < 8:
           raise ValueError('EOF in mp4 composite box size.')
         size2, xtype2 = struct.unpack('>L4s', fread(8))
         if not (8 <= size2 <= ofs_limit):
           raise ValueError(
-              'EOF in mp4 composite box, size=%d ofs_limit=%d' %
-              (size2, ofs_limit))
+              'EOF in mp4 composite box, xtype=%r size=%d ofs_limit=%d' %
+              (xtype2, size2, ofs_limit))
         ofs_limit -= size2
         xtype_path.append(xtype2)
         process_box(size2 - 8)
