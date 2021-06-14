@@ -505,6 +505,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_webp(self):
     self.assertEqual(analyze_string('524946466876000057454250565038205c760000d2be019d012a26027001'.decode('hex')),
                      {'codec': 'vp8', 'format': 'webp', 'height': 368, 'width': 550})
+    self.assertEqual(analyze_string('RIFF\x7c\x3e\0\0WEBPVP8X\x0a\0\0\0\x18\0\0\0\2\2\0\0\2\0'),
+                     {'format': 'webp', 'height': 513, 'width': 515, 'subformat': 'extended'})
     self.assertEqual(analyze_string('524946460e6c0000574542505650384c026c00002f8181621078'.decode('hex')),
                      {'codec': 'webp-lossless', 'format': 'webp', 'height': 395, 'width': 386})
 

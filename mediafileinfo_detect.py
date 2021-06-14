@@ -1476,7 +1476,7 @@ def get_ogg_es_track_info(header):
     return get_track_info_from_analyze_func(header, analyze_gif)
   elif header.startswith('BM'):
     return get_track_info_from_analyze_func(header, analyze_bmp)
-  elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' L'):
+  elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' LX'):
     return get_track_info_from_analyze_func(header, analyze_webp)
   elif header.startswith('MM\x00\x2a') or header.startswith('II\x2a\x00'):
     return get_track_info_from_analyze_func(header, analyze_tiff)
@@ -7230,7 +7230,7 @@ def quick_detect_image_format(header):
     return 'ico'
   elif header.startswith('#define'):
     return 'xbm'
-  #elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' L'):  # Needs 12 bytes.
+  #elif (header.startswith('RIFF') and header[8 : 15] == 'WEBPVP8' and (header[15] or 'x') in ' LX'):  # Needs 12 bytes.
   #  return get_track_info_from_analyze_func(header, analyze_webp)
   #elif header.startswith('\0\0\0') and len(header) >= 12 and 8 <= ord(header[3]) <= 255 and header[4 : 12] == 'ftypmif1':  # Needs 12 bytes.
   #  return get_track_info_from_analyze_func(header, analyze_mov)  # HEIF or AVIF.
@@ -7473,27 +7473,48 @@ def analyze_vp8(fread, info, fskip, format='vp8', fclass='video',
 
 def is_webp(header):
   if not (len(header) >= 26 and header.startswith('RIFF') and
-          header[8 : 15] == 'WEBPVP8' and header[15] in ' L'):
+          header[8 : 15] == 'WEBPVP8' and header[15] in ' LX'):
     return False
-  if header[15] == ' ' and header[23 : 26] != '\x9d\x01\x2a':
-    return False
-  if header[15] == 'L' and header[20] != '\x2f':
-    return False
-  size1, size2 = struct.unpack('<4xL8xL', header[:20])
-  return size1 - size2 == 12 and size2 > 6
+  if header[15] == 'X':  # https://developers.google.com/speed/webp/docs/riff_container#extended_file_format
+    if len(header) < 30:
+      return False
+    size1, size2, flags = struct.unpack('<L8xLL', header[4 : 24])
+    return size1 >= 18 and size2 == 10 and not (flags & ~0x3f)
+  else:
+    if header[15] == ' ' and header[23 : 26] != '\x9d\x01\x2a':
+      return False
+    if header[15] == 'L' and header[20] != '\x2f':
+      return False
+    size1, size2 = struct.unpack('<4xL8xL', header[:20])
+    return size1 - size2 == 12 and size2 > 6
 
 
 def analyze_webp(fread, info, fskip):
-  header = fread(26)
+  header = fread(30)
   if len(header) < 26:
     raise ValueError('Too short for webp.')
   if not (header.startswith('RIFF') and
-          header[8 : 15] == 'WEBPVP8' and header[15] in ' L'):
+          header[8 : 15] == 'WEBPVP8' and header[15] in ' LX'):
     raise ValueError('webp signature not found.')
   info['format'] = 'webp'
-  size1, size2 = struct.unpack('<4xL8xL', header[:20])
-  if size1 - size2 != 12:
-    raise ValueError('Bad webp size difference.')
+  if header[15] == 'X':  # https://developers.google.com/speed/webp/docs/riff_container#extended_file_format
+    info['subformat'] = 'extended'
+    if len(header) < 30:
+      raise ValueError('Too short for webp extended.')
+    size1, size2, flags, wdl, wdh, htl, hth = struct.unpack('<L8xLLBHBH', header[4 : 30])
+    if size1 < 18:
+      return ValueError('webp extended too short.')
+    if size2 != 10:
+      return ValueError('Bad webp extended header size.')
+    if flags & ~0x3f:
+      return ValueError('Bad webp extended header flags: 0x%x' % flags)
+    info['width'], info['height'] = (wdl | wdh << 8) + 1, (htl | hth << 8) + 1
+    # We could parse more chunks including the 'VP8 ' or 'VP8L' chunk to get
+    # info['codec'].
+  else:
+    size1, size2 = struct.unpack('<4xL8xL', header[:20])
+    if size1 - size2 != 12:
+      raise ValueError('Bad webp size difference.')
   if header[15] == ' ':
     # https://tools.ietf.org/html/rfc6386
     if header[23 : 26] != '\x9d\x01\x2a':
@@ -10204,7 +10225,7 @@ FORMAT_ITEMS.extend((
     ('jbig2', (0, '\x97JB2\r\n\x1a\n')),
     # PDF-ready output of `jbig2 -p'.
     ('jbig2', (0, '\0\0\0\0\x30\0\1\0\0\0\x13', 19, '\0\0\0\0\0\0\0\0')),
-    ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L'), 26, lambda header: (is_webp(header), 400))),
+    ('webp', (0, 'RIFF', 8, 'WEBPVP8', 15, (' ', 'L', 'X'), 30, lambda header: (is_webp(header), 400))),
     # Both the tagged (TIFF-based) and the coded (codestream, elementary
     # stream, bitstream) format are detected.
     ('jpegxr', (0, ('II\xbc\x01', 'WMPH'), 8, lambda header: adjust_confidence(400, count_is_jpegxr(header)))),
