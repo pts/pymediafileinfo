@@ -12440,7 +12440,7 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, has_lstat, do_
     entries, files = None, sorted(files)
   for filename, stat_obj in files:
     old_item = old_files.get(filename)
-    symlink = tags = None  # Don't emit tags= with --tags=false.
+    symlink = tags = info = None  # Don't emit tags= with --tags=false.
     is_symlink = False
     if has_lstat and stat.S_ISLNK(stat_obj.st_mode):
       info, had_error_here = get_symlink_info(filename, stat_obj)
@@ -12454,7 +12454,7 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, has_lstat, do_
           stat_obj2 = None
         if stat_obj2 and stat.S_ISREG(stat_obj2.st_mode):
           stat_obj, is_symlink = stat_obj2, False
-    if tags_impl and is_symlink is False:
+    if tags_impl and not is_symlink:
       rfilename = filename
       if symlink is not None:  # We use os.path.realpath to avoid EPERM on lgetattr on symlink.
         rfilename = os.path.realpath(filename)
@@ -12462,8 +12462,8 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, has_lstat, do_
         tags = ','.join(tags_impl(rfilename).strip().split())
       except OSError, e:
         print >>sys.stderr, 'warning: tags %s: %s' % (filename, e)
-    if not (not old_item or old_item[0] != info['size'] or
-            (do_mtime and old_item[1] != int(info['mtime'])) or
+    if not (not old_item or old_item[0] != stat_obj.st_size or
+            (do_mtime and old_item[1] != int(stat_obj.st_mtime)) or
             old_item[3] != symlink or
             old_item[4] != is_symlink or
             (tags_impl and tags != old_item[2])):
