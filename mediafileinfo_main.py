@@ -148,7 +148,7 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func):
+def info_scan(dirname, outf, get_file_info_func, has_lstat):
   """Prints results sorted by filename."""
   had_error = False
   try:
@@ -164,7 +164,10 @@ def info_scan(dirname, outf, get_file_info_func):
     else:
       filename = os.path.join(dirname, entry)
     try:
-      stat_obj = os.lstat(filename)
+      if has_lstat:
+        stat_obj = os.lstat(filename)
+      else:
+        stat_obj = os.stat(filename)
     except OSError, e:
       print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
       stat_obj = None
@@ -188,19 +191,22 @@ def info_scan(dirname, outf, get_file_info_func):
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func)
+    had_error |= info_scan(filename, outf, get_file_info_func, has_lstat)
   return had_error
 
 
-def process(filename, outf, get_file_info_func):
+def process(filename, outf, get_file_info_func, has_lstat):
   """Prints results sorted by filename."""
   try:
-    stat_obj = os.lstat(filename)
+    if has_lstat:
+      stat_obj = os.lstat(filename)
+    else:
+      stat_obj = os.stat(filename)
   except OSError, e:
     print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
     return True
   if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func)
+    return info_scan(filename, outf, get_file_info_func, has_lstat)
   elif stat.S_ISREG(stat_obj.st_mode):
     info, had_error = get_file_info_func(filename, stat_obj)
     outf.write(format_info(info))
@@ -209,7 +215,7 @@ def process(filename, outf, get_file_info_func):
       print >>sys.stderr, 'warning: unknown file format: %r' % filename
       had_error = True
     return had_error
-  elif stat.S_ISLNK(stat_obj.st_mode):
+  elif has_lstat and stat.S_ISLNK(stat_obj.st_mode):
     info, had_error = get_symlink_info(filename, stat_obj)
     outf.write(format_info(info))
     outf.flush()
@@ -269,7 +275,7 @@ def main(argv):
   for filename in argv[i:]:
     if filename.startswith(prefix):
       filename = filename[len(prefix):]
-    had_error |= process(filename, outf, get_file_info_func)
+    had_error |= process(filename, outf, get_file_info_func, has_lstat)
   if had_error:
     sys.exit(2)
 
