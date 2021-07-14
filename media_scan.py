@@ -12487,9 +12487,6 @@ def info_scan(dirname, outf, get_file_info_func, skip_recent_sec, has_lstat, do_
         info['symlink'] = symlink
     if not do_mtime:
       info.pop('mtime', None)
-    elif info.get('format') == '?':
-      print >>sys.stderr, 'warning: unknown file format: %r' % filename
-      had_error = True
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):

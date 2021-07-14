@@ -11541,7 +11541,7 @@ def get_symlink_info(filename, stat_obj):
   return info, False
 
 
-def info_scan(dirname, outf, get_file_info_func):
+def info_scan(dirname, outf, get_file_info_func, has_lstat):
   """Prints results sorted by filename."""
   had_error = False
   try:
@@ -11557,7 +11557,10 @@ def info_scan(dirname, outf, get_file_info_func):
     else:
       filename = os.path.join(dirname, entry)
     try:
-      stat_obj = os.lstat(filename)
+      if has_lstat:
+        stat_obj = os.lstat(filename)
+      else:
+        stat_obj = os.stat(filename)
     except OSError, e:
       print >>sys.stderr, 'error: lstat %r: %s' % (filename, e)
       stat_obj = None
@@ -11581,19 +11584,22 @@ def info_scan(dirname, outf, get_file_info_func):
     outf.write(format_info(info))
     outf.flush()
   for filename in sorted(subdirs):
-    had_error |= info_scan(filename, outf, get_file_info_func)
+    had_error |= info_scan(filename, outf, get_file_info_func, has_lstat)
   return had_error
 
 
-def process(filename, outf, get_file_info_func):
+def process(filename, outf, get_file_info_func, has_lstat):
   """Prints results sorted by filename."""
   try:
-    stat_obj = os.lstat(filename)
+    if has_lstat:
+      stat_obj = os.lstat(filename)
+    else:
+      stat_obj = os.stat(filename)
   except OSError, e:
     print >>sys.stderr, 'error: missing file %r: %s' % (filename, e)
     return True
   if stat.S_ISDIR(stat_obj.st_mode):
-    return info_scan(filename, outf, get_file_info_func)
+    return info_scan(filename, outf, get_file_info_func, has_lstat)
   elif stat.S_ISREG(stat_obj.st_mode):
     info, had_error = get_file_info_func(filename, stat_obj)
     outf.write(format_info(info))
@@ -11602,13 +11608,49 @@ def process(filename, outf, get_file_info_func):
       print >>sys.stderr, 'warning: unknown file format: %r' % filename
       had_error = True
     return had_error
-  elif stat.S_ISLNK(stat_obj.st_mode):
+  elif has_lstat and stat.S_ISLNK(stat_obj.st_mode):
     info, had_error = get_symlink_info(filename, stat_obj)
     outf.write(format_info(info))
     outf.flush()
     return had_error
   else:
     return False
+
+
+def run_pipe(inf, outf, get_file_info_func, has_lstat):
+  import signal
+  signal.signal(signal.SIGINT, signal.SIG_DFL)  # Prevent KeyboardInterrupt.
+  while 1:
+    line = inf.readline()
+    if not line:
+      break
+    if not line.endswith('\n'):
+      outf.write('format=? error=incomplete_line\n')
+      outf.flush()
+      break
+    filename = line = line.rstrip('\r\n')  # Either, both etc.
+    try:
+      if has_lstat:
+        stat_obj = os.lstat(filename)
+      else:
+        stat_obj = os.stat(filename)
+    except OSError, e:
+      stat_obj = None
+    if stat_obj is None:
+      response = 'format=? error=missing_file f=%s\n' % filename
+    elif stat.S_ISDIR(stat_obj.st_mode):
+      response = 'format=? error=is_dir f=%s\n' % filename
+    elif stat.S_ISREG(stat_obj.st_mode):
+      # This returns 'format=? ... error=...' upon an error.
+      info, had_error = get_file_info_func(filename, stat_obj)
+      response = format_info(info)
+    elif has_lstat and stat.S_ISLNK(stat_obj.st_mode):
+      info, had_error = get_symlink_info(filename, stat_obj)
+      response = format_info(info)
+    else:  # Not a file or directory.
+      response = 'format=? error=bad_node f=%s\n' % filename
+    outf.write(response)
+    outf.flush()
 
 
 # ---
@@ -11624,12 +11666,25 @@ def set_fd_binary(fd):
 
 def main(argv):
   if len(argv) < 2 or argv[1] == '--help':
-    print >>sys.stderr, (
+    sys.stderr.write(
         'mediafileinfo.py: Get parameters and dimension of media files.\n'
         'This is free software, GNU GPL >=2.0. '
         'There is NO WARRANTY. Use at your risk.\n'
-        'Usage: %s [<flag> ...] <filename> [...]' % argv[0])
+        'Usage: %s [<flag> ...] <filename> [...]\n'
+        '    or %s --pipe [--quick]\n'
+        % (argv[0], argv[0]))
     sys.exit(1)
+  has_lstat = callable(getattr(os, 'lstat', None))
+  if argv[1] == '--pipe':
+    mode = 'info'
+    if len(argv) > 2 and argv[2] == '--quick':
+      mode = 'quick'
+    get_file_info_func = (get_file_info, get_quick_info)[mode == 'quick']
+    inf, outf = sys.stdin, sys.stdout
+    set_fd_binary(inf.fileno())
+    set_fd_binary(outf.fileno())
+    run_pipe(inf, outf, get_file_info_func, has_lstat)
+    return
   mode = 'info'
   i = 1
   while i < len(argv):
@@ -11662,7 +11717,7 @@ def main(argv):
   for filename in argv[i:]:
     if filename.startswith(prefix):
       filename = filename[len(prefix):]
-    had_error |= process(filename, outf, get_file_info_func)
+    had_error |= process(filename, outf, get_file_info_func, has_lstat)
   if had_error:
     sys.exit(2)
 
