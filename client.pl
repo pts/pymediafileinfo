@@ -6,7 +6,7 @@
 
 use integer;
 use strict;
-use IPC::Run qw(start finish);
+use IPC::Run qw(start finish);  # sudo apt-get install libipc-run-perl
 use Data::Dumper qw(Dumper);
 
 $| = 1;  # Autoflush stdout.
