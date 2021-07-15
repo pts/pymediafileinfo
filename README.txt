@@ -293,6 +293,22 @@ A13. This file format is called ``mediafileinfo'', it's documented here:
 
      Of course, mediafileinfo.py and related tools can detect this file format.
 
+Q14. Can pymediafileinfo detection be called from other programming languages?
+
+A14. Yes. You still need Python 2.4, 2.5, 2.6 or 2.7 to run mediafileinfo.py
+     (only the standard packages, no need to install extras), but you can
+     interact with it from other programming languages.
+
+     mediafileinfo.py has a pipe server mode: when invoked as
+     `mediafileinfo.py --pipe', it reads a filename from stdin, does the
+     detection of that file, writes a single line in the mediafileinfo
+     format (documented in
+     https://github.com/pts/pymediafileinfo/blob/master/mediafileinfo_format.md
+     ) to stdout, and does this indefinitely. Some sample clients are
+     already written: client.py for Python 2 (tested with 2.4, 2.5, 2.6 and
+     2.7) and Python 3 (tested with 3.0, 3.4 and 3.8), client.rb for Ruby
+     (tested with 1.9 and 2.3), and Perl (tested with 5.18 and 5.24).
+
 * (end)
 
 __END__
