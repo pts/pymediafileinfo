@@ -307,7 +307,8 @@ A14. Yes. You still need Python 2.4, 2.5, 2.6 or 2.7 to run mediafileinfo.py
      ) to stdout, and does this indefinitely. Some sample clients are
      already written: client.py for Python 2 (tested with 2.4, 2.5, 2.6 and
      2.7) and Python 3 (tested with 3.0, 3.4 and 3.8), client.rb for Ruby
-     (tested with 1.9 and 2.3), and Perl (tested with 5.18 and 5.24).
+     (tested with 1.9 and 2.3), and client.pl for Perl (tested with 5.18 and
+     5.24).
 
 * (end)
 
