@@ -25,7 +25,8 @@ Advantages of mediafileinfo.py:
 * It's fast (see FAQ entry Q4) even though it's written in Python, and some of
   the alternatives are written in C or C++.
 * It has only a few dependencies: stock Python 2.4, 2.5, 2.6 or 2.7; no
-  package installation needed.
+  package installation needed. It doesn't work with Python 3, but see Q14
+  for interacting with it from Python 3 code.
 * It isn't not fooled by incorrect media metadata: it gets media parameters
   directly from the media data (e.g. width sometimes from the video
   bitstream).
