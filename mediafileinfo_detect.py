@@ -1423,6 +1423,53 @@ def analyze_swf(fread, info, fskip, format='swf', fclass='vector',
       (xmax - xmin + 10) // 20, (ymax - ymin + 10) // 20)
 
 
+# --- dv: DIF (digital interface format) DV (digital video).
+
+def analyze_dv(fread, info, fskip, format='dv', fclass='media',
+               spec=(0, '\x1f\7\0')):
+  # IEC 61834 (paid)
+  # https://github.com/FFmpeg/FFmpeg/blob/da5497a1a22d06d6979a888d2ded79521c428d29/libavcodec/dv_profile.c#L73-L292
+  # https://github.com/FFmpeg/FFmpeg/blob/da5497a1a22d06d6979a888d2ded79521c428d29/libavformat/dv.c#L641
+  # https://github.com/MediaArea/MediaInfoLib/blob/c567c176f5d145efeb5821b67467fba33d87354c/Source/MediaInfo/Multiple/File_DvDif.cpp
+  header = fread(80)  # Block 0.
+  if len(header) < 3:
+    raise ValueError('Too short for dv.')
+  if not header.startswith('\x1f\7\0'):
+    raise ValueError('dv signature not found.')
+  info['format'] = 'dv'
+  width = height = None
+  if len(header) == 80:
+    for _ in xrange(5):
+      data = fread(80)  # Next block.
+      # Typical first 6 prefixes: ('\x1f\7\0', '\x3f\7\0', '\x3f\7\1', '\x5f\7\0', '\x5f\7\1', '\x5f\7\2').
+      if len(data) < 80 or data.startswith('\x5f\7\2'):
+        break
+    stype = is_pal = None
+    if len(data) == 80 and data.startswith('\x5f\7\2'):
+      dsf = (ord(header[3]) & 0x80) >> 7
+      if (ord(header[3]) & 0x7f) == 0x3f and data[51] == '\xff':
+        # Created by QuickTime 3. https://trac.ffmpeg.org/ticket/217
+        stype, is_pal = 0, dsf
+      else:
+        stype, is_pal = ord(data[51]) & 0x1f, (ord(data[51]) & 0x20) >> 5
+        if dsf == is_pal and stype in (0, 1, 4, 0x14, 0x15, 0x18):
+          pass
+        else:
+          dsf = stype = is_pal = None
+    if stype is not None and is_pal is not None:
+      if stype in (0, 1, 4):
+        width, height = 720, (576, 480)[not is_pal]
+      elif stype in (0x14, 0x15):
+        width, height = (1440, 1280)[not is_pal], (1080, 1035)[stype != 0x14]
+      elif stype == 0x18:
+        width, height = 960, 720
+  info['tracks'] = []
+  if width and height:
+    video_track_info = {'type': 'video', 'codec': 'dv', 'width': width, 'height': height}
+    info['tracks'].append(video_track_info)
+  # TODO(pts): Add info about the audio track.
+
+
 # --- ogg.
 
 
@@ -10193,8 +10240,6 @@ FORMAT_ITEMS.extend((
     # http://stnsoft.com/DVD/ifo.html
     ('dvd-video-video-ts-ifo', (0, 'DVDVIDEO-VMG\0')),
     ('dvd-video-vts-ifo', (0, 'DVDVIDEO-VTS\0')),
-    # DIF DV (digital video).
-    ('dv', (0, '\x1f\x07\x00')),
     # http://fileformats.archiveteam.org/wiki/RIFX
     # Big endian RIFF. Not in mainstream use, not analyzing further.
     ('rifx', (0, ('RIFX', 'XFIR'), 12, lambda header: (len(header) >= 12 and header[8 : 12].lower().strip().isalnum(), 100))),

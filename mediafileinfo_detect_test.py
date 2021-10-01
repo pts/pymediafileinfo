@@ -1249,6 +1249,17 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('RIFF????AVI '), {'format': 'avi', 'tracks': []}),
     # TODO(pts): Add tests with audio and video tracks.
 
+  def test_analyze_dv(self):
+    self.assertEqual(analyze_string('\x1f\7\0?'), {'format': 'dv', 'tracks': []})
+    data = ('1f0700bff8787878ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'  # Block 0.
+            '5f0702ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60ffff20ff6103c8fdff62ffd5e90663ffc1d1e1ffffffffffffffffffffffff'  # Block 1.
+           ).decode('hex')
+    self.assertEqual(analyze_string(data), {'format': 'dv', 'tracks': [{'type': 'video', 'codec': 'dv', 'width': 720, 'height': 576}]})
+    self.assertEqual(analyze_string(data[:80]), {'format': 'dv', 'tracks': []})
+    self.assertEqual(analyze_string(data[:80] + ('\x5f\7\2' + '\xff' * 76)), {'format': 'dv', 'tracks': []})  # Block 1 too short.
+    self.assertEqual(analyze_string(data[:80] + ('\x5f\7\2' + '\xfe' * 77)), {'format': 'dv', 'tracks': []})  # Bad stype in block 1.
+    self.assertEqual(analyze_string(data[:80] + ('\x5f\7\2' + '\xff' * 77)), {'format': 'dv', 'tracks': [{'type': 'video', 'codec': 'dv', 'width': 720, 'height': 576}]})  # QuickTime 3.
+
   def test_analyze_mpeg_ts(self):
     self.assertEqual(analyze_string('G\0\x10\x10' + '\0' * 184, expect_error=True),
                      {'format': 'mpeg-ts', 'subformat': 'ts', 'tracks': [], 'error': 'Missing mpeg-ts pat payload.', 'hdr_aframes': 0, 'hdr_astreams': 0, 'hdr_ts_packet_count': 1, 'hdr_ts_payload_count': 1, 'hdr_ts_pusi_count': 0, 'hdr_vframes': 0, 'hdr_vstreams': 0})
