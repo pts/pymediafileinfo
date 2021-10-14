@@ -483,10 +483,52 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'djvu', 'height': 3300, 'width': 2550, 'subformat': 'djvm'})
 
   def test_analyze_art(self):
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0'),
+                     {'format': 'art', 'codec': 'art'})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\8\0\x40\x15\3\xdd\1\xe0\1'),  # Unrecognized header bytes.
+                     {'format': 'art', 'codec': 'art'})
     self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xdd\1\xe0\1'),
                      {'format': 'art', 'codec': 'art', 'height': 480, 'width': 477})
-    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\8\0\x40\x15\3\xdd\1\xe0\1'),
-                     {'format': 'art', 'codec': 'art'})
+    self.assertEqual(analyze_string('JG\3\x0e\0\0\0\4\x8e\x02\n\0\xeb\0\xd7\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 235, 'width': 215})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15 \xd0\2\x40\2'),
+                     {'format': 'art', 'codec': 'art', 'height': 576, 'width': 720})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\0\x05\xc0\x03'),
+                     {'format': 'art', 'codec': 'art', 'height': 960, 'width': 1280})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\t\1\x93\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 403, 'width': 265})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\x7f\x02\xf4\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 244, 'width': 639})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\x80\x02\xe0\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\x88\x01J\x02'),
+                     {'format': 'art', 'codec': 'art', 'height': 586, 'width': 392})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\x90\1\xf0\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 240, 'width': 400})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xa0\0\xbe\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 190, 'width': 160})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xd2\0\xd2\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 210, 'width': 210})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xd8\0\xa2\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 162, 'width': 216})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xdc\0\xa8\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 168, 'width': 220})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xf3\0\xe3\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 227, 'width': 243})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\3\xfa\0\xa6\0'),
+                     {'format': 'art', 'codec': 'art', 'height': 166, 'width': 250})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\x03e\x03U\x02'),
+                     {'format': 'art', 'codec': 'art', 'height': 597, 'width': 869})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\x03j\x03L\x02'),
+                     {'format': 'art', 'codec': 'art', 'height': 588, 'width': 874})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\7\0\x40\x15\x03~\x02\x1d\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 285, 'width': 638})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\x8c\x16\0\0\xb8\1\xd8\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 440, 'width': 472})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\x8c\x16\0\x00F\1\xd8\1'),
+                     {'format': 'art', 'codec': 'art', 'height': 326, 'width': 472})
+    self.assertEqual(analyze_string('JG\4\x0e\0\0\0\0\x8c\x16\0\x00}\x02\x8c\2'),
+                     {'format': 'art', 'codec': 'art', 'height': 637, 'width': 652})
 
   def test_analyze_ico(self):
     self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),

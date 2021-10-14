@@ -8366,25 +8366,34 @@ def analyze_djvu(fread, info, fskip):
   info['width'], info['height'] = width, height
 
 
-def analyze_art(fread, info, fskip):
+def analyze_art(fread, info, fskip, format='art', fclass='image',
+                spec=(0, 'JG', 2, ('\3', '\4'), 3, '\x0e\0\0\0')):
   # By AOL browser.
   # https://en.wikipedia.org/wiki/ART_image_file_format
   # https://multimedia.cx/eggs/aol-art-format/
   # http://samples.mplayerhq.hu/image-samples/ART/
+  # https://samples.ffmpeg.org/image-samples/ART/
+  # https://bugzilla.mozilla.org/show_bug.cgi?id=153450
+  # https://msfn.org/board/topic/125338-aol-art-compressed-image/
+  #   2009, Internet Explorer 6, Windows registry FEATURE_IMAGING_USE_ART.
+  # Proprietary and undocumented jgdw400.dll . There is also jgdw500.dll .
+  #   There is also jgdwaol.dll .
+  # ACDSee 5.01 has ART support. It works on Windows 10, but it doesn't work
+  #   on Wine 1.6.
   header = fread(17)
-  if len(header) < 17:
+  if len(header) < 7:
     raise ValueError('Too short for art.')
   if not (header.startswith('JG') and header[2] in '\3\4' and
-          header[3 : 8] == '\016\0\0\0\0'):
+          header[3 : 7] == '\x0e\0\0\0'):
     raise ValueError('art signature not found.')
-  # Usually header[8 : 13] == '\7\0\x40\x15\x03'.
   info['format'] = info['codec'] = 'art'
-  # This is mostly an educated guess based on samples, the file format is
+  # These are mostly an educated guess based on samples, the file format is
   # not documented. Not even XnView MP or IrfanView can open them.
-  if header[8 : 13] == '\7\0\x40\x15\3':
+  if header[2] == '\4' and header[7 : 13] in ('\0\7\0\x40\x15\3', '\0\7\0\x40\x15\x20'):
     info['width'], info['height'] = struct.unpack('<HH', header[13 : 17])
-  else:
-    pass  # Example: P50374Bc.art has header[8 : 13] == '\x8c\x16\0\0\x7d'.
+  elif ((header[2] == '\3' and header[7 : 12] == '\4\x8e\x02\x0a\0') or
+        (header[2] == '\4' and header[7 : 12] == '\0\x8c\x16\0\0')):
+    info['height'], info['width'] = struct.unpack('<HH', header[12 : 16])
 
 
 def analyze_fuji_raf(fread, info, fskip):
@@ -10293,7 +10302,6 @@ FORMAT_ITEMS.extend((
     ('gem', (0, GEM_XIMG_HEADERS, 16, 'XIMG\0\0')),
     # By PCPaint >=2.0 and Pictor.
     ('pcpaint-pic', (0, '\x34\x12', 6, '\0\0\0\0', 11, tuple('\xff123'), 13, tuple('\0\1\2\3\4'))),
-    ('art', (0, 'JG', 2, ('\3', '\4'), 3, '\016\0\0\0\0')),
     ('fuji-raf', (0, 'FUJIFILMCCD-RAW 020', 19, ('0', '1'), 20, 'FF383501')),
     ('minolta-raw', (0, '\0MRM\0', 6, ('\0', '\1', '\2', '\3'), 8, '\0PRD\0\0\0\x18')),
     ('dpx', (0, 'SDPX\0\0', 8, 'V', 9, ('1', '2'), 10, '.', 11, tuple('0123456789'))),
@@ -10893,7 +10901,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'miff': analyze_miff,
     'jbig2': analyze_jbig2,
     'djvu': analyze_djvu,
-    'art': analyze_art,
     'webp': analyze_webp,
     'jpegxr': analyze_jpegxr,
     'flif': analyze_flif,
