@@ -535,11 +535,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_ico(self):
     self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x16\0\0\0'),
                      {'format': 'ico', 'height': 49, 'width': 48})
-    self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x17\0\0\0-????????????????\3\0\0\0'),
+    self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x17\0\0\0-(\0\0\0\x30\0\0\0\x62\0\0\0????\3\0\0\0'),
                      {'format': 'ico', 'subformat': 'bmp', 'codec': 'bitfields', 'height': 49, 'width': 48})
-    self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x18\0\0\0--\x89PNG????????????????'),
-                     {'format': 'ico', 'subformat': 'png', 'codec': 'flate', 'height': 49, 'width': 48})
-    self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x18\0\0\0--????????????IHDR????'),
+    self.assertEqual(analyze_string('\0\0\1\0\1\0\x30\x31\0\0\1\0\x20\0\xa8\x25\0\0\x18\0\0\0--\x89PNG????????IHDR????'),
                      {'format': 'ico', 'subformat': 'png', 'codec': 'flate', 'height': 49, 'width': 48})
 
   def test_analyze_cur(self):
@@ -1166,30 +1164,44 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'xpm', 'subformat': 'xpm3', 'codec': 'uncompressed-ascii', 'height': 3456, 'width': 12})
 
   def test_analyze_bmp(self):
+    data0 = 'BM????\0\0\0\0????\x0c\0\0\0\x80\2\xe0\1'
     data1 = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
-    data2 = 'BM????\0\0\0\0????\x0c\0\0\0\x80\2\xe0\1'
+    data2 = 'BM????\0\0\0\0????@\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
+    self.assertEqual(analyze_string(data0),
+                     {'format': 'bmp', 'codec': 'uncompressed', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(data1),
                      {'format': 'bmp', 'codec': 'rle', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(data1[:22]),
                      {'format': 'bmp'})
     self.assertEqual(analyze_string(data2),
-                     {'format': 'bmp', 'codec': 'uncompressed', 'height': 480, 'width': 640})
+                     {'format': 'bmp', 'codec': 'rle', 'height': 480, 'width': 640})
 
-  def test_analyze_rdi(self):
+  def test_analyze_dib(self):
+    data0 = '\x0c\0\0\0\x80\2\xe0\1\1\0\2\0'
+    data1 = '\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
+    data2 = '@\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
+    self.assertEqual(analyze_string(data0),
+                     {'format': 'dib', 'codec': 'uncompressed', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(data1),
+                     {'format': 'dib', 'codec': 'rle', 'height': 480, 'width': 640})
+    self.assertEqual(analyze_string(data2),
+                     {'format': 'dib', 'codec': 'rle', 'height': 480, 'width': 640})
+
+  def test_analyze_rdib(self):
     data_bmp = 'BM????\0\0\0\0????\x28\0\0\0\x80\2\0\0\xe0\1\0\0\1\0\x08\0\1\0\0\0'
     data1 = 'RIFF????RDIB' + data_bmp
     data2 = 'RIFF????RDIBdata' + data_bmp
     data3 = 'RIFF????RDIBdata????' + data_bmp
     self.assertEqual(analyze_string(data1),
-                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+                     {'format': 'rdib', 'codec': 'rle', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(data1[:14]),
-                     {'format': 'rdi'})
+                     {'format': 'rdib'})
     self.assertEqual(analyze_string(data2),
-                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+                     {'format': 'rdib', 'codec': 'rle', 'height': 480, 'width': 640})
     self.assertEqual(analyze_string(data2[:16]),
-                     {'format': 'rdi'})
+                     {'format': 'rdib'})
     self.assertEqual(analyze_string(data3),
-                     {'format': 'rdi', 'codec': 'rle', 'height': 480, 'width': 640})
+                     {'format': 'rdib', 'codec': 'rle', 'height': 480, 'width': 640})
 
   def test_analyze_utah_rle(self):
     self.assertEqual(analyze_string('\x52\xcc\x1c\0\x2c\0\x3e\0\x32\0\x05\x03\x08\0\x08'),

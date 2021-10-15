@@ -1903,6 +1903,45 @@ def analyze_4xm(fread, info, fskip, format='4xm', fclass='media',
 
 # --- Windows
 
+# Only BMP (DIB) image codecs. Also used in AVI etc. for keyframe-only video codecs.
+# See also WINDOWS_VIDEO_CODECS for more video codecs.
+DIB_CODECS = {
+    0: 'uncompressed',
+    1: 'rle',
+    2: 'rle',
+    3: 'bitfields',
+    4: 'jpeg',
+    5: 'flate',  # PNG.
+    6: 'bitfields',
+    11: 'uncompressed',
+    12: 'rle',
+    13: 'rle',
+}
+
+
+def parse_dib_header(info, data):
+  # BITMAPINFOHEADER struct in data.
+  # https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapinfoheader
+  if not isinstance(data, (str, buffer)):
+    raise TypeError
+  if len(data) < 8:
+    raise ValueError('Too short for dib.')
+  bi_size, = struct.unpack('<L', data[:4])
+  #if bi_size not in (12, 40, 64, 108, 124):  # From Pillow-8.4.0.
+  if 12 <= bi_size < 40:
+    # BITMAPCOREHEADER struct: bc_size, bc_width, bc_height, bc_planes, bc_bitcnt = struct.unpack('<LHHHH')
+    info['width'], info['height'] = struct.unpack('<HH', data[4 : 8])
+    info['codec'] = 'uncompressed'
+  elif 40 <= bi_size <= 127:
+    if len(data) >= 12:
+      info['width'], info['height'] = struct.unpack('<LL', data[4 : 12])
+      if len(data) >= 20:
+        bi_compression, = struct.unpack('<L', data[16 : 20])
+        info['codec'] = DIB_CODECS.get(bi_compression, str(bi_compression))
+  else:
+    raise ValueError('Bad dib bi_size: %d' % bi_size)
+
+
 # FourCC.
 # See some on: http://www.fourcc.org/
 # See many on: https://github.com/MediaArea/MediaInfoLib/blob/master/Source/Resource/Text/DataBase/CodecID_Video_Riff.csv
@@ -1957,16 +1996,13 @@ WINDOWS_VIDEO_CODECS = {
 
 
 def get_windows_video_codec(codec):
+  bi_compression, = struct.unpack('<L', codec)
+  if bi_compression <= 31:  # Just a random limit.
+    return DIB_CODECS.get(bi_compression, str(bi_compression))
+  if bi_compression in (0x10000001, 0x10000002):
+    return 'mpeg'
   codec = codec.strip().lower()  # Canonicalize FourCC.
-  if codec == '\0\0\0\0':
-    codec = 'uncompressed'
-  elif codec in ('\1\0\0\x10', '\2\0\0\x10'):
-    codec = 'mpeg'
-  elif codec == '\2\0\0\x10':
-    codec = 'mpeg'
-  elif codec in ('\1\0\0\0', '\2\0\0\0'):
-    codec = 'rle'
-  elif '\0' in codec:
+  if '\0' in codec:
     raise ValueError('NUL in Windows video codec %r.' % codec)
   return WINDOWS_VIDEO_CODECS.get(codec, codec)
 
@@ -2128,16 +2164,17 @@ def analyze_avi(fread, info, fskip, format='avi', fclass='media',
         if strh_data[:4] == 'vids':
           if len(strf_data) < 20:
             raise ValueError('avi strf chunk to short for video track.')
-          # BITMAPINFO starts with BITMAPINFOHEADER.
+          # strf_data contains BITMAPINFO, which starts with BITMAPINFOHEADER.
           # https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
-          width, height = struct.unpack('<LL', strf_data[4 : 12])
-          if strh_data[4 : 8] == '\0\0\0\0':
+          tmp_info = {}
+          parse_dib_header(tmp_info, strf_data)
+          if strh_data[4 : 8] != '\0\0\0\0':
             video_codec = strf_data[16 : 20]
           else:
             video_codec = strh_data[4 : 8]
           video_codec = get_windows_video_codec(video_codec)
           track_info = {'type': 'video', 'codec': video_codec}
-          set_video_dimens(track_info, width, height)
+          set_video_dimens(track_info, tmp_info['width'], tmp_info['height'])
           info['tracks'].append(track_info)
         elif strh_data[:4] == 'auds':
           if len(strf_data) < 16:
@@ -6122,67 +6159,78 @@ def analyze_xml(fread, info, fskip):
           break
 
 
-DIB_CODECS = {
-    0: 'uncompressed',
-    1: 'rle',
-    2: 'rle',
-    3: 'bitfields',
-    4: 'jpeg',
-    5: 'flate',  # PNG.
-    6: 'bitfields',
-    11: 'uncompressed',
-    12: 'rle',
-    13: 'rle',
-}
-
-
-def populate_dib(info, data, format):
+def populate_bmp_info(info, data, format):
   # Should be preceded by: data = fread(34).
   if len(data) < 22:
-    raise ValueError('Too short for %s dib.' % format)
+    raise ValueError('Too short for %s bmp.' % format)
   if not data.startswith('BM'):
-    raise ValueError('%s dib signature not found.' % format)
-  if data[6 : 10] != '\0\0\0\0' or data[15 : 18] != '\0\0\0':
-    raise ValueError('Bad %s dib data.'  % format)
-  b = ord(data[14])
-  if not 12 <= b <= 127:
-    raise ValueError('Bad %s dib info size: %d' % (format, b))
+    raise ValueError('%s bmp signature not found.' % format)
+  if data[6 : 10] != '\0\0\0\0':
+    raise ValueError('Bad %s bmp data.'  % format)
+  parse_dib_header(info, buffer(data, 14))
   info['format'] = format
-  if b < 40 and len(data) >= 12:
-    info['width'], info['height'] = struct.unpack(
-        '<HH', data[18 : 22])
-    info['codec'] = 'uncompressed'
-  elif b >= 40 and len(data) >= 26:
-    info['width'], info['height'] = struct.unpack(
-        '<LL', data[18 : 26])
-    if len(data) >= 34 and b != 64:
-      codec, = struct.unpack('<L', data[30 : 34])
-      info['codec'] = DIB_CODECS.get(codec, str(codec))
 
 
-
-def analyze_bmp(fread, info, fskip):
+def analyze_bmp(fread, info, fskip, format='bmp', fclass='image',
+                spec=(0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))):
   # https://en.wikipedia.org/wiki/BMP_file_format
+  # https://github.com/ImageMagick/ImageMagick/blob/1b04b8317378589d1c3a2fddecf30ef1f7cf2c80/coders/bmp.c#L618
   data = fread(34)
   if len(data) < 22:
     raise ValueError('Too short for bmp.')
   if not data.startswith('BM'):
     raise ValueError('bmp signature not found.' )
-  populate_dib(info, data, 'bmp')
+  populate_bmp_info(info, data, 'bmp')
 
 
-def analyze_rdi(fread, info, fskip):
+DIB_BI_SIZES = (12, 40, 64, 108, 124)  # From Pillow-8.4.0.
+DIB_BI_BITCNTS = (1, 2, 4, 8, 16, 24, 32)
+
+
+def analyze_dib(fread, info, fskip, format='dib', fclass='image',
+                spec=((0, '\x0c\0\0\0', 8, '\1\0', 10, ('\1', '\2', '\4', '\x08', '\x18'), 11, '\0'),
+                      (0, tuple(chr(c) for c in DIB_BI_SIZES if c >= 20), 1, '\0\0\0', 12, '\1\0', 14, tuple(chr(c) for c in DIB_BI_BITCNTS), 15, '\0', 17, lambda header: (len(header) >= 17 and ord(header[16]) < 32, 38), 17, '\0\0\0'))):
+  # BITMAPINFOHEADER struct (and its various versions), starting at offset 14
+  # of format=bmp.
+  data = fread(20)
+  if len(data) < 12:
+    raise ValueError('Too short for dib.')
+  # Do some checks before calling the permissive parse_dib_header.
+  bi_size, = struct.unpack('<L', data[:4])
+  if bi_size not in DIB_BI_SIZES:
+    raise ValueError('dib signature not found.')
+  info['format'] = 'dib'
+  if bi_size == 12:
+    if data[8 : 10] != '\1\0':
+      raise ValueError('Bad dib bc_planes.')
+    bi_bitcnt, = struct.unpack('<H', data[10 : 12])
+    if bi_bitcnt in (16, 32):
+      raise ValueError('Bad dib bc_bitcnt.')
+  else:
+    if data[12 : 14] != '\1\0':
+      raise ValueError('Bad dib bi_planes.')
+    bi_bitcnt, = struct.unpack('<H', data[14 : 16])
+    if ord(data[16]) >= 32:
+      raise ValueError('Bad dib bi_compression.')
+  if bi_bitcnt not in DIB_BI_BITCNTS:
+    raise ValueError('Bad dib bi_bitcnt.')
+  parse_dib_header(info, data)
+
+
+def analyze_rdib(fread, info, fskip, format='rdib', fclass='image',
+                 spec=((0, 'RIFF', 8, 'RDIBBM'),
+                       (0, 'RIFF', 8, 'RDIBdata'))):
   # http://fileformats.archiveteam.org/wiki/RDIB
   # https://www.aelius.com/njh/wavemetatools/doc/riffmci.pdf
   # We don't support the ``extended RDIB'', because it has hard to find any
   # sample files.
   header = fread(20 + 34)
   if len(header) < 14:
-    raise ValueError('Too short for rdi.')
+    raise ValueError('Too short for rdib.')
   has_data = header[12 : 16] == 'data'
   if not (header.startswith('RIFF') and header[8 : 12] == 'RDIB' and (has_data or header[12 : 14] == 'BM')):
     raise ValueError('rdi signature not found.' )
-  info['format'] = 'rdi'
+  info['format'] = 'rdib'
   if has_data:
     # If there is a 4-byte chunk_size field after 'data', then header[26 :
     # 30] becomes '\0\0\0\0' (dib_data[6 : 10]). This is how we detect the
@@ -6191,7 +6239,7 @@ def analyze_rdi(fread, info, fskip):
   else:
     header = header[12:]
   if len(header) >= 22:
-    populate_dib(info, header, 'rdi')
+    populate_bmp_info(info, header, 'rdib')
 
 
 def analyze_flic(fread, info, fskip, format='flic', fclass='video',
@@ -8461,17 +8509,24 @@ def parse_ico_or_cur(fread, info, fskip, format):
       raise ValueError('Bad %s image_offset.' % format)
     best = max(best, (width * height, width, height, image_offset))
   _, info['width'], info['height'], image_offset = best  # Largest icon.
-  # Detect .png compression at image_offset.
+  # Detect codec at image_offset.
   if format == 'ico' and fskip(image_offset - min_image_offset):
     data = fread(20)
     if len(data) == 20:
       # https://github.com/ImageMagick/ImageMagick/blob/2059f96eeae8c2d26e8683aa17fd65f78f42ad30/coders/icon.c#L276-L277
-      # 'IHDR' conflicts with BITMAPINFOHEADER.color_plane_count and .bits_per_pixel.
-      if data.startswith('\x89PNG') or data[12 : 16] == 'IHDR':
+      # 'IHDR' conflicts with BITMAPINFOHEADER.biPlanes and .biBitCnt.
+      if data.startswith('\x89PNG') and data[12 : 16] == 'IHDR':
         info['subformat'], info['codec'] = 'png', 'flate'
       else:
-        codec, = struct.unpack('<L', data[16 : 20])
-        info['subformat'], info['codec'] = 'bmp', DIB_CODECS.get(codec, str(codec))
+        dib_info = {}
+        parse_dib_header(dib_info, data)
+        if dib_info['width'] != width:
+          raise ValueError('Bad %s dib width.')
+        if dib_info['height'] != (height << 1):
+          raise ValueError('Bad %s dib height.')
+        info['subformat'] = 'bmp'
+        if 'codec' in dib_info:
+          info['codec'] = dib_info['codec']
 
 
 def analyze_ico(fread, info, fskip, format='ico', fclass='image',
@@ -10362,9 +10417,6 @@ FORMAT_ITEMS.extend((
     ('qtif', (0, '\0\0\0', 4, 'idsc')),
     # .mov preview image.
     ('pnot', (0, '\0\0\0\x14pnot', 12, '\0\0')),
-    ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
-    ('rdi', (0, 'RIFF', 8, 'RDIBBM')),
-    ('rdi', (0, 'RIFF', 8, 'RDIBdata')),
     ('dcx', (0, '\xb1\x68\xde\x3a', 8, lambda header: (len(header) < 8 or header[5 : 8] != '\0\0\0' or ord(header[4]) >= 12, 2))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 7, ('\0', '\x10', '\x18', '\x20'), 16, ('\1', '\2', '\4', '\x08', '\x0f', '\x10', '\x18', '\x20'))),
@@ -10957,8 +11009,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'pnot': analyze_pnot,
     'ac3': analyze_ac3,
     'dts': analyze_dts,
-    'bmp': analyze_bmp,
-    'rdi': analyze_rdi,
     'mng': analyze_mng,
     'xml': analyze_xml,
     'xml-comment': analyze_xml,
