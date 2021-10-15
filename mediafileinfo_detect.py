@@ -6325,20 +6325,22 @@ def analyze_deep(fread, info, fskip):
       info['codec'] = str(codec)
 
 
-def analyze_pcx(fread, info, fskip):
+def analyze_pcx(fread, info, fskip, format='pcx', fclass='image',
+               spec=(0, '\n', 1, ('\0', '\2', '\3', '\4', '\5'), 2, ('\0', '\1'), 3, ('\1', '\2', '\4', '\x08'))):
   # https://en.wikipedia.org/wiki/PCX
   header = fread(12)
   if len(header) < 12:
     raise ValueError('Too short for pcx.')
   signature, version, encoding, bpp, xmin, ymin, xmax, ymax = struct.unpack(
       '<BBBBHHHH', header)
-  if signature != 10 or version > 5 or encoding != 1 or bpp not in (1, 2, 4, 8):
+  if not (signature == 10 and version in (0, 2, 3, 4, 5) and encoding in (0, 1) and bpp in (1, 2, 4, 8)):
     raise ValueError('pcx signature not found.')
   if xmax < xmin:
     raise ValueError('pcx xmax smaller than xmin.')
   if ymax < ymin:
     raise ValueError('pcx ymax smaller than ymin.')
-  info['format'], info['codec'] = 'pcx', 'rle'
+  info['format'] = 'pcx'
+  info['codec'] = ('uncompressed', 'rle')[encoding]
   info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
 
 
@@ -10363,7 +10365,6 @@ FORMAT_ITEMS.extend((
     ('bmp', (0, 'BM', 6, '\0\0\0\0', 15, '\0\0\0', 22, lambda header: (len(header) >= 22 and 12 <= ord(header[14]) <= 127, 52))),
     ('rdi', (0, 'RIFF', 8, 'RDIBBM')),
     ('rdi', (0, 'RIFF', 8, 'RDIBdata')),
-    ('pcx', (0, '\n', 1, ('\0', '\1', '\2', '\3', '\4', '\5'), 2, '\1', 3, ('\1', '\2', '\4', '\x08'))),
     ('dcx', (0, '\xb1\x68\xde\x3a', 8, lambda header: (len(header) < 8 or header[5 : 8] != '\0\0\0' or ord(header[4]) >= 12, 2))),
     # Not all tga (targa) files have 'TRUEVISION-XFILE.\0' footer.
     ('tga', (0, ('\0',) + tuple(chr(c) for c in xrange(30, 64)), 1, ('\0', '\1'), 2, ('\1', '\2', '\3', '\x09', '\x0a', '\x0b', '\x20', '\x21'), 7, ('\0', '\x10', '\x18', '\x20'), 16, ('\1', '\2', '\4', '\x08', '\x0f', '\x10', '\x18', '\x20'))),
@@ -10887,7 +10888,6 @@ FORMAT_ITEMS.extend((
 # TODO(pts): Move everything from here to analyze(..., format=...).
 ANALYZE_FUNCS_BY_FORMAT = {
     'deep': analyze_deep,
-    'pcx': analyze_pcx,
     'dcx': analyze_dcx,
     'xbm': analyze_xbm,
     'xpm': analyze_xpm,

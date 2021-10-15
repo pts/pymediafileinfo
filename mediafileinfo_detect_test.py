@@ -393,6 +393,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_pcx(self):
     self.assertEqual(analyze_string('\n\5\1\x08\0\0\0\0\2\1\4\1'),
                      {'format': 'pcx', 'codec': 'rle', 'height': 261, 'width': 259})
+    self.assertEqual(analyze_string('\n\4\0\x08\0\0\0\0\2\1\4\1'),
+                     {'format': 'pcx', 'codec': 'uncompressed', 'height': 261, 'width': 259})
 
   def test_analyze_dcx(self):
     data_pcx = '\n\5\1\x08\0\0\0\0\2\1\4\1'
