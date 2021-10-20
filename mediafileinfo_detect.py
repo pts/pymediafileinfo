@@ -6374,7 +6374,7 @@ def analyze_deep(fread, info, fskip):
 
 
 def analyze_pcx(fread, info, fskip, format='pcx', fclass='image',
-               spec=(0, '\n', 1, ('\0', '\2', '\3', '\4', '\5'), 2, ('\0', '\1'), 3, ('\1', '\2', '\4', '\x08'))):
+                spec=(0, '\n', 1, ('\0', '\2', '\3', '\4', '\5'), 2, ('\0', '\1'), 3, ('\1', '\2', '\4', '\x08'))):
   # https://en.wikipedia.org/wiki/PCX
   header = fread(12)
   if len(header) < 12:
@@ -6390,6 +6390,57 @@ def analyze_pcx(fread, info, fskip, format='pcx', fclass='image',
   info['format'] = 'pcx'
   info['codec'] = ('uncompressed', 'rle')[encoding]
   info['width'], info['height'] = xmax - xmin + 1, ymax - ymin + 1
+
+
+def is_f32_pos_nbit16(f):
+  """Is f (an f32) a positive integer, smaller than (1 << 16)?"""
+  return (f > 0 and 0 <= (f >> 23) - 127 < 16 and
+          not (f & ((1 << (150 - (f >> 23))) - 1)))
+
+
+def count_is_spider(header):
+  if len(header) < 48:
+    return False
+  if header.startswith('\x3f\x80\0\0') and header[16 : 20] == '\x3f\x80\0\0':
+    fmt = '>'
+  elif header.startswith('\0\0\x80\x3f') and header[16 : 20] == '\0\0\x80\x3f':
+    fmt = '<'
+  else:
+    return False
+  height, width = struct.unpack(fmt + '4xL36xL', buffer(header, 0, 48))
+  if not (is_f32_pos_nbit16(width) and is_f32_pos_nbit16(height)):
+    return False
+  # Confidence of is_f32_pos_nbit16 is 201.
+  return (800 - 13) + 2 * 201
+
+
+def analyze_spider(fread, info, fskip, format='spider', fclass='image',
+                   spec=(0, ('\x3f\x80\0\0', '\0\0\x80\x3f'), 48, lambda header: adjust_confidence(800 - 13, count_is_spider(header)))):
+  # https://github.com/python-pillow/Pillow/blob/862be7cbcda1a4fc566a4679ad38b0cd8bba22fe/src/PIL/SpiderImagePlugin.py#L234-L259
+  # https://en.wikipedia.org/wiki/Single-precision_floating-point_format
+  header = fread(48)
+  if len(header) < 48:
+    raise ValueError('Too short for spider.')
+  if not (  # Check slice_count == 1.0 and iform == 1.0 (2D), both as f32.
+     (header.startswith('\x3f\x80\0\0') and header[16 : 20] == '\x3f\x80\0\0') or
+     (header.startswith('\0\0\x80\x3f') and header[16 : 20] == '\0\0\x80\x3f')):
+    raise ValueError('spider signature not found.')
+
+  def get_int_from_posint_f32(f):
+    shift = 150 - (f >> 23)
+    assert 0 <= shift <= 23
+    return int((0x800000 | f & 0x7fffff) >> shift)
+
+  fmt = '<>'[header[0] != '\0']  # Detect endianness.
+  height, width = struct.unpack(fmt + '4xL36xL', buffer(header, 0, 48))
+  # Valid iform (header[16 : 20]) values: 1 (2D), 3, -11, -12, -21, -22.
+  if not is_f32_pos_nbit16(width):
+    raise ValueError('Bad spider width.')
+  if not is_f32_pos_nbit16(height):
+    raise ValueError('Bad spider height.')
+  info['format'], info['codec'] = 'spider', 'uncompressed'
+  info['width'] = get_int_from_posint_f32(width)
+  info['height'] = get_int_from_posint_f32(height)
 
 
 def analyze_dcx(fread, info, fskip):
