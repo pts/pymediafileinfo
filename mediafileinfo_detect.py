@@ -10910,6 +10910,10 @@ FORMAT_ITEMS.extend((
     # https://smsoft.ru/en/pifdoc.htm
     # file-5.30/magic/Magdir/msdos
     ('pif', (0, '\0', 30, '  ', 0x171, 'MICROSOFT PIFEX\0\x87\1\0\0')),
+    # Microsoft Windows internet shortcut.
+    # http://www.lyberty.com/encyc/articles/tech/dot_url_format_-_an_unofficial_guide.html
+    # https://stackoverflow.com/q/13088263
+    ('url', (0, '[InternetShortcut]', 18, ('\r', '\n'))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
