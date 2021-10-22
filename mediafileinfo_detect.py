@@ -9748,7 +9748,7 @@ def analyze_gz(fread, info, fskip):
   info['format'], info['codec'] = 'gz', 'flate'
 
 
-def analyze_xz(fread, info, fskip, format='xz', fclass='other',
+def analyze_xz(fread, info, fskip, format='xz', fclass='compress',
                spec=(0, '\xfd7zXZ\0')):
   # http://fileformats.archiveteam.org/wiki/XZ
   header = fread(6)
