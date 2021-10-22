@@ -10339,8 +10339,7 @@ def count_is_html(header):
 # ---
 
 
-# TODO(pts): Move everything from here to analyze_...(..., format=..., spec=...).
-# TODO(pts): Make Spec matching callable from analyze_...().
+# TODO(pts): Move everything from here to def analyze_...(..., format=..., spec=...) or add_format(...).
 # TODO(pts): Static analysis: autodetect conflicts and subsumes in string-only matchers.
 # TODO(pts): Optimization: create prefix dict of 8 bytes as well.
 FORMAT_ITEMS.extend((
@@ -10717,25 +10716,8 @@ FORMAT_ITEMS.extend((
     # https://github.com/pts/upxbc/blob/0c5c63aef8c5c3336945a92a3829078d64dfdee2/upxbc#L1239
     ('upxz', (0, 'UPXZ')),
 
-    # fclass='code', fclass='other': Non-compressed, non-media.
+    # fclass='code': Code: source code, machine code or bytecode.
 
-    ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
-    ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
-    ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
-    # 408 is arbitrary, but since cups-raster has it, we can also that much.
-    ('xml-comment', (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
-    ('xml-comment', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
-    ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 7, lambda header: (header[:5].lower() == '<?php', 200))),
-    # We could be more strict here, e.g. rejecting non-HTML docypes.
-    # 408 is arbitrary, but since cups-raster has it, we can also that much.
-    ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
-    ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
-    ('xhtml',),  # From 'html' and 'xml'.
-    # Contains thumbnails of multiple images files.
-    # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
-    # pspbrwse.jbf
-    # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
-    ('jbf', (0, 'JASC BROWS FILE\0')),
     # .o object files created by Go.
     # See printObjHeader in go/src/cmd/compile/internal/gc/obj.go
     # TODO(pts): Read XCOFF in go/src/cmd/link/internal/ld/lib.go
@@ -10748,9 +10730,6 @@ FORMAT_ITEMS.extend((
     # doesn't seem to print any specific header in the assemble(...)
     # function. The corresponding lex.c in Go prints "go object ".
     ('go-object', (0, 'go object ')),
-    # `nasm -f rdf' output.
-    # https://en.wikipedia.org/wiki/Netwide_Assembler#RDOFF
-    ('rdoff', (0, 'RDOFF', 5, ('1', '2'))),
     # This header seems to come right after 'go object ...\n!\n', so it
     # isn't at the beginning of the file.
     # .o object files created by newer (1.14) Go.
@@ -10834,18 +10813,6 @@ FORMAT_ITEMS.extend((
     ('scumm-index', (0, '\xad\xb1\xbe\xb2\xff\xff\xff\xf6\xff\xb2\xbe\xa7\xac')),
     # https://en.wikipedia.org/wiki/Scratch_(programming_language)#File_formats
     ('scratch', (0, ('ScratchV01', 'ScratchV02'))),
-    # OLE compound file == composite document file, including Thumbs.db and
-    # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
-    ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
-    ('avidemux-mpeg-index', (0, 'ADMY')),
-    ('avidemux-project', (0, '//AD')),
-    # *** These modified files were found in JOE when it aborted on ...
-    # *** JOE was aborted by UNIX signal ...
-    # *** Modified files in JOE when it aborted on
-    ('deadjoe', (0, '\n*** ', 5, ('These modified', 'JOE was aborte', 'Modified files'))),
-    # Filename extension: .mfo
-    # Example: output of pymediafileinfo and media_scan.py.
-    ('mediafileinfo', (0, 'format=')),
     ('unixscript', (0, '#!', 4, lambda header: (header.startswith('#!/') or header.startswith('#! /'), 110))),
     # Windows .cmd or DOS .bat file. Not all such file have a signature though.
     ('windows-cmd', (0, '@', 1, ('e', 'E'), 11, lambda header: (header[:11].lower() == '@echo off\r\n', 900))),
@@ -10860,6 +10827,41 @@ FORMAT_ITEMS.extend((
     # TODO(pts): For the ASCII (.ll) format: https://subscription.packtpub.com/book/application_development/9781785285981/1/ch01lvl1sec13/converting-ir-to-llvm-bitcode
     ('llvm-bitcode', (0, '\xde\xc0\x17\x0b\0\0\0\0')),
     ('llvm-bitcode', (0, 'BC\xc0\xde')),  # Usually continues with '\x21\0c\00' -- is it a function?
+    # https://en.wikipedia.org/wiki/Netwide_Assembler#RDOFF
+    ('rdoff', (0, 'RDOFF', 5, ('1', '2'))),
+
+    # fclass='other': Non-code, non-compressed, non-media.
+
+    ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
+    ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
+    ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('xml-comment', (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
+    ('xml-comment', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
+    ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 7, lambda header: (header[:5].lower() == '<?php', 200))),
+    # We could be more strict here, e.g. rejecting non-HTML docypes.
+    # 408 is arbitrary, but since cups-raster has it, we can also that much.
+    ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
+    ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
+    ('xhtml',),  # From 'html' and 'xml'.
+    # Contains thumbnails of multiple images files.
+    # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
+    # pspbrwse.jbf
+    # https://github.com/0x09/jbfinspect/blob/master/jbfinspect.c
+    ('jbf', (0, 'JASC BROWS FILE\0')),
+    # `nasm -f rdf' output.
+    # OLE compound file == composite document file, including Thumbs.db and
+    # Microsoft Office 97--2003 documents (.doc, .xls, .ppt).
+    ('olecf', (0, ('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', '\x0e\x11\xfc\x0d\xd0\xcf\x11\x0e'))),
+    ('avidemux-mpeg-index', (0, 'ADMY')),
+    ('avidemux-project', (0, '//AD')),
+    # *** These modified files were found in JOE when it aborted on ...
+    # *** JOE was aborted by UNIX signal ...
+    # *** Modified files in JOE when it aborted on
+    ('deadjoe', (0, '\n*** ', 5, ('These modified', 'JOE was aborte', 'Modified files'))),
+    # Filename extension: .mfo
+    # Example: output of pymediafileinfo and media_scan.py.
+    ('mediafileinfo', (0, 'format=')),
     ('cue', (0, 'REM GENRE ')),
     ('cue', (0, 'REM DATE ')),
     ('cue', (0, 'REM DISCID ')),
