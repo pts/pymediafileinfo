@@ -10899,6 +10899,9 @@ FORMAT_ITEMS.extend((
         # 270 possible manufacturer values: http://www.color.org/signatureRegistry/index.xalter
         #48, ('\0\0\0\0', 'ADBE', 'CANO', 'EPSO', 'HP  ', 'IBM ', 'IEC ', 'KODA', 'QMS ', 'TEKT', 'argl', 'none'),
     )),
+    # https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html
+    ('desktop', (0, '[Desktop Entry]', 15, ('\r', '\n'))),
+    ('desktop', (0, '[KDE Desktop Entry]', 19, ('\r', '\n'))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
