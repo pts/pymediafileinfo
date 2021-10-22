@@ -10336,6 +10336,36 @@ def count_is_html(header):
   return False
 
 
+def count_is_msoffice_owner(header):
+  # File names starting with ~$ , they are called ``owner files'' in the Microsoft Office documentation.
+  # https://support.microsoft.com/en-us/topic/description-of-how-word-creates-temporary-files-66b112fb-d2c0-8f40-a0be-70a367cc4c85
+  # File format prefix is an educated guess based on samples.
+  if len(header) < 54:
+    return False
+  name_size = ord(header[0])
+  if not 1 <= name_size <= 53:
+    return False
+  c = 29  # Confidence.
+  for i in xrange(1, name_size + 1):  # Username in 8-bit encoding.
+    if ord(header[i]) < 32:
+      return False
+    c += 38
+  for i in xrange(name_size + 1, 54):
+    if header[i] != '\0':
+      return False
+    c += 100
+  if len(header) >= 56:
+    name_size2, = struct.unpack('<H', header[54 : 56])
+    if name_size2 != name_size:
+      return False
+    c += 200
+  elif len(header) == 55:
+    if ord(header[54]) != name_size:
+      return False
+    c += 100
+  return c
+
+
 # ---
 
 
@@ -10914,6 +10944,7 @@ FORMAT_ITEMS.extend((
     # http://www.lyberty.com/encyc/articles/tech/dot_url_format_-_an_unofficial_guide.html
     # https://stackoverflow.com/q/13088263
     ('url', (0, '[InternetShortcut]', 18, ('\r', '\n'))),
+    ('msoffice-owner', (0, tuple(chr(c) for c in xrange(1, 54)), 56, lambda header: adjust_confidence(29, count_is_msoffice_owner(header)))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
