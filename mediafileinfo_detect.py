@@ -10902,6 +10902,10 @@ FORMAT_ITEMS.extend((
     # https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html
     ('desktop', (0, '[Desktop Entry]', 15, ('\r', '\n'))),
     ('desktop', (0, '[KDE Desktop Entry]', 19, ('\r', '\n'))),
+    # Microsoft Windows shortcut.
+    # https://ithreats.files.wordpress.com/2009/05/lnk_the_windows_shortcut_file_format.pdf
+    # file-5.30/magic/Magdir/windows
+    ('lnk', (0, '\114\0\0\0\001\024\002\0\0\0\0\0\300\0\0\0\0\0\0\106')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
