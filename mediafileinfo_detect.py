@@ -10253,8 +10253,22 @@ def analyze_signify(fread, info, fskip, format='signify', fclass='crypto',
     info['format'] = 'signify-signature'
 
 
+ODF_FORMAT_BY_MIMETYPE = {
+    'application/vnd.oasis.opendocument.base': 'odf-odb',
+    'application/vnd.oasis.opendocument.formula': 'odf-odf',
+    'application/vnd.oasis.opendocument.graphics': 'odf-odg',
+    'application/vnd.oasis.opendocument.presentation': 'odf-odp',
+    'application/vnd.oasis.opendocument.spreadsheet': 'odf-ods',
+    'application/vnd.oasis.opendocument.text': 'odf-odt',
+    'application/vnd.oasis.opendocument.graphics-template': 'odf-otg',
+    'application/vnd.oasis.opendocument.presentation-template': 'odf-otp',
+    'application/vnd.oasis.opendocument.spreadsheet-template': 'odf-ots',
+    'application/vnd.oasis.opendocument.text-template': 'odf-ott',
+}
+
+
 def analyze_zip(fread, info, fskip, format='zip', fclass='archive',
-                extra_formats=('msoffice-zip', 'msoffice-docx', 'msoffice-xlsx', 'msoffice-pptx'),
+                extra_formats=('msoffice-zip', 'msoffice-docx', 'msoffice-xlsx', 'msoffice-pptx', 'odf-zip') + tuple(ODF_FORMAT_BY_MIMETYPE.itervalues()),
                 spec=((0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6')),
                       (0, 'PK00PK', 6, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6')))):
   # Also Java jar, Android apk, Python .zip, .docx, .xlsx, .pptx,  ODT, ODS, ODP.
@@ -10293,26 +10307,29 @@ def analyze_zip(fread, info, fskip, format='zip', fclass='archive',
   if len(filename) != filename_size or not fskip(extra_field_size):
     return
   if filename == '[Content_Types].xml':
-    info['format'] = 'msoffice-zip'
+    info['format'], max_size = 'msoffice-zip', 65536
+  elif filename == 'mimetype':
+    info['format'], max_size = 'odf-zip', 256  # OpenDocument Format.
   else:
     return
-  if method:  # Usually compressed for msoffice-zip'.
+
+  if method:  # Usually compressed for msoffice-zip.
     try:
       import zlib
     except ImportError:
       return
     zd = zlib.decompressobj(-15)
     if compressed_size is None:
-      data = fread(65536)
+      data = fread(max_size)
     else:
       zd = zlib.decompressobj(-15)
-      data = fread(min(compressed_size, 65536))
+      data = fread(min(compressed_size, max_size))
     try:
-      data = zd.decompress(data)[:65536]  # TODO(pts): Decompress in 256-byte chunks to prevent size blowup.
+      data = zd.decompress(data)[:max_size]  # TODO(pts): Decompress in 256-byte chunks to prevent size blowup.
     except zlib.error:
       return
-  else:
-    data = fread(min(uncompressed_size, 65536))
+  else:  # Usuually uncompressed for odf-zip.
+    data = fread(min(uncompressed_size, max_size))
   if info['format'] == 'msoffice-zip' and data.startswith('<?xml '):
     is_docx = ' PartName="/word/' in data
     is_xlsx = ' PartName="/xl/' in data
@@ -10324,6 +10341,10 @@ def analyze_zip(fread, info, fskip, format='zip', fclass='archive',
         info['format'] = 'msoffice-xlsx'
       elif is_pptx:
         info['format'] = 'msoffice-pptx'
+  elif info['format'] == 'odf-zip':
+    format = ODF_FORMAT_BY_MIMETYPE.get(data)
+    if format is not None:
+      info['format'] = format
 
 
 def count_is_troff(header):
