@@ -397,18 +397,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'pcx', 'codec': 'uncompressed', 'height': 261, 'width': 259})
 
   def test_analyze_spider(self):
-    def get_spider_header(width, height, iform=1, fmt='>'):
+    def build_spider_header(width, height, iform=1, fmt='>'):
       # iform=1 means 2D.
       slice_count = 1  # It means image.
       d, = struct.unpack(fmt + 'f', '~~!@')  # Dummy.
       return struct.pack(fmt + '12f', slice_count, height, d, d, iform,
                          d, d, d, d, d, d, width)
 
-    self.assertEqual(analyze_string(get_spider_header(width=5678, height=1234, fmt='>')),
+    self.assertEqual(analyze_string(build_spider_header(width=5678, height=1234, fmt='>')),
                      {'format': 'spider', 'codec': 'uncompressed', 'height': 1234, 'width': 5678})
-    self.assertEqual(analyze_string(get_spider_header(width=5678, height=1234, fmt='<')),
+    self.assertEqual(analyze_string(build_spider_header(width=5678, height=1234, fmt='<')),
                      {'format': 'spider', 'codec': 'uncompressed', 'height': 1234, 'width': 5678})
-    self.assertEqual(analyze_string(get_spider_header(width=5678, height=1234, iform=3, fmt='<')),
+    self.assertEqual(analyze_string(build_spider_header(width=5678, height=1234, iform=3, fmt='<')),
                      {'format': '?'})  # spider images with iform=3 are not detected.
 
   def test_analyze_dcx(self):
