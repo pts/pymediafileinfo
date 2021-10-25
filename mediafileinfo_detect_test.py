@@ -622,6 +622,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'png', 'codec': 'flate', 'width': 1281, 'height': 770})
     self.assertEqual(analyze_string(data2),
                      {'format': 'apng', 'detected_format': 'png', 'codec': 'flate', 'width': 1281, 'height': 770})
+    self.assertEqual(analyze_string('\x89PNG\r\n\x1a\n\0\0\0\4CgBI\x50\0\x20\6\x2c\xb8\x77\x66' + data1[8:]),
+                     {'format': 'png', 'subformat': 'apple', 'codec': 'flate', 'width': 1281, 'height': 770})
 
   def test_analyze_jng(self):
     self.assertEqual(analyze_string('\x8bJNG\r\n\x1a\n\0\0\0\rJHDR\0\0\5\1\0\0\3\2'),

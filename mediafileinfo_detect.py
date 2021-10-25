@@ -6281,13 +6281,28 @@ def analyze_mng(fread, info, fskip, format='mng', fclass='image',
 
 
 def analyze_png(fread, info, fskip, format='png', extra_formats=('apng',), fclass='image',
-                spec=(0, '\x89PNG\r\n\x1a\n\0\0\0', 12, 'IHDR')):
+                spec=((0, '\x89PNG\r\n\x1a\n\0\0\0', 12, 'IHDR'),
+                      (0, '\x89PNG\r\n\x1a\n\0\0\0\x04CgBI\x50\0\x20', 24, '\0\0\0', 28, 'IHDR'))):
   # https://tools.ietf.org/html/rfc2083
   # https://wiki.mozilla.org/APNG_Specification
   header = fread(24)
   if len(header) < 24:
     raise ValueError('Too short for png.')
-  if not header.startswith('\x89PNG\r\n\x1a\n\0\0\0') or header[12 : 16] != 'IHDR':
+  if header.startswith('\x89PNG\r\n\x1a\n\0\0\0'):
+    if header[12 : 16] == 'IHDR':
+      pass
+    elif header[12 : 19] == 'CgBI\x50\0\x20':
+      # https://iphonedev.wiki/index.php/CgBI_file_format
+      # https://stackoverflow.com/a/20670192/
+      header += fread(16)
+      if len(header) == 40 and header[24 : 27] == '\0\0\0' and header[28 : 32] == 'IHDR':
+        info['subformat'] = 'apple'  # For iOS.
+        header = header[16:]
+      else:
+        header = ''
+  else:
+    header = ''
+  if not header:
     raise ValueError('png signature not found.')
   info['format'], info['codec'] = 'png', 'flate'
   info['width'], info['height'] = struct.unpack('>LL', header[16 : 24])
