@@ -6094,6 +6094,8 @@ def analyze_xml(fread, info, fskip):
         i = data.find('>', j) + 1
         if i <= 0:
           raise EOFError
+        if i - 1 > j and data[i - 2] == '/':
+          i -= 1
         if tag_name.startswith('!'):
           if tag_name == '!DOCTYPE':  # XML doctype is uppercase.
             if had_doctype:
@@ -6140,6 +6142,10 @@ def analyze_xml(fread, info, fskip):
           attrs = parse_attrs(buffer(data, j, i - j - 1))
           if (attrs.get('version', '') + 'xx')[:2] not in ('1.', '2.', '3.'):
             raise ValueError('Bad texmacs version: %r' % attrs.get('version'))
+        elif tag_name == 'math':
+          attrs = parse_attrs(buffer(data, j, i - j - 1))
+          if attrs.get('xmlns') == 'http://www.w3.org/1998/Math/MathML':
+            info['format'] = 'mathml'
         break
       else:
         raise ValueError('xml tag expected.')
@@ -10979,6 +10985,7 @@ FORMAT_ITEMS.extend((
     ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
     ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
     ('xhtml',),  # From 'html' and 'xml'.
+    ('mathml',),
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf

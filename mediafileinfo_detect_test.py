@@ -800,6 +800,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_texmacs_xml(self):
     self.assertEqual(analyze_string('<?xml version="1.0"?>\n\n<TeXmacs version="1.99.9">'), {'format': 'texmacs', 'detected_format': 'xml', 'subformat': 'xml'})
 
+  def test_analyze_mathml(self):
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\n\n<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"/>'),
+                     {'format': 'mathml', 'detected_format': 'xml'})
+
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen
     self.assertRaises(ValueError, f, '')
