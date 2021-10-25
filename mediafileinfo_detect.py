@@ -5907,7 +5907,41 @@ def parse_svg_dimen(data):
   return data
 
 
-def analyze_xml(fread, info, fskip):
+def count_is_xml(header):
+  # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
+  if header.startswith('<?xml?>'):
+    # XMLDecl needs version="...", but we are lenient here.
+    return 700
+  if not header.startswith('<?xml') and header[5 : 6].isspace():
+    return False
+  i = 6
+  while i < len(header) and header[i].isspace():
+    i += 1
+  header = header[i : i + 13]
+  if header.startswith('?>'):
+    return (i + 2) * 100
+  for decl in ('version=', 'encoding=', 'standalone='):
+    i = len(decl)
+    if header.startswith(decl) and len(header) > i and header[i] in '"\'':
+      return (i + 1) * 100
+  return False
+
+
+def count_is_xml_comment(header):
+  i = 0
+  while i < len(header) and header[i].isspace():
+    i += 1
+  if header[i : i + 4] != '<!--':
+    return False
+  return (i + 4) * 100
+
+
+def analyze_xml(fread, info, fskip, format='xml', fclass='other',
+                extra_formats=('xml-comment', 'xhtml', 'mathml'),  # Also generates 'smil' etc.
+                spec=((0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header))),
+                      # 408 is arbitrary, but since cups-raster has it, we can also that much.
+                      (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header))),
+                      (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_xml_comment(header))))):
   # https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
   whitespace = '\t\n\x0b\x0c\r '
   whitespace_tagend = whitespace + '>'
@@ -10391,35 +10425,6 @@ def count_is_info(header):
     return (i + 1) * 100  # +1: '\n'
 
 
-def count_is_xml(header):
-  # XMLDecl in https://www.w3.org/TR/2006/REC-xml11-20060816/#sec-rmd
-  if header.startswith('<?xml?>'):
-    # XMLDecl needs version="...", but we are lenient here.
-    return 700
-  if not header.startswith('<?xml') and header[5 : 6].isspace():
-    return False
-  i = 6
-  while i < len(header) and header[i].isspace():
-    i += 1
-  header = header[i : i + 13]
-  if header.startswith('?>'):
-    return (i + 2) * 100
-  for decl in ('version=', 'encoding=', 'standalone='):
-    i = len(decl)
-    if header.startswith(decl) and len(header) > i and header[i] in '"\'':
-      return (i + 1) * 100
-  return False
-
-
-def count_is_xml_comment(header):
-  i = 0
-  while i < len(header) and header[i].isspace():
-    i += 1
-  if header[i : i + 4] != '<!--':
-    return False
-  return (i + 4) * 100
-
-
 def count_is_html(header):
   i = 0
   while i < len(header) and header[i].isspace():
@@ -10975,17 +10980,11 @@ FORMAT_ITEMS.extend((
 
     ('appledouble', (0, '\0\5\x16\7\0', 6, lambda header: (header[5] <= '\3', 25))),
     ('dsstore', (0, '\0\0\0\1Bud1\0')),  # https://en.wikipedia.org/wiki/.DS_Store
-    ('xml', (0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header)))),
-    # 408 is arbitrary, but since cups-raster has it, we can also that much.
-    ('xml-comment', (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header)))),
-    ('xml-comment', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_xml_comment(header)))),
     ('php', (0, '<?', 2, ('p', 'P'), 6, WHITESPACE, 7, lambda header: (header[:5].lower() == '<?php', 200))),
     # We could be more strict here, e.g. rejecting non-HTML docypes.
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
     ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
-    ('xhtml',),  # From 'html' and 'xml'.
-    ('mathml',),
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf
@@ -11227,8 +11226,6 @@ ANALYZE_FUNCS_BY_FORMAT = {
     'ac3': analyze_ac3,
     'dts': analyze_dts,
     'mng': analyze_mng,
-    'xml': analyze_xml,
-    'xml-comment': analyze_xml,
     'html': analyze_xml,
     'svg': analyze_xml,
     'smil': analyze_xml,

@@ -766,9 +766,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(data3), {'format': 'xml'})
     self.assertEqual(analyze_string(data4), {'format': 'xml'})
     self.assertEqual(analyze_string(data5), {'format': 'xml'})
-    self.assertEqual(analyze_string(data6), {'format': 'xml', 'detected_format': 'xml-comment'})
-    self.assertEqual(analyze_string(' ' + data6), {'format': 'xml', 'detected_format': 'xml-comment'})
-    self.assertEqual(analyze_string(data7), {'format': 'xml-comment'})
+    self.assertEqual(analyze_string(data6), {'format': 'xml'})
+    self.assertEqual(analyze_string(' ' + data6), {'format': 'xml'})
+    self.assertEqual(analyze_string(data7), {'format': 'xml-comment', 'detected_format': 'xml'})
 
   def test_analyze_html(self):
     self.assertEqual(analyze_string('\t\f<!doctype\rhtml\r'), {'format': 'html'})
@@ -780,8 +780,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\t\f<body\n'), {'format': 'html'})
     self.assertEqual(analyze_string('\t\f<body>'), {'format': 'html'})
     data2 = '<!--x-->\t\f<body>'
-    self.assertEqual(analyze_string(data2), {'format': 'html', 'detected_format': 'xml-comment'})
-    self.assertEqual(analyze_string('\r\n' + data2), {'format': 'html', 'detected_format': 'xml-comment'})
+    self.assertEqual(analyze_string(data2), {'format': 'html', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('\r\n' + data2), {'format': 'html', 'detected_format': 'xml'})
     self.assertEqual(analyze_string('\t\f<!doctype\rhtml=', expect_error=True, analyze_func=mediafileinfo_detect.analyze_xml), {'detected_format': '?', 'detected_analyze': None, 'error': 'xml signature not found.'})
     self.assertEqual(analyze_string('\t\f<html=', expect_error=True, analyze_func=mediafileinfo_detect.analyze_xml), {'detected_format': '?', 'detected_analyze': None, 'error': 'xml signature not found.'})
 
@@ -794,7 +794,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string(data1), {'format': 'xhtml', 'detected_format': 'html'})
     self.assertEqual(analyze_string(data2), {'format': 'xhtml', 'detected_format': 'html'})
     self.assertEqual(analyze_string(data3), {'format': 'xhtml', 'detected_format': 'xml'})
-    self.assertEqual(analyze_string(data4), {'format': 'xhtml', 'detected_format': 'xml-comment'})
+    self.assertEqual(analyze_string(data4), {'format': 'xhtml', 'detected_format': 'xml'})
     self.assertEqual(analyze_string(data5), {'format': 'xhtml', 'detected_format': 'html'})
 
   def test_analyze_texmacs_xml(self):
@@ -836,7 +836,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<svg:svg>\f'),
                      {'format': 'svg'})
     self.assertEqual(analyze_string('<!-- --><svg>'),
-                     {'format': 'svg', 'detected_format': 'xml-comment'})
+                     {'format': 'svg', 'detected_format': 'xml'})
     self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!-- Created with Sodipodi ("http://www.sodipodi.com/") -->\n<svg\n   xmlns:xml="http://www.w3.org/XML/1998/namespace"\n   xmlns:dc="http://purl.org/dc/elements/1.1/"\n   xmlns:cc="http://web.resource.org/cc/"\n   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"\n   xmlns:svg="http://www.w3.org/2000/svg"\n   xmlns="http://www.w3.org/2000/svg"\n   xmlns:xlink="http://www.w3.org/1999/xlink"\n   xmlns:sodipodi="http://inkscape.sourceforge.net/DTD/sodipodi-0.dtd"\n   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"\n   id="svg602"\n   sodipodi:version="0.32"\n   width="100.00000pt"\n   height="100.00000pt"\n   xml:space="preserve"\n   sodipodi:docname="english.svg"\n   sodipodi:docbase="/home/terry/.icons/nabi"\n   inkscape:version="0.41"\n   inkscape:export-filename="/home/terry/images/icon/png/NewDir/txtfile.png"\n   inkscape:export-xdpi="200.00000"\n   inkscape:export-ydpi="200.00000"><foo'),
                      {'format': 'svg', 'detected_format': 'xml', 'height': 125, 'width': 125})
     self.assertEqual(analyze_string('<?xml version="1.0" standalone="no"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"\n   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<!--\n    Designed after data from http://www.wacom-asia.com/download/manuals/BambooUsersManual.pdf\n    Size and positions of controls may not be accurate\n -->\n<svg\n   xmlns="http://www.w3.org/2000/svg"\n   version="1.1"\n   style="color:#000000;stroke:#7f7f7f;fill:none;stroke-width:.25;font-size:8"\n   id="bamboo-2fg"\n   width="208"\n   height="136">\n  <title'),
@@ -846,7 +846,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<svg:svg xmlns = \'http://www.w3.org/2000/svg\' width="2e3" height="0009px">'),
                      {'format': 'svg', 'height': 9, 'width': 2000})
     self.assertEqual(analyze_string('<!-- my\ncomment -->\r\n <svg:svg xmlns = \'http://www.w3.org/2000/svg\' width="2e3" height="0009px">'),
-                     {'format': 'svg', 'detected_format': 'xml-comment', 'height': 9, 'width': 2000})
+                     {'format': 'svg', 'detected_format': 'xml', 'height': 9, 'width': 2000})
     data1 = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [\r\n	<!ENTITY ns_svg "http://www.w3.org/2000/svg">\r\n	<!ENTITY ns_xlink "http://www.w3.org/1999/xlink">\r\n]>\n<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="129" viewBox="0 0 128 129" overflow="visible" enable-background="new 0 0 128 129" xml:space="preserve">'
     self.assertEqual(analyze_string(data1),
                      {'format': 'svg', 'detected_format': 'xml', 'height': 129, 'width': 128})
@@ -855,7 +855,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<?xml version="1.0"?>\n<svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 -200 800 700">\n  <title>'),
                      {'format': 'svg', 'detected_format': 'xml', 'height': 700, 'width': 800})
     self.assertEqual(analyze_string('<!----><svg xmlns="http://www.w3.org/2000/svg">\n  <view id="normal" viewBox="0 0 17 19"/>'),
-                     {'format': 'svg', 'detected_format': 'xml-comment', 'height': 19, 'width': 17})
+                     {'format': 'svg', 'detected_format': 'xml', 'height': 19, 'width': 17})
 
   def test_analyze_smil(self):
     self.assertEqual(analyze_string('<smil>'),
@@ -863,7 +863,7 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<smil\r'),
                      {'format': 'smil'})
     self.assertEqual(analyze_string('<!-- my\ncomment -->\t\t<smil>'),
-                     {'format': 'smil', 'detected_format': 'xml-comment'})
+                     {'format': 'smil', 'detected_format': 'xml'})
     self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\n<!-- Comment --->\n<!DOCTYPE smil -->\t\f<smil xml:id="root" xmlns="http://www.w3.org/ns/SMIL" version="3.0" baseProfile="Tiny" >'),
                      {'format': 'smil', 'detected_format': 'xml'})
 
