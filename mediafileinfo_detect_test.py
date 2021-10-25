@@ -814,6 +814,18 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\r<uof:UOF xmlns:uof="http://schemas.uof.org/cn/2003/uof" uof:mimetype="vnd.uof.text">'),
                      {'format': 'uof-uot', 'detected_format': 'xml'})
 
+  def test_analyze_odf_flatxml(self):
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\t<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"/>'),
+                     {'format': 'odf-flatxml', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\t<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:mimetype="application/vnd.oasis.opendocument.graphics">'),
+                     {'format': 'odf-flatxml-fodg', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\t<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:mimetype="application/vnd.oasis.opendocument.presentation">'),
+                     {'format': 'odf-flatxml-fodp', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\t<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:mimetype="application/vnd.oasis.opendocument.spreadsheet">'),
+                     {'format': 'odf-flatxml-fods', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\t<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:mimetype="application/vnd.oasis.opendocument.text">'),
+                     {'format': 'odf-flatxml-fodt', 'detected_format': 'xml'})
+
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen
     self.assertRaises(ValueError, f, '')

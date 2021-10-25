@@ -5942,9 +5942,16 @@ UOF_FORMAT_BY_MIMETYPE = {
     'vnd.uof.text': 'uof-uot',
 }
 
+ODF_FLATXML_FORMAT_BY_MIMETYPE = {
+    'application/vnd.oasis.opendocument.graphics': 'odf-flatxml-fodg',
+    'application/vnd.oasis.opendocument.presentation': 'odf-flatxml-fodp',
+    'application/vnd.oasis.opendocument.spreadsheet': 'odf-flatxml-fods',
+    'application/vnd.oasis.opendocument.text': 'odf-flatxml-fodt',
+}
+
 
 def analyze_xml(fread, info, fskip, format='xml', fclass='other',
-                extra_formats=('xml-comment', 'xhtml', 'mathml', 'uof-xml') + tuple(UOF_FORMAT_BY_MIMETYPE.itervalues()),  # Also generates 'smil' etc.
+                extra_formats=('xml-comment', 'xhtml', 'mathml', 'uof-xml', 'odf-flatxml') + tuple(UOF_FORMAT_BY_MIMETYPE.itervalues()) + tuple(ODF_FLATXML_FORMAT_BY_MIMETYPE.itervalues()),  # Also generates 'smil' etc.
                 spec=((0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header))),
                       # 408 is arbitrary, but since cups-raster has it, we can also that much.
                       (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header))),
@@ -6059,7 +6066,7 @@ def analyze_xml(fread, info, fskip, format='xml', fclass='other',
       if not c.isalpha():
         raise ValueError('Bad xml attr name start.')
       j = i
-      while i < len(data) and (data[i].isalpha() or data[i] in '-:_'):
+      while i < len(data) and (data[i].isalnum() or data[i] in '-:_'):
         i += 1
       if i == len(data):
         raise ValueError('EOF in attr name.')
@@ -6197,6 +6204,14 @@ def analyze_xml(fread, info, fskip, format='xml', fclass='other',
               info['format'] = format
             else:
               info['format'] = 'uof-xml'
+        elif tag_name == 'office:document':
+          attrs = parse_attrs(buffer(data, j, i - j - 1))
+          if attrs.get('xmlns:office') == 'urn:oasis:names:tc:opendocument:xmlns:office:1.0':
+            format = ODF_FLATXML_FORMAT_BY_MIMETYPE.get(attrs.get('office:mimetype'))
+            if format is not None:
+              info['format'] = format
+            else:
+              info['format'] = 'odf-flatxml'
         break
       else:
         raise ValueError('xml tag expected.')
