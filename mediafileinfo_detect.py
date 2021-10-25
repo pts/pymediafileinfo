@@ -5936,8 +5936,15 @@ def count_is_xml_comment(header):
   return (i + 4) * 100
 
 
+UOF_FORMAT_BY_MIMETYPE = {
+    'vnd.uof.presentation': 'uof-uop',
+    'vnd.uof.spreadsheet': 'uof-uos',
+    'vnd.uof.text': 'uof-uot',
+}
+
+
 def analyze_xml(fread, info, fskip, format='xml', fclass='other',
-                extra_formats=('xml-comment', 'xhtml', 'mathml'),  # Also generates 'smil' etc.
+                extra_formats=('xml-comment', 'xhtml', 'mathml', 'uof-xml') + tuple(UOF_FORMAT_BY_MIMETYPE.itervalues()),  # Also generates 'smil' etc.
                 spec=((0, '<?xml', 5, WHITESPACE + ('?',), 256, lambda header: adjust_confidence(6, count_is_xml(header))),
                       # 408 is arbitrary, but since cups-raster has it, we can also that much.
                       (0, '<!--', 408, lambda header: adjust_confidence(400, count_is_xml_comment(header))),
@@ -6121,7 +6128,7 @@ def analyze_xml(fread, info, fskip, format='xml', fclass='other',
         elif not data[i].isalpha():
           raise ValueError('Bad xml tag name start.')
         i += 1
-        while i < len(data) and (data[i].isalpha() or data[i] == '-'):
+        while i < len(data) and (data[i].isalpha() or data[i] == '-' or data[i] == ':'):
           i += 1
         tag_name = data[j : i]
         j = i
@@ -6180,6 +6187,16 @@ def analyze_xml(fread, info, fskip, format='xml', fclass='other',
           attrs = parse_attrs(buffer(data, j, i - j - 1))
           if attrs.get('xmlns') == 'http://www.w3.org/1998/Math/MathML':
             info['format'] = 'mathml'
+        elif tag_name == 'uof:UOF':
+          # Replace xmlns:SOMENONEASCII= with xmlns:=
+          attrs_str = ''.join((c for c in buffer(data, j, i - j - 1) if ord(c) < 128))
+          attrs = parse_attrs(attrs_str)
+          if attrs.get('xmlns:uof') == 'http://schemas.uof.org/cn/2003/uof':
+            format = UOF_FORMAT_BY_MIMETYPE.get(attrs.get('uof:mimetype'))
+            if format is not None:
+              info['format'] = format
+            else:
+              info['format'] = 'uof-xml'
         break
       else:
         raise ValueError('xml tag expected.')

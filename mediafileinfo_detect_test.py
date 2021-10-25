@@ -804,6 +804,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\n\n<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"/>'),
                      {'format': 'mathml', 'detected_format': 'xml'})
 
+  def test_analyze_uof(self):
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\r<uof:UOF xmlns:uof="http://schemas.uof.org/cn/2003/uof"/>'),
+                     {'format': 'uof-xml', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\r<uof:UOF xmlns:uof="http://schemas.uof.org/cn/2003/uof" uof:mimetype="vnd.uof.presentation">'),
+                     {'format': 'uof-uop', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\r<uof:UOF xmlns:uof="http://schemas.uof.org/cn/2003/uof" uof:mimetype="vnd.uof.spreadsheet">'),
+                     {'format': 'uof-uos', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\r<uof:UOF xmlns:uof="http://schemas.uof.org/cn/2003/uof" uof:mimetype="vnd.uof.text">'),
+                     {'format': 'uof-uot', 'detected_format': 'xml'})
+
   def test_parse_svg_dimen(self):
     f = mediafileinfo_detect.parse_svg_dimen
     self.assertRaises(ValueError, f, '')
