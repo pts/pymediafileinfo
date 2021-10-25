@@ -1227,6 +1227,30 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_detect_fig(self):
     self.assertEqual(analyze_string('#FIG 3.2\n'), {'format': 'fig'})
 
+  def test_analyze_zip(self):
+    def build_zip_entry(filename, data):  # Uncompressed.
+      return ''.join(('PK\3\4\x14\0\0\x08\0\0\xe5rYS\7\x8a\xa8\x5b', struct.pack('<LLL', len(data), len(data), len(filename)), filename, data))
+
+    def build_compressed_zip_entry(filename, data):
+      import zlib
+      zc = zlib.compressobj(1, 8, -15)
+      uncompressed_size = len(data)
+      data = ''.join((zc.compress(data), zc.flush()))
+      return ''.join(('PK\3\4\x14\0\0\x08\x08\0\xe5rYS\7\x8a\xa8\x5b', struct.pack('<LLL', len(data), uncompressed_size, len(filename)), filename, data))
+
+    self.assertEqual(analyze_string('PK\1\2'), {'format': 'zip'})
+    self.assertEqual(analyze_string('PK\3\4'), {'format': 'zip'})
+    self.assertEqual(analyze_string('PK00PK\5\6'), {'format': 'zip'})
+    self.assertEqual(analyze_string('PK00PK\7\x08'), {'format': 'zip'})
+    self.assertEqual(analyze_string('PK\6\6'), {'format': 'zip'})
+    self.assertEqual(analyze_string(build_zip_entry('hi', 'hello')), {'format': 'zip'})
+    # Usually compressed, but for speeding up tests we test only 1 compressed.
+    self.assertEqual(analyze_string(build_zip_entry('[Content_Types].xml', '')), {'format': 'msoffice-zip', 'detected_format': 'zip'})
+    self.assertEqual(analyze_string(build_compressed_zip_entry('[Content_Types].xml', '<?xml PartName="/word/')), {'format': 'msoffice-docx', 'detected_format': 'zip'})
+    self.assertEqual(analyze_string(build_zip_entry('[Content_Types].xml', '<?xml PartName="/xl/ PartName="/xl/ ')), {'format': 'msoffice-xlsx', 'detected_format': 'zip'})
+    self.assertEqual(analyze_string(build_zip_entry('[Content_Types].xml', '<?xml PartName="/ppt/')), {'format': 'msoffice-pptx', 'detected_format': 'zip'})
+    self.assertEqual(analyze_string(build_zip_entry('[Content_Types].xml', '<?xml PartName="/word/ PartName="/xl/ ')), {'format': 'msoffice-zip', 'detected_format': 'zip'})
+
   def test_detect_zoo(self):
     self.assertEqual(analyze_string('ZOO 2.00 Archive.\x1a\0\0\xdc\xa7\xc4\xfd'), {'format': 'zoo'})
     self.assertEqual(analyze_string('ZOO 1.20 Archive.\x1a\0\0\xdc\xa7\xc4\xfd'), {'format': 'zoo'})

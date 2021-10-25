@@ -10253,6 +10253,79 @@ def analyze_signify(fread, info, fskip, format='signify', fclass='crypto',
     info['format'] = 'signify-signature'
 
 
+def analyze_zip(fread, info, fskip, format='zip', fclass='archive',
+                extra_formats=('msoffice-zip', 'msoffice-docx', 'msoffice-xlsx', 'msoffice-pptx'),
+                spec=((0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6')),
+                      (0, 'PK00PK', 6, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6')))):
+  # Also Java jar, Android apk, Python .zip, .docx, .xlsx, .pptx,  ODT, ODS, ODP.
+  header = fread(4)
+  if header == 'PK00':
+    header = fread(4)
+  if len(header) < 4:
+    raise ValueError('Too short for zip.')
+  # 'PK\6\6' is ZIP64.
+  if header in ('PK\1\2', 'PK\5\6', 'PK\7\x08', 'PK\6\6'):
+    info['format'] = 'zip'
+    return
+  elif header != 'PK\3\4':
+    raise ValueError('zip signature not found.')
+  info['format'] = 'zip'
+  data = fread(26)  # Local file header.
+  if len(data) < 26:
+    return
+  # crc32 is of the uncompressed, decrypted file. We ignore it.
+  (version, flags, method, mtime_time, mtime_date, ignored_crc32, compressed_size,
+   uncompressed_size, filename_size, extra_field_size,
+  ) = struct.unpack('<HHHHHlLLHH', data)
+  if method not in (0, 8):  # 0=uncompressed, 8=flate.
+    return
+  assert method in (0, 8), method  # See meanings in METHODS.
+  if flags & 1:  # Encrypted file.
+    return
+  if flags & 8:  # Data descriptor comes after file contents.
+    if method == 8:
+      compressed_size = uncompressed_size = None
+    elif method == 0:
+      if uncompressed_size == 0:
+        uncompressed_size = compressed_size
+  # 8-bit name of the first archive member.
+  filename = fread(filename_size)
+  if len(filename) != filename_size or not fskip(extra_field_size):
+    return
+  if filename == '[Content_Types].xml':
+    info['format'] = 'msoffice-zip'
+  else:
+    return
+  if method:  # Usually compressed for msoffice-zip'.
+    try:
+      import zlib
+    except ImportError:
+      return
+    zd = zlib.decompressobj(-15)
+    if compressed_size is None:
+      data = fread(65536)
+    else:
+      zd = zlib.decompressobj(-15)
+      data = fread(min(compressed_size, 65536))
+    try:
+      data = zd.decompress(data)[:65536]  # TODO(pts): Decompress in 256-byte chunks to prevent size blowup.
+    except zlib.error:
+      return
+  else:
+    data = fread(min(uncompressed_size, 65536))
+  if info['format'] == 'msoffice-zip' and data.startswith('<?xml '):
+    is_docx = ' PartName="/word/' in data
+    is_xlsx = ' PartName="/xl/' in data
+    is_pptx = ' PartName="/ppt/' in data
+    if is_docx + is_xlsx + is_pptx == 1:
+      if is_docx:
+        info['format'] = 'msoffice-docx'
+      elif is_xlsx:
+        info['format'] = 'msoffice-xlsx'
+      elif is_pptx:
+        info['format'] = 'msoffice-pptx'
+
+
 def count_is_troff(header):
   i = 0
   if header.startswith('.\\" ') or header.startswith('.\\"*'):
@@ -10648,10 +10721,6 @@ FORMAT_ITEMS.extend((
 
     # fclass='archive': Compressed archive.
 
-    # '\6\6' is ZIP64.
-    # Also Java jar and Android apk.
-    ('zip', (0, 'PK', 2, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
-    ('zip', (0, 'PK00PK', 6, ('\1\2', '\3\4', '\5\6', '\7\x08', '\6\6'))),
     ('rar', (0, 'Rar!')),
     ('zpaq', (0, ('7kS', 'zPQ'), 4, lambda header: (header.startswith('7kSt') or (header.startswith('zPQ') and 1 <= ord(header[3]) <= 127), 52))),
     ('7z', (0, '7z\xbc\xaf\x27\x1c')),
