@@ -874,7 +874,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
                      {'format': 'svg', 'detected_format': 'xml', 'height': 129, 'width': 128})
     self.assertEqual(analyze_string('\f' + data1, analyze_func=mediafileinfo_detect.analyze_xml),
                      {'format': 'svg', 'detected_format': '?', 'detected_analyze': None, 'height': 129, 'width': 128})
-    self.assertEqual(analyze_string('<?xml version="1.0"?>\n<svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 -200 800 700">\n  <title>'),
+    self.assertEqual(analyze_string('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 -200 800 700">\n  <title>'),
+                     {'format': 'svg', 'detected_format': 'xml', 'height': 700, 'width': 800})
+    self.assertEqual(analyze_string('<?xml version="1.0"?>\n<svg:svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 -200 800 700">\n  <svg:title>'),
                      {'format': 'svg', 'detected_format': 'xml', 'height': 700, 'width': 800})
     self.assertEqual(analyze_string('<!----><svg xmlns="http://www.w3.org/2000/svg">\n  <view id="normal" viewBox="0 0 17 19"/>'),
                      {'format': 'svg', 'detected_format': 'xml', 'height': 19, 'width': 17})
@@ -887,6 +889,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('<!-- my\ncomment -->\t\t<smil>'),
                      {'format': 'smil', 'detected_format': 'xml'})
     self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?>\n<!-- Comment --->\n<!DOCTYPE smil -->\t\f<smil xml:id="root" xmlns="http://www.w3.org/ns/SMIL" version="3.0" baseProfile="Tiny" >'),
+                     {'format': 'smil', 'detected_format': 'xml'})
+    self.assertEqual(analyze_string('<?xml version="1.0" encoding="UTF-8"?><smil:smil xml:id="root" xmlns:smil="http://www.w3.org/ns/SMIL" version="3.0" baseProfile="Tiny" >'),
                      {'format': 'smil', 'detected_format': 'xml'})
 
   def test_analyze_brunsli(self):

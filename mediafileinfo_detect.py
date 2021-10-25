@@ -6157,10 +6157,10 @@ def analyze_xml(fread, info, fskip, format='xml', fclass='other',
                 raise EOFError
             continue
           raise ValueError('Unknown xml special tag: %s' % tag_name)
-        elif tag_name == 'smil':
+        elif tag_name in ('smil', 'smil:smil'):
           info['format'] = 'smil'
           # No width= and height= attributes in SMIL.
-        elif tag_name == 'svg':
+        elif tag_name in ('svg', 'svg:svg'):
           info['format'] = 'svg'
           # Typical: attrs['xmlns'] == 'http://www.w3.org/2000/svg'.
           attrs = parse_attrs(buffer(data, j, i - j - 1))
