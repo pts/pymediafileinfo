@@ -11089,6 +11089,12 @@ FORMAT_ITEMS.extend((
     ('url', (0, '[InternetShortcut]', 18, ('\r', '\n'))),
     ('msoffice-owner', (0, tuple(chr(c) for c in xrange(1, 54)), 56, lambda header: adjust_confidence(29, count_is_msoffice_owner(header)))),
 
+    # fclass='database': Database.
+
+    # https://www.sqlite.org/fileformat.html#the_database_header
+    # https://stackoverflow.com/a/69722897
+    ('sqlite3', (0, 'SQLite format 3\0', 16, ('\0\1', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0'), 18, ('\1', '\2', '\3', '\4'), 19, ('\1', '\2', '\3', '\4'))),
+
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
     # https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-09#section-5.3
