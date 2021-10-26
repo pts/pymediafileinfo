@@ -2035,6 +2035,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_msoffice_mdb(self):
     self.assertEqual(analyze_string('\0\1\0\x00Standard Jet DB\0\1\0\0\0'), {'format': 'msoffice-mdb'})
 
+  def test_analyze_msoffice_accdb(self):
+    self.assertEqual(analyze_string('\0\1\0\x00Standard ACE DB\0\2\0\0\0'), {'format': 'msoffice-accdb'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

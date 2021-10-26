@@ -11099,6 +11099,9 @@ FORMAT_ITEMS.extend((
     # Microsoft Access database file before Access 2007.
     # http://jabakobob.net/mdb/first-page.html
     ('msoffice-mdb', (0, '\0\1\0\x00Standard Jet DB\0', 22, '\0\0')),
+    # Microsoft Access database file since Access 2007.
+    # http://jabakobob.net/mdb/first-page.html
+    ('msoffice-accdb', (0, '\0\1\0\x00Standard ACE DB\0', 22, '\0\0')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
