@@ -2026,6 +2026,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('untrusted comment: minisign foo\n'), {'format': 'signify', 'subformat': 'minisign'})
     self.assertEqual(analyze_string('untrusted comment: foo\n'), {'format': 'signify'})
 
+  def test_analyze_sqlite2(self):
+    self.assertEqual(analyze_string('** This file contains an SQLite 2.1 database **\x00\x28\x75\xe3\xda'), {'format': 'sqlite2'})
+
   def test_analyze_sqlite3(self):
     self.assertEqual(analyze_string('SQLite format 3\0\4\0\1\1'), {'format': 'sqlite3'})
 

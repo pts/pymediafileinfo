@@ -11091,6 +11091,8 @@ FORMAT_ITEMS.extend((
 
     # fclass='database': Database.
 
+    # https://stackoverflow.com/a/69722897
+    ('sqlite2', (0, '** This file contains an SQLite 2.', 34, ('0', '1'), 35, ' database **\0', 48, ('\xda\xe3\x75\x28', '\x28\x75\xe3\xda'))),
     # https://www.sqlite.org/fileformat.html#the_database_header
     # https://stackoverflow.com/a/69722897
     ('sqlite3', (0, 'SQLite format 3\0', 16, ('\0\1', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0'), 18, ('\1', '\2', '\3', '\4'), 19, ('\1', '\2', '\3', '\4'))),
