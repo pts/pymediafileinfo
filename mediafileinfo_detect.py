@@ -11102,6 +11102,9 @@ FORMAT_ITEMS.extend((
     # Microsoft Access database file since Access 2007.
     # http://jabakobob.net/mdb/first-page.html
     ('msoffice-accdb', (0, '\0\1\0\x00Standard ACE DB\0', 22, '\0\0')),
+    # CDB database files don't have any header.
+    # https://cr.yp.to/cdb/cdb.txt
+    ('djb-cdb',),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
