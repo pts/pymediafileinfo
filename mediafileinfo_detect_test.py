@@ -2038,6 +2038,10 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_msoffice_accdb(self):
     self.assertEqual(analyze_string('\0\1\0\x00Standard ACE DB\0\2\0\0\0'), {'format': 'msoffice-accdb'})
 
+  def test_analyze_lmdb(self):
+    self.assertEqual(analyze_string('\0\0\0\0\0\0\x08\0\0\0\0\0\xde\xc0\xef\xbe\1\0\0\0'), {'format': 'lmdb-data'})
+    self.assertEqual(analyze_string('\xde\xc0\xef\xbe\1???'), {'format': 'lmdb-lock'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
