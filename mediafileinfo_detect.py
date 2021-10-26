@@ -11096,6 +11096,9 @@ FORMAT_ITEMS.extend((
     # https://www.sqlite.org/fileformat.html#the_database_header
     # https://stackoverflow.com/a/69722897
     ('sqlite3', (0, 'SQLite format 3\0', 16, ('\0\1', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0'), 18, ('\1', '\2', '\3', '\4'), 19, ('\1', '\2', '\3', '\4'))),
+    # Microsoft Access database file before Access 2007.
+    # http://jabakobob.net/mdb/first-page.html
+    ('msoffice-mdb', (0, '\0\1\0\x00Standard Jet DB\0', 22, '\0\0')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 

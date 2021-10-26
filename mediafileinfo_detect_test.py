@@ -2032,6 +2032,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_sqlite3(self):
     self.assertEqual(analyze_string('SQLite format 3\0\4\0\1\1'), {'format': 'sqlite3'})
 
+  def test_analyze_msoffice_mdb(self):
+    self.assertEqual(analyze_string('\0\1\0\x00Standard Jet DB\0\1\0\0\0'), {'format': 'msoffice-mdb'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
