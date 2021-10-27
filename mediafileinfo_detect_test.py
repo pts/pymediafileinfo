@@ -1427,13 +1427,14 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data_pcm = 'fmt \x12\0\0\0\1\0\1\0\x11\x2b\0\0\x22\x56\0\0\2\0\x10\0'
     data_mp3 = 'fmt \x1e\0\0\0\x55\0\1\0\x40\x1f\0\0\xd0\x07\0\0 \1\0\0\0'
     data_bext = 'bext\5\0\0\0??????'  # Round 5 to 6, to word boundary.
+    data_junk = 'JUNK\5\0\0\0??????'  # Round 5 to 6, to word boundary.
     self.assertEqual(analyze_string(data_riff + data_pcm),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'pcm', 'type': 'audio', 'sample_rate': 11025, 'sample_size': 16}]}),
     self.assertEqual(analyze_string(data_riff + data_mp3),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
     self.assertEqual(analyze_string(data_riff + data_bext),
                      {'format': 'wav', 'tracks': []})
-    self.assertEqual(analyze_string(''.join((data_riff, data_bext, data_bext, data_mp3))),
+    self.assertEqual(analyze_string(''.join((data_riff, data_bext, data_junk, data_bext, data_mp3))),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})
     self.assertEqual(analyze_string(''.join((data_riff[:-4] + 'RMP3', data_bext, data_bext, 'bext\xff\0\0\0' + '?' * 256, data_mp3))),
                      {'format': 'wav', 'tracks': [{'channel_count': 1, 'codec': 'mp3', 'type': 'audio', 'sample_rate': 8000, 'sample_size': 16}]})

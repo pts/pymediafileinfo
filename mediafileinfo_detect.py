@@ -5484,7 +5484,7 @@ def analyze_sun_icon(fread, info, fskip, format='sun-icon', fclass='image',
 
 
 def analyze_wav(fread, info, fskip, format='wav', fclass='audio', ext='.wav',
-                spec=(0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))):
+                spec=(0, 'RIFF', 8, ('WAVE', 'RMP3'), 12, ('fmt ', 'bext', 'JUNK'), 20, lambda header: (len(header) < 20 or header[12 : 16] != 'fmt ' or (16 <= ord(header[16]) <= 80 and header[17 : 20] == '\0\0\0'), 315 * (header[12 : 16] == 'fmt ') or 1))):
   # 'RMP3' as .rmp extension, 'WAVE' has .wav extension. 'WAVE' can also have codec=mp3.
   header = fread(36)
   if len(header) < 16:
@@ -5493,7 +5493,7 @@ def analyze_wav(fread, info, fskip, format='wav', fclass='audio', ext='.wav',
     raise ValueError('wav signature not found.')
   info['format'] = 'wav'
   info['tracks'] = []
-  while header[12 : 16] == 'bext':  # Skip 'bext' chunk(s).
+  while header[12 : 16] in ('bext', 'JUNK'):  # Skip 'bext' and 'JUNK' chunk(s).
     chunk_size, = struct.unpack('<L', header[16 : 20])
     chunk_size += chunk_size & 1
     i = chunk_size - (len(header) - 20)
