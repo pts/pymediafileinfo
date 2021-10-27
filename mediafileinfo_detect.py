@@ -11250,6 +11250,8 @@ FORMAT_ITEMS.extend((
     ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp256@openssh.com ')),
     ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp384@openssh.com ')),
     ('ssh-public-keys', (0, 'sk-ecdsa-sha2-nistp521@openssh.com ')),
+    # smime.p7s file attachments.
+    ('pkcs7-signature', (0, '\x30\x80\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x07\x02')),
 
     # fclass='font'.
 
