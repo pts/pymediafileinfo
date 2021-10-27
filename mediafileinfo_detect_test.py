@@ -373,6 +373,8 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_pnm(self):
     self.assertEqual(analyze_string('P1#f oo\n #bar\r\t123\x0b\x0c456#'),
                      {'codec': 'uncompressed-ascii', 'format': 'pnm', 'subformat': 'pbm', 'height': 456, 'width': 123})
+    self.assertEqual(analyze_string('P7\n67 135\n00000000000\n'),
+                     {'codec': 'uncompressed', 'format': 'pnm', 'subformat': 'ppmx', 'height': 135, 'width': 67})
 
   def test_analyze_lbm(self):
     self.assertEqual(analyze_string('FORM\0\0\0\x4eILBMBMHD\0\0\0\x14'),
@@ -975,9 +977,9 @@ class MediaFileInfoDetectTest(unittest.TestCase):
   def test_analyze_xv_thumbnail(self):
     data1 = 'P7 332\n#XVVERSION:Version 2.28  Rev: 9/26/92\n#IMGINFO:512x440 Color JPEG\n#END_OF_COMMENTS\n48 40 255\n'
     self.assertEqual(analyze_string(data1[:data1.find('\n') + 1]),
-                     {'format': 'xv-thumbnail', 'codec': 'uncompressed'})
+                     {'format': 'xv-thumbnail', 'detected_format': 'pnm', 'codec': 'uncompressed'})
     self.assertEqual(analyze_string(data1),
-                     {'format': 'xv-thumbnail', 'codec': 'uncompressed', 'height': 40, 'width': 48})
+                     {'format': 'xv-thumbnail', 'detected_format': 'pnm', 'codec': 'uncompressed', 'height': 40, 'width': 48})
 
   def test_analyze_gem(self):
     self.assertEqual(analyze_string('\0\1\0\x08\0\2\0\2'),

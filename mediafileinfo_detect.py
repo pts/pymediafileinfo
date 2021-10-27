@@ -6914,22 +6914,16 @@ def analyze_pnm(fread, info, fskip):
       info['subformat'] = 'pgm'
     elif header[1] in '36':
       info['subformat'] = 'ppm'
+    elif header[1] == '7':
+      info['subformat'] = 'ppmx'
     if header[1] in '123':
       info['codec'] = 'uncompressed-ascii'
     else:
       info['codec'] = 'uncompressed'  # Raw.
   else:
     raise ValueError('pnm signature not found.')
-  if header[1] == '7':
-    # http://fileformats.archiveteam.org/wiki/XV_thumbnail
-    # https://github.com/ingowald/updated-xv/blob/395756178dad44efb950e3ea6739fe60cc62d314/xvbrowse.c#L4034-L4059
-    header += fread(4)
-    if header != 'P7 332\n':
-      raise ValueError('xv-thumbnail signature not found.')
-    info['format'] = 'xv-thumbnail'
-  else:
-    info['format'] = 'pnm'
-  data = header[-1]
+  info['format'] = 'pnm'
+  data, header = header[-1], header[:-1]
   state = 0
   dimensions = []
   memory_budget = 100
@@ -6938,6 +6932,8 @@ def analyze_pnm(fread, info, fskip):
       break # raise ValueError('EOF in %s header.' % info['format'])
     if memory_budget < 0:
       raise ValueError('pnm header too long.')
+    if header[1] == '7' and len(header) < 7:
+      header += data
     if state == 0 and data.isdigit():
       state = 1
       memory_budget -= 1
@@ -6954,6 +6950,13 @@ def analyze_pnm(fread, info, fskip):
           break
       state = 0
     elif data in pnm_whitespace:
+      if header == 'P7 332\n':
+        # http://fileformats.archiveteam.org/wiki/XV_thumbnail
+        # https://github.com/ingowald/updated-xv/blob/395756178dad44efb950e3ea6739fe60cc62d314/xvbrowse.c#L4034-L4059
+        dimensions.pop()
+        info['format'] = 'xv-thumbnail'
+        info.pop('subformat', None)
+        header += '.'
       if len(dimensions) == 2:
         break
       state = 0
@@ -10574,10 +10577,9 @@ FORMAT_ITEMS.extend((
     # IrfanView also supports a lot: https://www.irfanview.com/main_formats.htm
 
     ('lepton', (0, '\xcf\x84', 2, ('\1', '\2'), 3, ('X', 'Y', 'Z'))),
-    ('pnm', (0, 'P', 1, ('1', '4'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    ('pnm', (0, 'P', 1, ('2', '5'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    ('pnm', (0, 'P', 1, ('3', '6'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'))),
-    ('xv-thumbnail', (0, 'P7 332\n')),
+    ('pnm', (0, 'P', 1, ('1', '2', '3', '4', '5', '6', '7'), 2, ('\t', '\n', '\x0b', '\x0c', '\r', ' ', '#'), 4, lambda header: (len(header) >= 3 and header[2] == '#' or header[3].isdigit(), 1))),
+    # Detected as 'pnm'.
+    ('xv-thumbnail',),
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('pam', (0, 'P7\n', 3, tuple('#\nABCDEFGHIJKLMNOPQRSTUVWXYZ'), 408, lambda header: adjust_confidence(400, count_is_pam(header)))),
     ('xbm', (0, '#define', 7, (' ', '\t'), 256, lambda header: adjust_confidence(800, count_is_xbm(header)))),  # '#define test_width 42'.
