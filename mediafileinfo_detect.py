@@ -11109,6 +11109,11 @@ FORMAT_ITEMS.extend((
     # https://blog.separateconcerns.com/2016-04-03-lmdb-format.html
     ('lmdb-data', (0, ('\0\0\0\0\0\0\0\x08\0\0\0\0\xbe\xef\xc0\xde\0\0\0\1', '\0\0\0\0\0\0\x08\0\0\0\0\0\xde\xc0\xef\xbe\1\0\0\0'))),
     ('lmdb-lock', (0, ('\xbe\xef\xc0\xde', '\xde\xc0\xef\xbe'), 8, lambda header: (len(header) >= 8 and ((header[0] == '\xbe' and header[7] in '\1\2\3\4') or (header[0] == '\xde' and header[4] in '\1\2\3\4')), 75))),
+    # DuckDB also supports it, but may not be its native format: https://duckdb.org/docs/data/parquet
+    # https://github.com/apache/parquet-format
+    # https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift
+    # TODO(pts): Parse the first few fields in Thrift format, just to understand.
+    ('parquet', (0, 'PAR1')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
