@@ -10505,14 +10505,27 @@ def count_is_msoffice_owner(header):
     if ord(header[i]) < 32:
       return False
     c += 38
+  b2 = ''
   for i in xrange(name_size + 1, 54):
-    if header[i] != '\0':
-      return False
-    c += 100
+    if b2:
+      if header[i] != b2:
+        return False
+      c += 100
+    else:
+      b2 = header[i]
+      if b2 not in ' \0':
+        return False
+      c += 78
   if len(header) >= 56:
     name_size2, = struct.unpack('<H', header[54 : 56])
     if name_size2 != name_size:
-      return False
+      if len(header) >= 57 and b2 == ' ' and header[54] == b2:
+        name_size2, = struct.unpack('<H', header[55 : 57])
+        if name_size2 != name_size:
+          return False
+        c += 100
+      else:
+        return False
     c += 200
   elif len(header) == 55:
     if ord(header[54]) != name_size:
@@ -11113,7 +11126,7 @@ FORMAT_ITEMS.extend((
     # http://www.lyberty.com/encyc/articles/tech/dot_url_format_-_an_unofficial_guide.html
     # https://stackoverflow.com/q/13088263
     ('url', (0, '[InternetShortcut]', 18, ('\r', '\n'))),
-    ('msoffice-owner', (0, tuple(chr(c) for c in xrange(1, 54)), 56, lambda header: adjust_confidence(29, count_is_msoffice_owner(header)))),
+    ('msoffice-owner', (0, tuple(chr(c) for c in xrange(1, 54)), 57, lambda header: adjust_confidence(29, count_is_msoffice_owner(header)))),
     # https://hwiegman.home.xs4all.nl/desktopini.html
     ('desktopini', (0, '[.ShellClassInfo]', 17, ('\r', '\n'))),
     ('desktopini', (0, '[LocalizedFileNames]', 20, ('\r', '\n'))),
