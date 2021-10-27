@@ -11117,6 +11117,15 @@ FORMAT_ITEMS.extend((
     # https://www.sqlite.org/fileformat.html#the_database_header
     # https://stackoverflow.com/a/69722897
     ('sqlite3', (0, 'SQLite format 3\0', 16, ('\0\1', '\2\0', '\4\0', '\x08\0', '\x10\0', '\x20\0', '\x40\0', '\x80\0'), 18, ('\1', '\2', '\3', '\4'), 19, ('\1', '\2', '\3', '\4'))),
+    # DBNAME-journal file.
+    # https://www.sqlite.org/fileformat.html#the_rollback_journal
+    # Many times the header (first 8 bytes) is overwritten with \0s.
+    ('sqlite3-journal', (0, '\xd9\xd5\x05\xf9\x20\xa1\x63\xd7')),
+    # https://www.sqlite.org/fileformat.html#the_write_ahead_log
+    ('sqlite3-wal', (0, '\x37\x7f\x06', 3, ('\x82', '\x83'), 4, '\x00\x2d\xe2\x18', 8, ('\0\0\2\0', '\0\0\4\0', '\0\0\x08\0', '\0\0\x10\0', '\0\0\x20\0', '\0\0\x40\0', '\0\0\x80\0', '\0\1\0\0'))),
+    # https://www.sqlite.org/walformat.html#walidxfmt
+    ('sqlite3-shm', (0, '\x00\x2d\xe2\x18\0\0\0\0', 12, '\0\0\0\1')),  # Big endian.
+    ('sqlite3-shm', (0, '\x18\xe2\x2d\x00\0\0\0\0', 12, '\1\0\0\0')),  # Little endian.
     # Microsoft Access database file before Access 2007.
     # http://jabakobob.net/mdb/first-page.html
     ('msoffice-mdb', (0, '\0\1\0\x00Standard Jet DB\0', 22, '\0\0')),
