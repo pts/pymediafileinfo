@@ -11162,6 +11162,11 @@ FORMAT_ITEMS.extend((
     # TODO(pts): Also detect format=rds if it's gzip-compressed, sometimes bzip2- or xz-compressed.
     ('rds', (0, 'X\n\0\0\0', 5, ('\2', '\3'), 6, '\0', 7, ('\1', '\2', '\3', '\4', '\5', '\6'))),
     ('rds', (0, 'A\n', 2, ('2', '3'), 3, '\n', 14, lambda header: adjust_confidence(387, count_is_rds_ascii(header)))),
+    # https://support.hdfgroup.org/release4/doc/DS.pdf
+    ('hdf4', (0, '\x0e\x03\x13\x01', 10, '\0\x1e\0\1')),
+    ('hdf4', (0, '\x0e\x03\x13\x01')),
+    # https://support.hdfgroup.org/HDF5/doc/H5.format.html#Superblock
+    ('hdf5', (0, '\x89HDF\r\n\x1a\n', 8, ('\0', '\1', '2'))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
