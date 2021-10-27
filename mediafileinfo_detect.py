@@ -11137,6 +11137,7 @@ FORMAT_ITEMS.extend((
     ('desktopini', (0, '\xff\xfe\x0d\0\x0a\0[\0L\0o\0c\0a\0l\0i\0z\0e\0d\0F\0i\0l\0e\0N\0a\0m\0e\0s\0]\0', 46, ('\r', '\n'))),
     ('vcalendar-ics', (0, 'BEGIN:VCALENDAR', 15, ('\r', '\n'))),
     ('vcard-vcf', (0, 'BEGIN:VCARD', 11, ('\r', '\n'))),
+    ('m3u-extended', (0, '#EXTM3U', 7, ('\r', '\n'))),
 
     # fclass='database': Database.
 
