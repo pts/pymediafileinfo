@@ -11130,6 +11130,11 @@ FORMAT_ITEMS.extend((
     # https://blog.separateconcerns.com/2016-04-03-lmdb-format.html
     ('lmdb-data', (0, ('\0\0\0\0\0\0\0\x08\0\0\0\0\xbe\xef\xc0\xde\0\0\0\1', '\0\0\0\0\0\0\x08\0\0\0\0\0\xde\xc0\xef\xbe\1\0\0\0'))),
     ('lmdb-lock', (0, ('\xbe\xef\xc0\xde', '\xde\xc0\xef\xbe'), 8, lambda header: (len(header) >= 8 and ((header[0] == '\xbe' and header[7] in '\1\2\3\4') or (header[0] == '\xde' and header[4] in '\1\2\3\4')), 75))),
+    # https://github.com/erthink/libmdbx
+    ('mdbx-data', (0, '\0\0\0\0\0\0\0\0\0\0' '\x08\0' '\0\0\0\0\0\0\0\0', 20, ('\1', '\2', '\3', '\4', '\5', '\6'), 21, '\x11\x4c\xef\xbd\x9d\x65\x59')),  # Little endian.
+    ('mdbx-data', (0, '\0\0\0\0\0\0\0\0\0\0' '\0\x08' '\0\0\0\0\0\0\0\0' '\x59\x65\x9d\xbd\xef\x4c\x11', 27, ('\1', '\2', '\3', '\4', '\5', '\6'))),  # Big endian.
+    ('mdbx-lock', (0, ('\1', '\2', '\3', '\4', '\5', '\6'), 1, '\x11\x4c\xef\xbd\x9d\x65\x59')),  # The lock file is empty if not in use.
+    ('mdbx-lock', (0,'\x59\x65\x9d\xbd\xef\x4c\x11', 7, ('\1', '\2', '\3', '\4', '\5', '\6'))),
     # DuckDB also supports it, but may not be its native format: https://duckdb.org/docs/data/parquet
     # https://github.com/apache/parquet-format
     # https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift
