@@ -10805,6 +10805,9 @@ FORMAT_ITEMS.extend((
     # http://fileformats.archiveteam.org/wiki/Microsoft_Help_2
     # http://www.russotto.net/chm/itolitlsformat.html
     # TODO(pts): Also add .mshc (.zip-based). https://fileinfo.com/extension/mshc
+    # ---
+    # https://www.opendesign.com/files/guestdownloads/OpenDesign_Specification_for_.dwg_files.pdf
+    ('autodesk-dwg', (0, 'AC10', 4, ('12', '14', '15', '18', '21', '24', '27', '32'), 6, '\0\0\0\0\0', 12, '\1')),
 
     # fclass='archive': Compressed archive.
 
