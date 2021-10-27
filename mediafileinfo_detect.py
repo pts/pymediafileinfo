@@ -11109,6 +11109,14 @@ FORMAT_ITEMS.extend((
     # https://stackoverflow.com/q/13088263
     ('url', (0, '[InternetShortcut]', 18, ('\r', '\n'))),
     ('msoffice-owner', (0, tuple(chr(c) for c in xrange(1, 54)), 56, lambda header: adjust_confidence(29, count_is_msoffice_owner(header)))),
+    # https://hwiegman.home.xs4all.nl/desktopini.html
+    ('desktopini', (0, '[.ShellClassInfo]', 17, ('\r', '\n'))),
+    ('desktopini', (0, '[LocalizedFileNames]', 20, ('\r', '\n'))),
+    ('desktopini', (0, '[ViewState]', 11, ('\r', '\n'))),
+    ('desktopini', (0, '\r\n[.ShellClassInfo]', 19, ('\r', '\n'))),
+    ('desktopini', (0, '\r\n[LocalizedFileNames]', 22, ('\r', '\n'))),
+    ('desktopini', (0, '\xff\xfe\x0d\0\x0a\0[\0.\0S\0h\0e\0l\0l\0C\0l\0a\0s\0s\0I\0n\0f\0o\0]\0', 40, ('\r', '\n'))),
+    ('desktopini', (0, '\xff\xfe\x0d\0\x0a\0[\0L\0o\0c\0a\0l\0i\0z\0e\0d\0F\0i\0l\0e\0N\0a\0m\0e\0s\0]\0', 46, ('\r', '\n'))),
 
     # fclass='database': Database.
 
