@@ -11167,6 +11167,10 @@ FORMAT_ITEMS.extend((
     ('hdf4', (0, '\x0e\x03\x13\x01')),
     # https://support.hdfgroup.org/HDF5/doc/H5.format.html#Superblock
     ('hdf5', (0, '\x89HDF\r\n\x1a\n', 8, ('\0', '\1', '2'))),
+    # There is no signature in SDBM pag and dir files.
+    # See ext/SDBM_File/sdbm/sdbm.{c,h} in perl-5.10.1.tar.gz
+    ('sdbm-pag',),
+    ('sdbm-dir',),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
