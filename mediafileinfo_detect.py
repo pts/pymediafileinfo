@@ -10518,6 +10518,27 @@ def count_is_msoffice_owner(header):
   return c
 
 
+def count_is_rds_ascii(header):
+  if not (header.startswith('A\n2\n') or header.startswith('A\n3\n')):
+    return False
+  i, j, m, c = 4, 5, min(len(header) - 1, 14), 387 + 61 + 100
+  if m < 4 or not header[4].isdigit() or header[4] == '0':
+    return False
+  while j < m and header[j].isdigit():
+    j += 1
+  if header[j] != '\n':
+    return False
+  r_version = int(header[i : j])
+  if r_version >> 24:
+    return False
+  v1, v2, v3 = (r_version >> 16) & 255, (r_version >> 8) & 255, r_version & 255
+  if not 1 <= v1 <= 6:  # Major R version (4 in 2021).
+    return False
+  if not (v2 <= 20 and v3 <= 20):
+    return False
+  return c
+
+
 # ---
 
 
@@ -11113,7 +11134,20 @@ FORMAT_ITEMS.extend((
     # https://github.com/apache/parquet-format
     # https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift
     # TODO(pts): Parse the first few fields in Thrift format, just to understand.
+    # TODO(pts): Add detection of the Apache Arrow file format.
     ('parquet', (0, 'PAR1')),
+    # https://www.loc.gov/preservation/digital/formats/fdd/fdd000470.shtml
+    # https://github.com/vnmabus/rdata/tree/develop/rdata/tests/data
+    # http://yetanothermathprogrammingconsultant.blogspot.com/2016/02/r-rdata-file-format.html
+    # This can read only binary: https://github.com/vnmabus/rdata
+    # TODO(pts): Also detect format=rdata if it's gzip-compressed, sometimes bzip2- or xz-compressed.
+    ('rdata', (0, ('RDX2\nX\n', 'RDX3\nX\n', 'RDA2\nA\n', 'RDA2\nB\n', 'RDX2\nB\n'))),
+    # R languge, writeRDS.
+    # Sample file: https://www.dropbox.com/s/e1tb76d57oqc79g/data_corpus_foreignaffairscommittee.rds?dl=1&v=1
+    # Sample file: https://www.dropbox.com/s/7mu92jzodpq11zc/data_corpus_guardian.rds?dl=1&v=1
+    # TODO(pts): Also detect format=rds if it's gzip-compressed, sometimes bzip2- or xz-compressed.
+    ('rds', (0, 'X\n\0\0\0', 5, ('\2', '\3'), 6, '\0', 7, ('\1', '\2', '\3', '\4', '\5', '\6'))),
+    ('rds', (0, 'A\n', 2, ('2', '3'), 3, '\n', 14, lambda header: adjust_confidence(387, count_is_rds_ascii(header)))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
