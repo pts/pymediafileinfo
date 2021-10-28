@@ -11213,6 +11213,8 @@ FORMAT_ITEMS.extend((
     # https://fallabs.com/qdbm/qdbm-1.8.78.tar.gz
     # Library version (header[12: 14]) is 14 in qdbm-1.8.78.
     ('qdbm', (0, ('[DEPOT]\n\f\0\0\0', '[depot]\n\f\0\0\0'), 12, ('1\0\0\0', '2\0\0\0', '3\0\0\0', '4\0\0\0', '5\0\0\0', '6\0\0\0', '7\0\0\0', '8\0\0\0', '9\0\0\0', '10\0\0', '11\0\0', '12\0\0', '13\0\0', '14\0\0'))),
+    # https://github.com/wesm/feather/blob/master/doc/FORMAT.md
+    ('arrow-feather', (0, 'FEA1')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
