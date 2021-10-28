@@ -11204,6 +11204,10 @@ FORMAT_ITEMS.extend((
     # struct tdb_header in common/tdb_private.h in https://www.samba.org/ftp/tdb/tdb-1.4.5.tar.gz
     # The version (header[32 : 36]) is (0x26011967 + 6) between tdb-1.1.3 and tdb-1.4.5.
     ('samba-tdb', (0, 'TDB file\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0', 36, lambda header: (len(header) >= 36 and (header[32 : 35] == '\x26\x01\x19' or header[33 : 36] == '\x19\x01\x26'), 300))),
+    # samba-ntdb is not in active use by Samba, it was a proposal in 2013.
+    # struct ntdb_header in struct ntdb_header in https://www.samba.org/ftp/tdb/ntdb-1.0.tar.gz
+    # The version (header[64 : 72]) is (0x26011967 + 7) in ntdb-1.0.
+    ('samba-ntdb', (0, 'NTDB file\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0', 72, lambda header: (len(header) >= 72 and (header[64 : 71] == '\0\0\0\0\x26\x01\x19' or header[65 : 72] == '\x19\x01\x26\0\0\0\0'), 300))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
