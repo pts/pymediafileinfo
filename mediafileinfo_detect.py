@@ -11227,6 +11227,12 @@ FORMAT_ITEMS.extend((
     ('gdbm-export-ascii', (0, '# GDBM dump file created by ')),
     # Created by `gdbm_dump --format=binary'.
     ('gdbm-export-binary', (0, '!\r\n! GDBM FLAT FILE DUMP -- THIS IS NOT A TEXT FILE\r\n! ')),
+    # TODO(pts): Add AT&T dbm
+    # TODO(pts): Add Berkeley DB, 1991 replacement of ndbm by Sleepycat Software (now Oracle) created to get around the AT&T Unix copyright on BSD. It features many extensions like parallelism, transactional control, hashing, and B tree storage.
+    # TODO(pts): Add Tokyo Cabinet various file formats
+    # TODO(pts): Add Kyoto Cabinet various file formats
+    # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
+    # TODO(pts): Add WiredTiger: database with traditional row-oriented and column-oriented storage.
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
