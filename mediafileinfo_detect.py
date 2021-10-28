@@ -11219,8 +11219,14 @@ FORMAT_ITEMS.extend((
     # Same as Apache Arrow Feather V2.
     # https://arrow.apache.org/docs/format/Columnar.html#ipc-file-format
     ('arrow-ipc', (0, 'ARROW1\0\0')),
-    # ndbm and GDBM 1.x use the same format.
+    # ndbm and GDBM use the same format.
     ('ndbm', (0, ('\x13\x57\x9a\xcd', '\x13\x57\x9a\xce', '\x13\x57\x9a\xcf', '\xcd\x9a\x57\x13', '\xce\x9a\x57\x13', '\xcf\x9a\x57\x13'))),
+    # https://www.gnu.org.ua/software/gdbm/manual/Numsync.html
+    ('gdbm-numsync', (0, ('\x13\x57\x9a\xd0', '\x13\x57\x9a\xd1', '\xd0\x9a\x57\x13', '\xd1\x9a\x57\x13'))),
+    # Created by `gdbm_dump --format=ascii'.
+    ('gdbm-export-ascii', (0, '# GDBM dump file created by ')),
+    # Created by `gdbm_dump --format=binary'.
+    ('gdbm-export-binary', (0, '!\r\n! GDBM FLAT FILE DUMP -- THIS IS NOT A TEXT FILE\r\n! ')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
