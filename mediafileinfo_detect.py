@@ -11208,6 +11208,11 @@ FORMAT_ITEMS.extend((
     # struct ntdb_header in struct ntdb_header in https://www.samba.org/ftp/tdb/ntdb-1.0.tar.gz
     # The version (header[64 : 72]) is (0x26011967 + 7) in ntdb-1.0.
     ('samba-ntdb', (0, 'NTDB file\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0', 72, lambda header: (len(header) >= 72 and (header[64 : 71] == '\0\0\0\0\x26\x01\x19' or header[65 : 72] == '\x19\x01\x26\0\0\0\0'), 300))),
+    # https://fallabs.com/qdbm/
+    # Search for magic in: https://fallabs.com/qdbm/spex.html
+    # https://fallabs.com/qdbm/qdbm-1.8.78.tar.gz
+    # Library version (header[12: 14]) is 14 in qdbm-1.8.78.
+    ('qdbm', (0, ('[DEPOT]\n\f\0\0\0', '[depot]\n\f\0\0\0'), 12, ('1\0\0\0', '2\0\0\0', '3\0\0\0', '4\0\0\0', '5\0\0\0', '6\0\0\0', '7\0\0\0', '8\0\0\0', '9\0\0\0', '10\0\0', '11\0\0', '12\0\0', '13\0\0', '14\0\0'))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
