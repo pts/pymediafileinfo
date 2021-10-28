@@ -11200,6 +11200,10 @@ FORMAT_ITEMS.extend((
     # See ext/SDBM_File/sdbm/sdbm.{c,h} in perl-5.10.1.tar.gz
     ('sdbm-pag',),
     ('sdbm-dir',),
+    # http://fileformats.archiveteam.org/wiki/TDB_(Samba)
+    # struct tdb_header in common/tdb_private.h in https://www.samba.org/ftp/tdb/tdb-1.4.5.tar.gz
+    # The version (header[32 : 36]) is (0x26011967 + 6) between tdb-1.1.3 and tdb-1.4.5.
+    ('samba-tdb', (0, 'TDB file\n\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0', 36, lambda header: (len(header) >= 36 and (header[32 : 35] == '\x26\x01\x19' or header[33 : 36] == '\x19\x01\x26'), 300))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
