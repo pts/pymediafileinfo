@@ -11219,6 +11219,8 @@ FORMAT_ITEMS.extend((
     # Same as Apache Arrow Feather V2.
     # https://arrow.apache.org/docs/format/Columnar.html#ipc-file-format
     ('arrow-ipc', (0, 'ARROW1\0\0')),
+    # ndbm and GDBM 1.x use the same format.
+    ('ndbm', (0, ('\x13\x57\x9a\xcd', '\x13\x57\x9a\xce', '\x13\x57\x9a\xcf', '\xcd\x9a\x57\x13', '\xce\x9a\x57\x13', '\xcf\x9a\x57\x13'))),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
