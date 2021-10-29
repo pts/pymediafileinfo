@@ -11247,8 +11247,10 @@ FORMAT_ITEMS.extend((
     # kchashdb.h in https://dbmx.net/kyotocabinet/pkg/kyotocabinet-1.2.79.tar.gz
     # Record count (offset 32) file size (offset 40) are 64-bit big endian.
     ('kyotocabinet', (0, 'KC\n\0', 4, tuple(chr(c) for c in xrange(1, 20)), 5, tuple(chr(c) for c in xrange(1, 20)), 6, tuple(chr(c) for c in xrange(1, 10)), 8, ('\x30', '\x31', '\x40', '\x41'), 32, '\0\0', 40, '\0\0')),
+    # https://github.com/wiredtiger/wiredtiger
+    ('wiredtiger-block', (0, '\x41\xd8\x01\x00\1\0', 7, '\0', 12, '\0\0\0\0')),
+    ('wiredtiger-log', (0, '\x64\x10\x10\x00', 5, '\0\0\0', 14, '\0\0')),
     # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
-    # TODO(pts): Add WiredTiger: database with traditional row-oriented and column-oriented storage.
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
