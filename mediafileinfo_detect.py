@@ -11250,7 +11250,12 @@ FORMAT_ITEMS.extend((
     # https://github.com/wiredtiger/wiredtiger
     ('wiredtiger-block', (0, '\x41\xd8\x01\x00\1\0', 7, '\0', 12, '\0\0\0\0')),
     ('wiredtiger-log', (0, '\x64\x10\x10\x00', 5, '\0\0\0', 14, '\0\0')),
-    # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
+    # https://dbmx.net/tkrzw/
+    # https://dbmx.net/tkrzw/pkg/tkrzw-1.0.18.tar.gz
+    ('tkrzw-tree', (0, 'TDB\0', 4, ('\0', '\1', '\2', '\3'), 34, ('\0', '\1'), 40, ('\0', '\1'))),
+    ('tkrzw-hash', (0, 'TkrzwHDB\n', 10, ('\1', '\2', '\3', '\4'), 16, '\0\0\0', 24, '\0\0', 32, '\0\0', 40, '\0\0')),
+    ('tkrzw-skip', (0, 'TkrzwSDB\n', 10, ('\1', '\2', '\3', '\4'), 24, '\0\0', 32, '\0\0', 40, '\0\0')),
+    ('tkrzw-queue', (0, 'TkrzwMQX\n')),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
