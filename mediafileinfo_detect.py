@@ -11243,7 +11243,10 @@ FORMAT_ITEMS.extend((
     ('berkeleydb-export', (0, 'format=bytevalue\n')),  # Version 1.
     # http://fallabs.com/tokyocabinet/spex-en.html
     ('tokyocabinet', (0, 'ToKyO CaBiNeT\n', 24, '\0\0\0\0\0\0\0\0', 32, ('\0', '\1', '\2', '\3'))),
-    # TODO(pts): Add Kyoto Cabinet various file formats
+    # https://dbmx.net/kyotocabinet/spex.html
+    # kchashdb.h in https://dbmx.net/kyotocabinet/pkg/kyotocabinet-1.2.79.tar.gz
+    # Record count (offset 32) file size (offset 40) are 64-bit big endian.
+    ('kyotocabinet', (0, 'KC\n\0', 4, tuple(chr(c) for c in xrange(1, 20)), 5, tuple(chr(c) for c in xrange(1, 20)), 6, tuple(chr(c) for c in xrange(1, 10)), 8, ('\x30', '\x31', '\x40', '\x41'), 32, '\0\0', 40, '\0\0')),
     # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
     # TODO(pts): Add WiredTiger: database with traditional row-oriented and column-oriented storage.
 
