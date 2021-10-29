@@ -11227,8 +11227,18 @@ FORMAT_ITEMS.extend((
     ('gdbm-export-ascii', (0, '# GDBM dump file created by ')),
     # Created by `gdbm_dump --format=binary'.
     ('gdbm-export-binary', (0, '!\r\n! GDBM FLAT FILE DUMP -- THIS IS NOT A TEXT FILE\r\n! ')),
+    # docs/programmer_reference/magic.txt in https://github.com/berkeleydb/libdb/releases/download/v5.3.28/db-5.3.28.tar.gz
+    ('berkeleydb', (0, ('\x00\x06\x15\x61', '\x61\x15\x06\x00'), 4, '\0\0\0', 7, ('\1', '\2', '\3', '\4', '\5', '\6', '\7', '\x08', '\x09'), 8, ('\0\0\x10\xe1', '\0\0\x04\xd2'))),
+    ('berkeleydb', (0, ('\x00\x05\x31\x62', '\x62\x31\x05\x00'), 4, ('\0\0\0\1', '\0\0\0\2', '\0\0\0\3', '\0\0\0\4', '\0\0\0\5', '\0\0\0\6', '\0\0\0\7', '\0\0\0\x08', '\0\0\0\x09', '\1\0\0\0', '\2\0\0\0', '\3\0\0\0', '\4\0\0\0', '\5\0\0\0', '\6\0\0\0', '\7\0\0\0', '\x08\0\0\0', '\x09\0\0\0'))),
+    # TODO(pts): Maybe values other than 0 and 1 are also valid in the first 12 bytes if Berkeley DB >=2.
+    ('berkeleydb', (0, '\0\0\0\0\0\0\0\0\0\0\0\1', 12, ('\x00\x04\x09\x88', '\x00\x05\x31\x62', '\x00\x06\x15\x61', '\x00\x07\x45\x82', '\x00\x04\x22\x53'), 16, '\0\0\0')),
+    ('berkeleydb', (0, '\0\0\0\0\1\0\0\0\0\0\0\0', 12, ('\x88\x09\x04\x00', '\x62\x31\x05\x00', '\x61\x15\x06\x00', '\x82\x45\x07\x00', '\x53\x22\x04\x00'), 17, '\0\0\0')),
+    # Created by `db_dump'.
+    # https://github.com/berkeleydb/libdb/releases/download/v5.3.28/db-5.3.28.tar.gz
+    ('berkeleydb-export', (0, 'VERSION=', 8, ('2', '3', '4', '5'), 9, '\n')),
+    ('berkeleydb-export', (0, 'format=print\n')),  # Version 1.
+    ('berkeleydb-export', (0, 'format=bytevalue\n')),  # Version 1.
     # TODO(pts): Add AT&T dbm
-    # TODO(pts): Add Berkeley DB, 1991 replacement of ndbm by Sleepycat Software (now Oracle) created to get around the AT&T Unix copyright on BSD. It features many extensions like parallelism, transactional control, hashing, and B tree storage.
     # TODO(pts): Add Tokyo Cabinet various file formats
     # TODO(pts): Add Kyoto Cabinet various file formats
     # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
