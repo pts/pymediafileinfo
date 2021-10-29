@@ -11241,7 +11241,8 @@ FORMAT_ITEMS.extend((
     ('berkeleydb-export', (0, 'VERSION=', 8, ('2', '3', '4', '5'), 9, '\n')),
     ('berkeleydb-export', (0, 'format=print\n')),  # Version 1.
     ('berkeleydb-export', (0, 'format=bytevalue\n')),  # Version 1.
-    # TODO(pts): Add Tokyo Cabinet various file formats
+    # http://fallabs.com/tokyocabinet/spex-en.html
+    ('tokyocabinet', (0, 'ToKyO CaBiNeT\n', 24, '\0\0\0\0\0\0\0\0', 32, ('\0', '\1', '\2', '\3'))),
     # TODO(pts): Add Kyoto Cabinet various file formats
     # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
     # TODO(pts): Add WiredTiger: database with traditional row-oriented and column-oriented storage.
