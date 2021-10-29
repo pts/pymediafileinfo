@@ -11200,6 +11200,9 @@ FORMAT_ITEMS.extend((
     # See ext/SDBM_File/sdbm/sdbm.{c,h} in perl-5.10.1.tar.gz
     ('sdbm-pag',),
     ('sdbm-dir',),
+    # Probably there is no signature in DBM files (by Ken Thompson in 1978 and 1979).
+    # Source code and documentation are not available.
+    ('dbm',),
     # http://fileformats.archiveteam.org/wiki/TDB_(Samba)
     # struct tdb_header in common/tdb_private.h in https://www.samba.org/ftp/tdb/tdb-1.4.5.tar.gz
     # The version (header[32 : 36]) is (0x26011967 + 6) between tdb-1.1.3 and tdb-1.4.5.
@@ -11238,7 +11241,6 @@ FORMAT_ITEMS.extend((
     ('berkeleydb-export', (0, 'VERSION=', 8, ('2', '3', '4', '5'), 9, '\n')),
     ('berkeleydb-export', (0, 'format=print\n')),  # Version 1.
     ('berkeleydb-export', (0, 'format=bytevalue\n')),  # Version 1.
-    # TODO(pts): Add AT&T dbm
     # TODO(pts): Add Tokyo Cabinet various file formats
     # TODO(pts): Add Kyoto Cabinet various file formats
     # TODO(pts): Add Tkrzw, an Apache 2.0 licensed successor to Kyoto Cabinet and Tokyo Cabinet
