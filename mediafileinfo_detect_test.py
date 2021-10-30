@@ -2045,6 +2045,13 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('\0\0\0\0\0\0\x08\0\0\0\0\0\xde\xc0\xef\xbe\1\0\0\0'), {'format': 'lmdb-data'})
     self.assertEqual(analyze_string('\xde\xc0\xef\xbe\1???'), {'format': 'lmdb-lock'})
 
+  def test_analyze_hsqldb(self):
+    self.assertEqual(analyze_string('HSQLLOCK????????'), {'format': 'hsqldb-lck'})
+    self.assertEqual(analyze_string('SET DATABASE UNIQUE NAME HSQLDB7CD000A703\n'), {'format': 'hsqldb-script'})
+    self.assertEqual(analyze_string('#HSQL Database Engine 2.3.8\n'), {'format': 'hsqldb-properties'})
+    self.assertEqual(analyze_string('/*C1*/SET SCHEMA SYSTEM_LOBS\n'), {'format': 'hsqldb-log'})
+    self.assertEqual(analyze_string('/*C3210*/SET SCHEMA PUBLIC\n'), {'format': 'hsqldb-log'})
+
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])

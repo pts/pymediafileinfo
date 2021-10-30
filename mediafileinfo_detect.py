@@ -10555,6 +10555,22 @@ def count_is_rds_ascii(header):
   return c
 
 
+def count_is_hsqldb_log(header):
+  if not header.startswith('/*'):
+    return False
+  if len(header) < 4 or header[3] == '0':
+    return False
+  i, c = 3, 300
+  while i < len(header) and header[i].isdigit():
+    i += 1
+    c += 55
+  # Usually: "*/SET SCHEMA PUBLIC\n" or "*/SET SCHEMA SYSTEM_LOBS\n".
+  expected = '*/SET SCHEMA '
+  if header[i : i + len(expected)] != expected:
+    return False
+  return c + 100 * len(expected)
+
+
 # ---
 
 
@@ -11256,6 +11272,29 @@ FORMAT_ITEMS.extend((
     ('tkrzw-hash', (0, 'TkrzwHDB\n', 10, ('\1', '\2', '\3', '\4'), 16, '\0\0\0', 24, '\0\0', 32, '\0\0', 40, '\0\0')),
     ('tkrzw-skip', (0, 'TkrzwSDB\n', 10, ('\1', '\2', '\3', '\4'), 24, '\0\0', 32, '\0\0', 40, '\0\0')),
     ('tkrzw-queue', (0, 'TkrzwMQX\n')),
+    # http://hsqldb.org/download/hsqldb_251_jdk6/
+    # http://hsqldb.org/download/hsqldb_251_jdk6/hsqldb-2.3.8-jdk6-sources.jar
+    # http://hsqldb.org/download/hsqldb_251_jdk6/hsqldb-2.3.8-jdk6.jar
+    # http://hsqldb.org/download/hsqldb_251_jdk6/sqltool-2.3.8-jdk6.jar
+    # *.lck file.
+    ('hsqldb-lck', (0, 'HSQLLOCK')),
+    # *.script file.
+    # getPropertiesSQL in org/hsqldb/persist/Logger.java
+    # TODO(pts): Sometimes it's gzip-compressed (.gz) text file.
+    # There also used to be a a binary format, but not anymore in hsqldb-2.3.8.
+    ('hsqldb-script', (0, 'SET DATABASE UNIQUE NAME ')),
+    # *.properties file.
+    ('hsqldb-properties', (0, '#HSQL Database Engine ')),
+    # *.data file containing the cache after a `SHUTDOWN;' statement. It
+    # It doesn't have a signature, typically it starts with ~16 \0 bytes.
+    ('hsqldb-data',),
+    # *.log file.
+    # Sometimes the file is empty.
+    ('hsqldb-log', (0, '/*C', 64, lambda header: adjust_confidence(300, count_is_hsqldb_log(header)))),
+    # It doesn't have a signature. Sumetimes it's gzip-compressed (.gz).
+    ('hsqldb-backup',),
+    # It doesn't have a signature.
+    ('hsqldb-lobs',),
 
     # fclass='crypto': Cryptography: encrypted files, keys, keychains.
 
