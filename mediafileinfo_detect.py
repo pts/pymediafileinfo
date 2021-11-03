@@ -5682,7 +5682,7 @@ def is_hxs(header):
 
 
 def analyze_exe(fread, info, fskip, format='exe', fclass='code',
-                # 408 is arbitrary, but since cups-raster has it, we can also that much.
+                # 408 (header_size_limit) is arbitrary, but since cups-raster has it, we can also that much.
                 spec=((0, 'MZ', 408, lambda header: adjust_confidence(200, count_is_exe(header))),
                       # format='hxs' bare. Usually there is a PE header (analyze_exe) in front of this.
                       (0, 'ITOLITLS\1\0\0\0\x28\0\0\0', 24, '\xc1\x07\x90\nv@\xd3\x11\x87\x89\x00\x00\xf8\x10WT')),

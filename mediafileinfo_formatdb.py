@@ -327,7 +327,7 @@ class FormatDb(object):
         else:
           raise TypeError('Bad pattern type: %r' % type(pattern))
         if fps > header_size_limit:
-          raise ValueError('Header too long.')
+          raise ValueError('Header for format too long: format=%r spec=%r size=%d limit=%d' % (format, spec, fps, header_size_limit))
         hps = max(hps, fps)
       for prefix in get_spec_prefixes(spec, max_prefix_size=max_prefix_size):
         fbp2 = fbp[len(prefix)]
@@ -337,7 +337,7 @@ class FormatDb(object):
           fbp2[prefix] = [format_spec]
     self.header_preread_size = hps  # Typically 64, we have 408.
     if hps > header_size_limit:
-      raise AssertionError('Header too long, maximum size is %s.' % header_size_limit)
+      raise AssertionError('Headers too long: size=%d limit=%d' % (hps, header_size_limit))
     self.formats_by_prefix = fbp
     self.formats = frozenset(item[0] for item in format_items)
 
