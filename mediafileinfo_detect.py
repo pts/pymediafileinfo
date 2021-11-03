@@ -4194,8 +4194,122 @@ def get_jpeg_dimensions(fread, header='', is_first_eof_ok=False):
   raise AssertionError('Internal JPEG parser error.')
 
 
+def count_is_jpeg(header):
+  if not header.startswith('\xff\xd8\xff'):
+    return False
+  i, lh = 2, len(header)
+  c = 100 * i
+  # Try to match more bytes (i.e. increasing c) of the most popular APP* markers.
+  while i + 4 <= lh:
+    marker = header[i + 1]
+    if header[i] != '\xff' or marker not in '\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef':
+      break
+    c += 150  # 1 value for header[i], 16 values for marker.
+    i += 2
+    size, = struct.unpack('>H', header[i : i + 2])
+    if size < 2 or i + size > lh:
+      break
+    # See statistics for leading most popular APP* segments below.
+    j = i + 2
+    es = i + size
+    while j < es and header[j] != '\0':
+      j += 1
+    if j < es:
+      c_name = 100 * (j + 1 - i) + (100 - 50)
+      c += c_name
+      name = marker + header[i + 2 : j]
+      i = j + 1
+      #print [name, header[i : es]]
+      if name == '\xe0JFIF': # 8251073 https://www.w3.org/Graphics/JPEG/jfif3.pdf Example: '\x01\x02\x00\x00\x01\x00\x01\x00\x00'.
+        if i + 9 <= es:
+          if size == 16:
+            c += 200
+          if header[i : i + 2] in ('\1\0', '\1\1', '\1\2'):  # Version.
+            c += 181
+          if header[i + 3] in '\0\1\2':  # Units.
+            c += 81
+          if header[i + 3 : i + 5] == '\0\1':  # X density.
+            c += 200
+          if header[i + 5 : i + 7] == '\0\1':  # Y density.
+            c += 200
+          if header[i + 7] == '\0':  # Thumbnail width.
+            c += 100
+          if header[i + 8] == '\0':  # Thumbnail height.
+            c += 100
+      elif name == '\xe1Exif':  # 1244210 Example: '\x00II*\x00\x08\x00\x00\x00'.
+        if i + 9 <= es and header[i] == '\0' and header[i + 1 : i + 5] in ('II*\0', 'MM\0*'):  # TIFF.
+          c += 488
+          if header[i + 4] == '\0' and header[i + 5 : i + 9] == '\x08\0\0\0':
+            c += 400
+      elif name == '\xeeAdobe': # 1003621 https://exiftool.org/TagNames/JPEG.html#Adobe Example: 'd\x08\x00\x00\x00\x01'.
+        if i + 6 <= es:
+          if i + 6 == es:
+            c += 200
+          if header[i] in '\x64\x65':
+            c += 88
+          if header[i + 1 : i + 3] in ('\x80\0', '\0\0'):
+            c += 188
+          if header[i + 3 : i + 5] == '\0\0':
+            c += 200
+          if header[i + 5] in '\0\1\2':
+            c += 81
+      elif name in ('\xe1http://ns.adobe.com/xap/1.0/', '\xe1http://ns.adobe.com/xap/1.0/ '): # 824414, 12330 https://wwwimages2.adobe.com/content/dam/acom/en/devnet/xmp/pdfs/XMP%20SDK%20Release%20cc-2016-08/XMPSpecificationPart3.pdf Example: '<?xpacket begin="'.
+        if header[i : i + 16] == '<?xpacket begin=':  # TODO(pts): Also support UTF-16BE, UTF-16LE.
+          c += 1600
+        if '<x:xmpmeta ' in header[i : es]:
+          c += 1100
+      elif name == '\xedPhotoshop 3.0': # 805633 https://wwwimages2.adobe.com/content/dam/acom/en/devnet/xmp/pdfs/XMP%20SDK%20Release%20cc-2016-08/XMPSpecificationPart3.pdf Example: '8BIM\x04\x04\x00\x00\x00\x00??'.
+        if i + 12 <= es and header[i : i + 4] == '8BIM':
+          c += 400
+          if header[i + 4 : i + 6] in ('\3\xf0', '\3\xfc', '\4\x04', '\4\x0a', '\4\x0b', '\4\x22', '\4\x24', '\4\x25'):  # Resource ID.
+            c += 63
+          if header[i + 6 : i + 8] == '\0\0':  # Resource name size.
+            c += 200
+            if header[i + 8 : i + 10] == '\0\0':  # High 2 bytes of size.
+              c += 200
+      elif name == '\xecDucky': # 570605 https://exiftool.org/TagNames/APP12.html#Ducky Example: '\x01\x00\x04\x00\x00\x00d\x00\x00'.
+        if i + 9 <= es and header[i] == '\1':
+          if i + 9 == es:
+            c += 200
+          c += 100
+          if header[i + 1 : i + 3] == '\0\4':
+            c += 200
+            if header[i + 3 : i + 6] == '\0\0\0':  # Quality is between 1 and 100, we check 0..255.
+              c += 300
+            if header[i + 7 : i + 9] == '\0\0':  # End.
+              c += 200
+      elif name == '\xe2ICC_PROFILE': # 508030 Example: '\x01?\x00???'.
+        if i + 3 <= es and header[i] == '\1':  # Chunk index.
+          c += 100
+          if header[i + 2] == '\0':  # High byte of profile size (4 bytes).
+            c += 100
+      elif name == '\xe2MPF': # 24363 http://fileformats.archiveteam.org/wiki/Multi-Picture_Format Example: 'II*\x00\x08\x00\x00\x00'.
+        if i + 8 <= es and header[i : i + 4] in ('II*\0', 'MM\0*'):  # TIFF.
+          c += 388
+          if header[i + 3] == '\0' and header[i + 4 : i + 8] == '\x08\0\0\0':
+            c += 400
+      elif name == '\xe0JFXX': # 1409 https://www.w3.org/Graphics/JPEG/jfif3.pdf Example: '\x13'.
+        if size >= 1 and header[i] in '\x10\x11\x13':
+          c += 81
+      else:
+        c -= c_name
+    i = es
+  if i < lh and header[i] == '\xff':
+    c += 100
+    i += 1
+    if i < lh and header[i] in ('\xc0', '\xc2', '\xdb', '\xfe'):
+      c += 75
+  return c
+
+
 def analyze_jpeg(fread, info, fskip, format='jpeg', fclass='image',
-                 spec=(0, '\xff\xd8\xff')):
+                 spec=((0, '\xff\xd8\xff\xe0'),
+                       (0, '\xff\xd8\xff\xe1'),  # Separate spec because of very different relative frequencies of header[3].
+                       (0, '\xff\xd8\xff\xdb'),
+                       (0, '\xff\xd8\xff', 3, ('\xe2', '\xc0', '\xee', '\xfe', '\xed')),
+                       # 408 is arbitrary, but since cups-raster has it, we can also that much.
+                       (0, '\xff\xd8\xff', 408, lambda header: adjust_confidence(300, count_is_jpeg(header))))):  # Most files will match this with highest confidence.
+  # Statistics for header[3]: 8220887 e0, 560958 e1, 212585 db, 1964 e2, 1246 c0, 1215 ee, 873 fe, 473 ed.
   header = fread(4)
   if len(header) < 3:
     raise ValueError('Too short for jpeg.')

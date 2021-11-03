@@ -1665,6 +1665,26 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     data3 = data1[:2] + '\xff\xfe\0\5???+' '\xff\xfe\0\5???\0\0' + data1[2:]  # Add COM markers with extra + and \0\0.
     self.assertEqual(analyze_string(data3),
                      {'format': 'jpeg', 'codec': 'jpeg', 'height': 120, 'width': 160})
+    data4 = '\xff\xd8\xff\xc2\0\7?\2\1\2\3'
+    self.assertEqual(analyze_string(data4),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'height': 513, 'width': 515})
+    soi = '\xff\xd8'
+    app_jfif = '\xff\xe0\0\x10JFIF\0\1\2\0\0\1\0\1\0\0'
+    app_jfxx = '\xff\xe0\0\x08JFXX\0\x13'
+    app_exif = '\xff\xe1\0\x10Exif\0\0II*\0\x08\0\0\0'
+    app_adobe = '\xff\xee\0\x0eAdobe\0\x64\x80\0\0\0\1'
+    app_xap = '\xff\xe1\0\x31http://ns.adobe.com/xap/1.0/ \0<?xpacket begin="'
+    app_photoshop30 = '\xff\xed\0\x1cPhotoshop 3.0\08BIM\4\4\0\0\0\0??'
+    app_ducky = '\xff\xec\0\x11Ducky\0\1\0\4\0\0\0\x64\0\0'
+    app_iccprofile = '\xff\xe2\0\x14ICC_PROFILE\0\1?\0???'
+    app_mpf = '\xff\xe2\0\x0eMPF\0II*\0\x08\0\0\0'
+    sof2 = '\xff\xc2\0\7?\2\1\2\3'
+    self.assertEqual(analyze_string(''.join((soi, sof2))),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'height': 513, 'width': 515})
+    data5 = ''.join((soi, app_exif, app_adobe, app_xap, app_photoshop30, app_ducky, app_iccprofile, app_mpf, app_jfif, app_jfxx, sof2))
+    self.assertEqual(analyze_string(data5),
+                     {'format': 'jpeg', 'codec': 'jpeg', 'height': 513, 'width': 515})
+    self.assertEqual((len(data5) * 100, mediafileinfo_detect.count_is_jpeg(data5)), (21100, 19914))  # Lots of bytes matched.
 
   def test_analyze_gif(self):
     self.assertEqual(analyze_string('GIF89a'),
