@@ -11186,6 +11186,9 @@ FORMAT_ITEMS.extend((
     # 408 is arbitrary, but since cups-raster has it, we can also that much.
     ('html', (0, '<', 408, lambda header: adjust_confidence(100, count_is_html(header)))),
     ('html', (0, WHITESPACE, 408, lambda header: adjust_confidence(12, count_is_html(header)))),
+    # Some yamls files omit this header (e.g. Google App Engine app.yaml),
+    # they can't be detected.
+    ('yaml', (0, ('---\n', '---\r', '--- '))),
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf
