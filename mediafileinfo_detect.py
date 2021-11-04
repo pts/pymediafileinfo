@@ -11189,6 +11189,9 @@ FORMAT_ITEMS.extend((
     # Some yamls files omit this header (e.g. Google App Engine app.yaml),
     # they can't be detected.
     ('yaml', (0, ('---\n', '---\r', '--- '))),
+    # https://toml.io/en/v1.0.0
+    # No signature.
+    ('toml',),
     # Contains thumbnails of multiple images files.
     # http://fileformats.archiveteam.org/wiki/PaintShop_Pro_Browser_Cache
     # pspbrwse.jbf
