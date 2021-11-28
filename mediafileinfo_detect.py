@@ -410,6 +410,7 @@ MKV_CODEC_IDS = {
     'A_MPC': 'mpc',
     'A_AC3': 'ac3',   # ATSC A/52a https://wiki.multimedia.cx/index.php/A52
     'A_EC3': 'eac3',  # ATSC A/52b https://wiki.multimedia.cx/index.php/A52
+    'A_TRUEHD': 'truehd',
     'A_ALAC': 'alac',
     'A_DTS': 'dts',
     'A_DTS/EXPRESS': 'dts-express',
