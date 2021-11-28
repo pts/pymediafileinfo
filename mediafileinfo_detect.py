@@ -666,6 +666,11 @@ def analyze_mkv(fread, info, fskip, format='mkv', extra_formats=('webm',), fclas
               raise ValueError('EOF in CodecID element.')
             data = data.rstrip('\0')  # Broken, but some mkv files have it.
             track_info['codec'] = MKV_CODEC_IDS.get(data, data)
+          elif xid == '\x63\xA2':  # CodecPrivate.
+            data = read_n(size)
+            if len(data) != size:
+              raise ValueError('EOF in CodecPrivate element.')
+            track_info['codec_private'] = data
           elif xid == '\x25\x86\x88':  # CodecName.
             data = read_n(size)
             if len(data) != size:
@@ -676,6 +681,23 @@ def analyze_mkv(fread, info, fskip, format='mkv', extra_formats=('webm',), fclas
             if len(data) != size:
               raise ValueError('EOF in in-Track element.')
         if 'type' in track_info:
+          data = track_info.pop('codec_private', None)
+          if data and track_info['codec'] == 'V_MS/VFW/FOURCC':
+            dib_info = {}
+            try:
+              parse_dib_header(dib_info, data)  # Function dependency.
+            except ValueError:
+              pass
+            try:
+              codec = int(dib_info.get('codec', ''))
+            except ValueError:
+              codec = None
+            if codec:
+              # Function dependency.
+              track_info['codec'] = get_windows_video_codec(struct.pack('<L', codec))
+            for key in ('width', 'height'):
+              if key in dib_info:
+                track_info[key] = dib_info[key]
           info['tracks'].append(track_info)
       break  #  in Segment, don't read anything beyond Tracks, they are large.
     else:
