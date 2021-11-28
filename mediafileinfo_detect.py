@@ -1986,6 +1986,7 @@ WINDOWS_VIDEO_CODECS = {
     'vcr2': 'vcr2',
     'av01': 'av1',
     'flv1': 'flv1',  # Flash Player 6, modified H.263, Sorenson Spark.
+    'wvc1': 'vc1',
     # TODO(pts): Add these.
     # 13 ffds: Not a specific codec, but anything ffdshow (ffmpeg) supports.
     #  7 uldx
