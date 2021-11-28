@@ -10708,6 +10708,26 @@ def count_is_hsqldb_log(header):
   return c + 100 * len(expected)
 
 
+def count_is_torrent(header):
+  # https://en.wikipedia.org/wiki/Torrent_file
+  # https://fileformats.fandom.com/wiki/Torrent_file
+  if len(header) < 3 or header[0] != 'd' or header[1] not in '123456789':
+    return False
+  c = 161
+  if header[2] == ':':
+    c += 100
+    i, size = 3, int(header[1])
+  elif header[2].isdigit() and header[3 : 4] == ':':
+    c += 159
+    i, size = 4, int(header[1 : 3])
+  if len(header) < i + size:
+    return False
+  # The most common (>=99.84%) key is 'announce'.
+  if header[i : i + size] not in ('announce', 'created by', 'announce-list', 'comment', 'comment.utf-8', 'info', 'creation date', 'nodes', 'httpseeds'):
+    return False
+  return c + 100 * size
+
+
 # ---
 
 
@@ -11297,6 +11317,7 @@ FORMAT_ITEMS.extend((
     ('vcalendar-ics', (0, 'BEGIN:VCALENDAR', 15, ('\r', '\n'))),
     ('vcard-vcf', (0, 'BEGIN:VCARD', 11, ('\r', '\n'))),
     ('m3u-extended', (0, '#EXTM3U', 7, ('\r', '\n'))),
+    ('torrent', (0, 'd', 1, ('1', '2', '3', '4', '5', '6', '7', '8', '9'), 22, lambda header: adjust_confidence(161, count_is_torrent(header)))),
 
     # fclass='database': Database.
 

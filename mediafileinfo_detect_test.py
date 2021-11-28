@@ -2072,6 +2072,16 @@ class MediaFileInfoDetectTest(unittest.TestCase):
     self.assertEqual(analyze_string('/*C1*/SET SCHEMA SYSTEM_LOBS\n'), {'format': 'hsqldb-log'})
     self.assertEqual(analyze_string('/*C3210*/SET SCHEMA PUBLIC\n'), {'format': 'hsqldb-log'})
 
+  def test_analyze_torrent(self):
+    self.assertEqual(analyze_string('d8:announce'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d10:created by'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d13:announce-list'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d13:comment.utf-8'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d7:comment'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d4:info'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d13:creation date'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d5:nodes'), {'format': 'torrent'})
+    self.assertEqual(analyze_string('d9:httpseeds'), {'format': 'torrent'})
 
 if __name__ == '__main__':
   unittest.main(argv=[sys.argv[0], '-v'] + sys.argv[1:])
