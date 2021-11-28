@@ -11318,6 +11318,7 @@ FORMAT_ITEMS.extend((
     ('vcard-vcf', (0, 'BEGIN:VCARD', 11, ('\r', '\n'))),
     ('m3u-extended', (0, '#EXTM3U', 7, ('\r', '\n'))),
     ('torrent', (0, 'd', 1, ('1', '2', '3', '4', '5', '6', '7', '8', '9'), 22, lambda header: adjust_confidence(161, count_is_torrent(header)))),
+    ('vobsub-idx', (0, '# VobSub index file, v')),
 
     # fclass='database': Database.
 
