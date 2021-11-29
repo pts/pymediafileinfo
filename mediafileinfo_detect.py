@@ -11321,6 +11321,10 @@ FORMAT_ITEMS.extend((
     ('m3u-extended', (0, '#EXTM3U', 7, ('\r', '\n'))),
     ('torrent', (0, 'd', 1, ('1', '2', '3', '4', '5', '6', '7', '8', '9'), 22, lambda header: adjust_confidence(161, count_is_torrent(header)))),
     ('vobsub-idx', (0, '# VobSub index file, v')),
+    # TODO(pts): Allow a leading '\n' or '\r\n'. Detect more files.
+    # TODO(pts): Allow UTF-8 and UTF-16LE and UTF-16BE BOM.
+    ('srt', (0, ('0', '1'), 1, '\r\n00:', 6, tuple('0123456789'), 7, tuple('0123456789'), 8, ':')),  # Subtitle.
+    ('srt', (0, ('0', '1'), 1, '\n00:', 5, tuple('0123456789'), 6, tuple('0123456789'), 7, ':')),  # Subtitle.
 
     # fclass='database': Database.
 
