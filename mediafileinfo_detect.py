@@ -10898,8 +10898,8 @@ FORMAT_ITEMS.extend((
     ('realaudio', (0, '.ra\xfd')),
     ('ralf', (0, 'LSD:', 4, ('\1', '\2', '\3'))),
     # http://midi.teragonaudio.com/tech/midifile/mthd.htm
-    ('midi', (0, 'MThd\0\0\0\6\0\0\0\1')),
-    ('midi', (0, 'MThd\0\0\0\6\0', 9, ('\1', '\2'), 10, ('\0', '\1', '\2', '\3'))),
+    ('midi', (0, 'MThd\0\0\0\6\0\0\0\1')),  # This assumes that for Format=0, it is always Tracks=2. But there are some counterexamples.
+    ('midi', (0, 'MThd\0\0\0\6\0', 9, ('\0', '\1', '\2'), 10, ('\0', '\1', '\2', '\3'))),
     # http://web.archive.org/web/20110610135604/http://www.midi.org/about-midi/rp29spec(rmid).pdf
     ('midi-rmid', (0, 'RIFF', 8, 'RMIDdata', 20, 'MThd\0\0\0\6\0', 29, ('\0', '\1', '\2'))),  # .rmi
     ('aiff', (0, 'FORM', 8, 'AIFFCOMM\0\0\0\x12')),
