@@ -97,9 +97,12 @@ def process_lines(lines):
             sys.stderr.write('warning: bad month or year-month-day, '
                              'ignoring line: %r\n' % line)
           if mtimetuple != mtimetuple2:
-            print >>sys.stderr, (mtimetuple, mtimetuple2)
+            # This may happen because of daylight-saving time (DST) change
+            # in the wrong current_year.
             sys.stderr.write('warning: bad time, '
-                             'ignoring mtime: %r\n' % (mtimetuple,))
+                             'ignoring mtime: read=%s canonical=%s\n' %
+                             ('%04d-%02d-%02d_%02d:%02d:%02d' % mtimetuple,
+                              '%04d-%02d-%02d_%02d:%02d:%02d' % mtimetuple2))
           info['mtime' ] = mtime
           filename = items[8]
           if current_dir != '.':
