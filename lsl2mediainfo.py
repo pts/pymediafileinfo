@@ -35,7 +35,10 @@ def process_lines(lines):
   state, current_dir, current_year = 0, '.', None
   for line in lines:
     line = line.rstrip('\n')
-    if state:  # Inside a directory.
+    if not state and len(line) >= 6 and line[0] in '-dbcsp' and line[1] in 'r-' and line[2] in 'w-' and line[4] in 'r-' and line[5] in 'w-':
+      # Output of non-recursive ls starts with an entry.
+      state, current_dir = 1, '.'
+    if state:  # state=1: inside a directory.
       if line.startswith('-'):
         items = line.split(None, 8)
         if len(items) != 9:
@@ -110,7 +113,7 @@ def process_lines(lines):
         pass
       elif not line:
         state = 0
-    else:
+    else:  # state=1: not inside a directory.
       if line.startswith('format='):
         yield line  # Pass through.
       elif line.startswith('total ') and TOTAL_LINE_RE.match(line):
@@ -123,8 +126,10 @@ def process_lines(lines):
           while current_dir[i : i + 1] == '/':
             i += 1
         current_dir = current_dir[i:]
+      elif line.startswith('-'):
+        sys.stderr.write('warning: syntax error, ignoring unexpected entry line: %r\n' % line)
       elif line:
-        sys.stderr.write('warning: syntax error, ignoring line: %r\n' % line)
+        sys.stderr.write('warning: syntax error, ignoring non-entry line: %r\n' % line)
       
 
 
