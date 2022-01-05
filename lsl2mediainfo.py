@@ -73,8 +73,13 @@ def process_lines(lines):
             info = {'format': '?', 'size': int(items[4])}
             mtimetuple = year, month, mday, hour, minute, second
             # mtime is approximate, `second' is always 0.
-            mtime = int(time.mktime(mtimetuple + (0, 0, 0)))  # Uses local time.
+            mtime = int(time.mktime(mtimetuple + (0, 0, 0)))  # Uses local time, with DST off (isdst=False).
             mtimetuple2 = time.localtime(mtime)[:6]
+            if mtimetuple2 != mtimetuple:
+              mtimeb = int(time.mktime(mtimetuple + (0, 0, 1)))  # Uses local time, with DST on (isdst=True).
+              mtimetuple2b = time.localtime(mtimeb)[:6]
+              if mtimetuple2b == mtimetuple:
+                mtime, mtimetuple2 = mtimeb, mtimetuple2b
           elif FULL_DAY_RE.match(items[5]):
             # Output of GNU `ls -l --full-time'.
             year, month, mday = map(int, items[5].split('-'))
