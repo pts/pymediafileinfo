@@ -116,11 +116,14 @@ def process_lines(lines):
         pass
       elif not line:
         state = 0
-    else:  # state=1: not inside a directory.
+    else:  # state=0: not inside a directory.
       if line.startswith('format='):
         yield line  # Pass through.
       elif line.startswith('total ') and TOTAL_LINE_RE.match(line):
         state = 1
+      elif line.startswith('year ') and YEAR_INT_RE.match(line.split(None, 2)[1]):
+        # Nonstandard, can be added manually to the input file.
+        current_year = int(line.split(None, 2)[1])
       elif line.endswith(':'):
         current_dir, state = line[:-1].strip('/'), 1
         i = 0
