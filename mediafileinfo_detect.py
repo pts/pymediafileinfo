@@ -1985,6 +1985,7 @@ WINDOWS_VIDEO_CODECS = {
     'dvx4': 'divx',
     '3iv2': 'divx',
     'h264': 'h264',
+    'x264': 'h264',
     'xvid': 'divx',
     'mjpg': 'mjpeg',
     'msvc': 'msvc',
