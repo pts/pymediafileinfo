@@ -19,7 +19,7 @@ NATURAL_DECIMAL_INT_RE = re.compile(r'\d+\Z')
 
 YEAR_INT_RE = re.compile(r'[1-9]\d\d\d\Z')
 
-HHMM_RE = re.compile(r'(?:0?\d|1[0-2]):[0-5]\d\Z')
+HHMM_RE = re.compile(r'(?:[01]?\d|2[0-3]):[0-5]\d\Z')
 
 MONTHS = ('', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
           'Oct', 'Nov', 'Dec')
